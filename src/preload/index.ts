@@ -29,6 +29,11 @@ const api = {
     ipcRenderer.on('service:logs:data', handler)
     return () => ipcRenderer.removeListener('service:logs:data', handler)
   },
+  onStatusChange: (callback: (data: { projectId: string; serviceId: string; status: string }) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { projectId: string; serviceId: string; status: string }) => callback(data)
+    ipcRenderer.on('service:status:change', handler)
+    return () => ipcRenderer.removeListener('service:status:change', handler)
+  },
 
   // Config
   loadProjectConfig: (projectPath: string): Promise<ProjectConfig> =>

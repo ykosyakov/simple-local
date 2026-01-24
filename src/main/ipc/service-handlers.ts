@@ -13,7 +13,7 @@ export function setupServiceHandlers(
 ): void {
   const logCleanupFns = new Map<string, () => void>()
 
-  ipcMain.handle('service:start', async (_event, projectId: string, serviceId: string) => {
+  ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
     const project = registry.getRegistry().projects.find((p) => p.id === projectId)
     if (!project) throw new Error('Project not found')
 
@@ -24,12 +24,45 @@ export function setupServiceHandlers(
     if (!service) throw new Error('Service not found')
 
     const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
+    const servicePath = `${project.path}/${service.path}`
 
-    await container.startService(
-      `${project.path}/${service.path}`,
-      service.command,
-      resolvedEnv
-    )
+    const sendLog = (data: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      win?.webContents.send('service:logs:data', { projectId, serviceId, data })
+    }
+
+    const sendStatus = (status: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      win?.webContents.send('service:status:change', { projectId, serviceId, status })
+    }
+
+    if (service.mode === 'native') {
+      container.startNativeService(
+        serviceId,
+        service.command,
+        servicePath,
+        resolvedEnv,
+        sendLog,
+        sendStatus
+      )
+    } else {
+      sendStatus('building')
+      sendLog('══════ Building container ══════\n')
+
+      try {
+        await container.buildContainer(servicePath, sendLog)
+      } catch (err) {
+        sendStatus('error')
+        sendLog(`Build failed: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
+        throw err
+      }
+
+      sendStatus('starting')
+      sendLog('\n══════ Starting service ══════\n')
+
+      await container.startService(servicePath, service.command, resolvedEnv)
+      sendStatus('running')
+    }
   })
 
   ipcMain.handle('service:stop', async (_event, projectId: string, serviceId: string) => {
@@ -39,8 +72,15 @@ export function setupServiceHandlers(
     const projectConfig = await config.loadConfig(project.path)
     if (!projectConfig) throw new Error('Project config not found')
 
-    const containerName = container.getContainerName(projectConfig.name, serviceId)
-    await container.stopService(containerName)
+    const service = projectConfig.services.find((s) => s.id === serviceId)
+    if (!service) throw new Error('Service not found')
+
+    if (service.mode === 'native') {
+      container.stopNativeService(serviceId)
+    } else {
+      const containerName = container.getContainerName(projectConfig.name, serviceId)
+      await container.stopService(containerName)
+    }
   })
 
   ipcMain.handle('service:status', async (_event, projectId: string) => {
