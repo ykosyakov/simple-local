@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings } from '../shared/types'
 
 const api = {
   // Registry
@@ -48,6 +48,14 @@ const api = {
   // Dialogs
   selectFolder: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:selectFolder'),
+
+  // Prerequisites
+  checkPrerequisites: (): Promise<PrerequisitesResult> =>
+    ipcRenderer.invoke('prerequisites:check'),
+  getSettings: (): Promise<AppSettings | null> =>
+    ipcRenderer.invoke('settings:get'),
+  saveSettings: (settings: AppSettings): Promise<void> =>
+    ipcRenderer.invoke('settings:save', settings),
 }
 
 contextBridge.exposeInMainWorld('api', api)
