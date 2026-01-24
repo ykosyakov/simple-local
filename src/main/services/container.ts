@@ -6,6 +6,7 @@ import type { ServiceStatus } from '../../shared/types'
 
 export class ContainerService extends EventEmitter {
   private docker: Docker
+  private nativeProcesses = new Map<string, import('child_process').ChildProcess>()
 
   constructor(socketPath?: string) {
     super()
@@ -114,6 +115,53 @@ export class ContainerService extends EventEmitter {
         throw error
       }
     }
+  }
+
+  startNativeService(
+    serviceId: string,
+    command: string,
+    cwd: string,
+    env: Record<string, string>,
+    onLog: (data: string) => void,
+    onStatusChange: (status: ServiceStatus['status']) => void
+  ): void {
+    onStatusChange('starting')
+
+    const [cmd, ...args] = command.split(' ')
+    const proc = spawn(cmd, args, {
+      cwd,
+      env: { ...process.env, ...env },
+      shell: true,
+    })
+
+    this.nativeProcesses.set(serviceId, proc)
+
+    proc.stdout?.on('data', (data) => onLog(data.toString()))
+    proc.stderr?.on('data', (data) => onLog(data.toString()))
+
+    proc.on('spawn', () => onStatusChange('running'))
+    proc.on('error', (err) => {
+      onStatusChange('error')
+      onLog(`Error: ${err.message}`)
+    })
+    proc.on('close', (code) => {
+      this.nativeProcesses.delete(serviceId)
+      if (code !== 0 && code !== null) {
+        onStatusChange('error')
+        onLog(`Process exited with code ${code}`)
+      } else {
+        onStatusChange('stopped')
+      }
+    })
+  }
+
+  stopNativeService(serviceId: string): boolean {
+    const proc = this.nativeProcesses.get(serviceId)
+    if (!proc) return false
+
+    proc.kill('SIGTERM')
+    this.nativeProcesses.delete(serviceId)
+    return true
   }
 
   async streamLogs(

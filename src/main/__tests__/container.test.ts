@@ -62,4 +62,59 @@ describe('ContainerService', () => {
       expect(cmd).toContain('npm run dev')
     })
   })
+
+  describe('startNativeService', () => {
+    it('spawns process with correct cwd and env', async () => {
+      const { spawn } = await import('child_process')
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        pid: 12345,
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const onLog = vi.fn()
+      const onStatusChange = vi.fn()
+
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev',
+        '/path/to/service',
+        { NODE_ENV: 'development' },
+        onLog,
+        onStatusChange
+      )
+
+      expect(spawn).toHaveBeenCalledWith(
+        'npm',
+        ['run', 'dev'],
+        expect.objectContaining({
+          cwd: '/path/to/service',
+          env: expect.objectContaining({ NODE_ENV: 'development' }),
+          shell: true,
+        })
+      )
+      expect(onStatusChange).toHaveBeenCalledWith('starting')
+    })
+  })
+
+  describe('stopNativeService', () => {
+    it('kills the native process', () => {
+      const mockProcess = {
+        kill: vi.fn().mockReturnValue(true),
+      }
+      containerService['nativeProcesses'].set('test-service', mockProcess as any)
+
+      const result = containerService.stopNativeService('test-service')
+
+      expect(result).toBe(true)
+      expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM')
+    })
+
+    it('returns false if no process found', () => {
+      const result = containerService.stopNativeService('nonexistent')
+      expect(result).toBe(false)
+    })
+  })
 })
