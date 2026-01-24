@@ -7,6 +7,7 @@ export interface Project {
   portRange: [number, number]
   debugPortRange: [number, number]
   lastOpened: string
+  status: 'loading' | 'ready' | 'error'
 }
 
 export interface Service {
@@ -19,6 +20,7 @@ export interface Service {
   debugPort?: number
   env: Record<string, string>
   dependsOn?: string[]
+  active: boolean
 }
 
 export interface ProjectConfig {
