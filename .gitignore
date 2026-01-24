@@ -5,6 +5,7 @@ node_modules/
 out/
 out-test/
 dist/
+*.tsbuildinfo
 
 # Electron Builder output
 dist-electron/
