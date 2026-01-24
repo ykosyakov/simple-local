@@ -256,6 +256,7 @@ Detect:
       env: s.env || {},
       dependsOn: s.dependsOn,
       devcontainer: `.simple-run/devcontainers/${s.id}.json`,
+      active: true,
     }))
 
     // Apply connections as env var references
@@ -300,6 +301,7 @@ Detect:
             port: info.port || 3000 + portOffset,
             env: {},
             devcontainer: `.simple-run/devcontainers/${info.name}.json`,
+            active: true,
           })
           portOffset++
         }

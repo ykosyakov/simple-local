@@ -56,6 +56,7 @@ export class RegistryService {
       portRange,
       debugPortRange,
       lastOpened: new Date().toISOString(),
+      status: 'ready',
     }
 
     this.store.set('projects', [...projects, project])
