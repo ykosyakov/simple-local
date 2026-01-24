@@ -117,4 +117,27 @@ describe('ContainerService', () => {
       expect(result).toBe(false)
     })
   })
+
+  describe('buildContainer', () => {
+    it('runs devcontainer build with correct args', async () => {
+      const { spawn } = await import('child_process')
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => {
+          if (event === 'close') setTimeout(() => cb(0), 10)
+        }),
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const onLog = vi.fn()
+      await containerService.buildContainer('/path/to/workspace', onLog)
+
+      expect(spawn).toHaveBeenCalledWith(
+        'npx',
+        ['devcontainer', 'build', '--workspace-folder', '/path/to/workspace'],
+        expect.any(Object)
+      )
+    })
+  })
 })

@@ -55,6 +55,33 @@ export class ContainerService extends EventEmitter {
     return args
   }
 
+  async buildContainer(
+    workspaceFolder: string,
+    onLog: (data: string) => void
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const args = this.buildDevcontainerCommand('build', workspaceFolder)
+
+      const proc = spawn('npx', args, {
+        env: process.env,
+        shell: true,
+      })
+
+      proc.stdout?.on('data', (data) => onLog(data.toString()))
+      proc.stderr?.on('data', (data) => onLog(data.toString()))
+
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`devcontainer build failed with code ${code}`))
+        } else {
+          resolve()
+        }
+      })
+
+      proc.on('error', reject)
+    })
+  }
+
   async startService(
     workspaceFolder: string,
     command: string,
