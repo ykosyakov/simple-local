@@ -10,6 +10,7 @@ interface ServiceCardProps {
   onStop: () => void
   onRestart: () => void
   onHide?: () => void
+  onModeChange?: (mode: 'native' | 'container') => void
   index?: number
 }
 
@@ -18,6 +19,11 @@ const STATUS_CONFIG = {
     color: 'var(--status-stopped)',
     glow: 'none',
     label: 'Offline',
+  },
+  building: {
+    color: 'var(--status-starting)',
+    glow: '0 0 8px var(--status-starting-glow)',
+    label: 'Building',
   },
   starting: {
     color: 'var(--status-starting)',
@@ -45,10 +51,13 @@ export function ServiceCard({
   onStop,
   onRestart,
   onHide,
+  onModeChange,
   index = 0,
 }: ServiceCardProps) {
   const isRunning = status === 'running'
   const isStarting = status === 'starting'
+  const isBuilding = status === 'building'
+  const isBusy = isRunning || isStarting || isBuilding
   const config = STATUS_CONFIG[status]
 
   return (
@@ -71,7 +80,7 @@ export function ServiceCard({
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div
-            className={`h-2 w-2 rounded-full ${isStarting ? 'status-pulse' : ''}`}
+            className={`h-2 w-2 rounded-full ${isStarting || isBuilding ? 'status-pulse' : ''}`}
             style={{
               background: config.color,
               boxShadow: config.glow,
@@ -84,7 +93,30 @@ export function ServiceCard({
             {config.label}
           </span>
         </div>
-        <span className="port-display">:{service.port}</span>
+        <div className="flex items-center gap-2">
+          <span className="port-display">:{service.port}</span>
+          {onModeChange && (
+            <select
+              value={service.mode}
+              onChange={(e) => onModeChange(e.target.value as 'native' | 'container')}
+              onClick={(e) => e.stopPropagation()}
+              disabled={isBusy}
+              className="rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                background: 'var(--bg-deep)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-mono)',
+                cursor: isBusy ? 'not-allowed' : 'pointer',
+                opacity: isBusy ? 0.5 : 1,
+              }}
+              title={isBusy ? 'Stop service to change mode' : 'Execution mode'}
+            >
+              <option value="native">Native</option>
+              <option value="container">Container</option>
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Service name */}
@@ -117,7 +149,7 @@ export function ServiceCard({
 
       {/* Actions */}
       <div className="group flex gap-2">
-        {!isRunning && !isStarting && (
+        {!isRunning && !isStarting && !isBuilding && (
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -131,7 +163,7 @@ export function ServiceCard({
           </button>
         )}
 
-        {(isRunning || isStarting) && (
+        {(isRunning || isStarting || isBuilding) && (
           <>
             <button
               onClick={(e) => {
