@@ -8,7 +8,8 @@
       "Bash(npm install:*)",
       "Bash(npm view:*)",
       "Bash(timeout 15 npm run dev:*)",
-      "Bash(npx electron:*)"
+      "Bash(npx electron:*)",
+      "Bash(npm run test:run:*)"
     ]
   }
 }

@@ -2,8 +2,9 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc'
+import { setupTray } from './tray'
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -29,6 +30,8 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 app.whenReady().then(() => {
@@ -41,11 +44,19 @@ app.whenReady().then(() => {
   // Setup IPC handlers
   setupIpcHandlers()
 
-  createWindow()
+  // Create main window
+  const mainWindow = createWindow()
+
+  // Setup tray
+  setupTray(mainWindow)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  app.isQuitting = true
 })
 
 app.on('window-all-closed', () => {
