@@ -14,13 +14,14 @@ export interface Service {
   id: string
   name: string
   path: string
-  devcontainer: string
   command: string
   port: number
   debugPort?: number
   env: Record<string, string>
   dependsOn?: string[]
   active: boolean
+  mode: 'native' | 'container'
+  devcontainer?: string
 }
 
 export interface ProjectConfig {
@@ -30,7 +31,7 @@ export interface ProjectConfig {
 
 export interface ServiceStatus {
   serviceId: string
-  status: 'stopped' | 'starting' | 'running' | 'error'
+  status: 'stopped' | 'building' | 'starting' | 'running' | 'error'
   containerId?: string
   error?: string
 }
