@@ -64,3 +64,12 @@ export type IpcChannels = {
   // Discovery
   'discovery:analyze': (projectPath: string) => ProjectConfig
 }
+
+export type DiscoveryStep = 'scanning' | 'ai-analysis' | 'processing' | 'complete' | 'error'
+
+export interface DiscoveryProgress {
+  projectPath: string
+  step: DiscoveryStep
+  message: string
+  log?: string  // Raw terminal output
+}

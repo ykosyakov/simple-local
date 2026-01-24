@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress } from '../shared/types'
 
 const api = {
   // Registry
@@ -35,6 +35,11 @@ const api = {
     ipcRenderer.invoke('discovery:analyze', projectPath),
   saveProjectConfig: (projectPath: string, config: ProjectConfig): Promise<void> =>
     ipcRenderer.invoke('discovery:save', projectPath, config),
+  onDiscoveryProgress: (callback: (progress: DiscoveryProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: DiscoveryProgress) => callback(progress)
+    ipcRenderer.on('discovery:progress', handler)
+    return () => ipcRenderer.removeListener('discovery:progress', handler)
+  },
 
   // Dialogs
   selectFolder: (): Promise<string | null> =>

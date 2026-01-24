@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import { spawn, ChildProcess } from 'child_process'
-import type { ProjectConfig, Service } from '../../shared/types'
+import type { ProjectConfig, Service, DiscoveryProgress } from '../../shared/types'
 
 const AI_DISCOVERY_TIMEOUT = 30000 // 30 seconds
 
@@ -138,13 +138,18 @@ Detect:
 
   async runAIDiscovery(
     projectPath: string,
-    cliTool: 'claude' | 'codex' = 'claude'
+    cliTool: 'claude' | 'codex' = 'claude',
+    onProgress?: (progress: DiscoveryProgress) => void
   ): Promise<ProjectConfig | null> {
     console.log('[Discovery] Starting AI discovery for:', projectPath)
     console.log('[Discovery] Scanning project structure...')
 
+    onProgress?.({ projectPath, step: 'scanning', message: 'Scanning file structure...' })
+
     const scanResult = await this.scanProjectStructure(projectPath)
     console.log('[Discovery] Scan result:', JSON.stringify(scanResult, null, 2))
+
+    onProgress?.({ projectPath, step: 'scanning', message: `Found ${scanResult.packageJsonPaths.length} package.json files` })
 
     const prompt = this.buildDiscoveryPrompt(scanResult)
 
@@ -154,6 +159,8 @@ Detect:
         : ['--prompt', prompt]
 
       console.log(`[Discovery] Spawning ${cliTool} with args:`, args.slice(0, 1))
+
+      onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...' })
 
       let proc: ChildProcess
       let timeoutId: NodeJS.Timeout
@@ -198,6 +205,7 @@ Detect:
         const chunk = data.toString()
         output += chunk
         console.log('[Discovery] stdout chunk:', chunk.slice(0, 200))
+        onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: chunk })
       })
 
       proc.stderr?.on('data', (data) => {
@@ -219,6 +227,8 @@ Detect:
           resolveOnce(null)
           return
         }
+
+        onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
 
         try {
           // Extract JSON from output (might have extra text)

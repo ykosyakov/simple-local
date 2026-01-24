@@ -3,6 +3,7 @@ import { ContainerService } from '../services/container'
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
+import type { DiscoveryProgress } from '../../shared/types'
 
 export function setupServiceHandlers(
   container: ContainerService,
@@ -93,20 +94,26 @@ export function setupServiceHandlers(
     logCleanupFns.delete(key)
   })
 
-  ipcMain.handle('discovery:analyze', async (_event, projectPath: string) => {
+  ipcMain.handle('discovery:analyze', async (event, projectPath: string) => {
     console.log('[IPC] discovery:analyze called for:', projectPath)
+
+    const sendProgress = (progress: DiscoveryProgress) => {
+      event.sender.send('discovery:progress', progress)
+    }
 
     // Try AI discovery first, fall back to basic
     console.log('[IPC] Attempting AI discovery...')
-    let result = await discovery.runAIDiscovery(projectPath)
+    let result = await discovery.runAIDiscovery(projectPath, 'claude', sendProgress)
 
     if (!result) {
       console.log('[IPC] AI discovery failed or timed out, falling back to basic discovery')
+      sendProgress({ projectPath, step: 'ai-analysis', message: 'AI discovery failed, using basic detection...' })
       result = await discovery.basicDiscovery(projectPath)
     } else {
       console.log('[IPC] AI discovery succeeded')
     }
 
+    sendProgress({ projectPath, step: 'complete', message: 'Discovery complete' })
     console.log('[IPC] Discovery complete, returning config with', result.services.length, 'services')
     return result
   })
