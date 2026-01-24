@@ -1,0 +1,153 @@
+import Docker from 'dockerode'
+import { spawn } from 'child_process'
+import { EventEmitter } from 'events'
+import type { ServiceStatus } from '../../shared/types'
+
+export class ContainerService extends EventEmitter {
+  private docker: Docker
+
+  constructor(socketPath?: string) {
+    super()
+    this.docker = new Docker(socketPath ? { socketPath } : undefined)
+  }
+
+  getContainerName(projectName: string, serviceId: string): string {
+    // Sanitize names for Docker
+    const sanitized = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    return `simple-run-${sanitized(projectName)}-${sanitized(serviceId)}`
+  }
+
+  async getContainerStatus(containerName: string): Promise<ServiceStatus['status']> {
+    try {
+      const containers = await this.docker.listContainers({ all: true })
+      const container = containers.find((c) =>
+        c.Names.some((n) => n === `/${containerName}` || n === containerName)
+      )
+
+      if (!container) return 'stopped'
+
+      if (container.State === 'running') return 'running'
+      if (container.State === 'created' || container.State === 'restarting') return 'starting'
+
+      return 'stopped'
+    } catch {
+      return 'stopped'
+    }
+  }
+
+  buildDevcontainerCommand(
+    action: 'up' | 'build' | 'exec',
+    workspaceFolder: string,
+    execCommand?: string
+  ): string[] {
+    const args = ['devcontainer', action, '--workspace-folder', workspaceFolder]
+
+    if (action === 'exec' && execCommand) {
+      args.push(execCommand)
+    }
+
+    return args
+  }
+
+  async startService(
+    workspaceFolder: string,
+    command: string,
+    env: Record<string, string>
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // First, start the devcontainer
+      const upArgs = this.buildDevcontainerCommand('up', workspaceFolder)
+
+      const upProcess = spawn('npx', upArgs, {
+        env: { ...process.env, ...env },
+        shell: true,
+      })
+
+      upProcess.stdout?.on('data', (data) => {
+        this.emit('log', data.toString())
+      })
+
+      upProcess.stderr?.on('data', (data) => {
+        this.emit('log', data.toString())
+      })
+
+      upProcess.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`devcontainer up failed with code ${code}`))
+          return
+        }
+
+        // Then exec the command inside
+        const execArgs = this.buildDevcontainerCommand('exec', workspaceFolder, command)
+
+        const execProcess = spawn('npx', execArgs, {
+          env: { ...process.env, ...env },
+          shell: true,
+        })
+
+        execProcess.stdout?.on('data', (data) => {
+          this.emit('log', data.toString())
+        })
+
+        execProcess.stderr?.on('data', (data) => {
+          this.emit('log', data.toString())
+        })
+
+        // Don't wait for exec to finish - it's a long-running dev server
+        resolve()
+      })
+    })
+  }
+
+  async stopService(containerName: string): Promise<void> {
+    try {
+      const container = this.docker.getContainer(containerName)
+      await container.stop()
+    } catch (error: unknown) {
+      // Container might already be stopped
+      if (!(error instanceof Error) || !error.message.includes('not running')) {
+        throw error
+      }
+    }
+  }
+
+  async streamLogs(
+    containerName: string,
+    onLog: (data: string) => void
+  ): Promise<() => void> {
+    const container = this.docker.getContainer(containerName)
+
+    const stream = await container.logs({
+      follow: true,
+      stdout: true,
+      stderr: true,
+      tail: 100,
+    })
+
+    const handleData = (chunk: Buffer) => {
+      // Docker stream has 8-byte header for multiplexed streams
+      // Skip header and emit log content
+      const content = chunk.slice(8).toString('utf-8')
+      if (content.trim()) {
+        onLog(content)
+      }
+    }
+
+    stream.on('data', handleData)
+
+    // Return cleanup function
+    return () => {
+      stream.removeListener('data', handleData)
+      stream.destroy()
+    }
+  }
+
+  async listProjectContainers(projectName: string): Promise<string[]> {
+    const prefix = `simple-run-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`
+    const containers = await this.docker.listContainers({ all: true })
+
+    return containers
+      .filter((c) => c.Names.some((n) => n.includes(prefix)))
+      .map((c) => c.Names[0].replace(/^\//, ''))
+  }
+}
