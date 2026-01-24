@@ -30,11 +30,15 @@ const api = {
     return () => ipcRenderer.removeListener('service:logs:data', handler)
   },
 
-  // Discovery
-  analyzeProject: (projectPath: string): Promise<ProjectConfig> =>
-    ipcRenderer.invoke('discovery:analyze', projectPath),
+  // Config
+  loadProjectConfig: (projectPath: string): Promise<ProjectConfig> =>
+    ipcRenderer.invoke('config:load', projectPath),
   saveProjectConfig: (projectPath: string, config: ProjectConfig): Promise<void> =>
     ipcRenderer.invoke('discovery:save', projectPath, config),
+
+  // Discovery (runs AI analysis)
+  analyzeProject: (projectPath: string): Promise<ProjectConfig> =>
+    ipcRenderer.invoke('discovery:analyze', projectPath),
   onDiscoveryProgress: (callback: (progress: DiscoveryProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: DiscoveryProgress) => callback(progress)
     ipcRenderer.on('discovery:progress', handler)

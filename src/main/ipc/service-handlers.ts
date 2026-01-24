@@ -118,6 +118,16 @@ export function setupServiceHandlers(
     return result
   })
 
+  // Load saved config (no discovery, just read the file)
+  ipcMain.handle('config:load', async (_event, projectPath: string) => {
+    console.log('[IPC] config:load called for:', projectPath)
+    const projectConfig = await config.loadConfig(projectPath)
+    if (!projectConfig) {
+      throw new Error('No config found for project')
+    }
+    return projectConfig
+  })
+
   ipcMain.handle('discovery:save', async (_event, projectPath: string, projectConfig) => {
     console.log('[IPC] discovery:save called for:', projectPath)
     console.log('[IPC] Saving config with', projectConfig.services.length, 'services')

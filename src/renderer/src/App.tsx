@@ -48,7 +48,11 @@ function App() {
   }
 
   const handleDiscoveryComplete = async (services: Service[]) => {
-    if (!loadingProjectPath) return
+    console.log('[Renderer] handleDiscoveryComplete called with', services.length, 'services')
+    if (!loadingProjectPath) {
+      console.log('[Renderer] No loadingProjectPath, returning early')
+      return
+    }
 
     try {
       const config: ProjectConfig = {
@@ -56,15 +60,24 @@ function App() {
         services,
       }
 
+      console.log('[Renderer] Saving project config to:', loadingProjectPath)
       await window.api.saveProjectConfig(loadingProjectPath, config)
-      const project = await window.api.addProject(loadingProjectPath, config.name)
+      console.log('[Renderer] Config saved successfully')
 
+      console.log('[Renderer] Adding project to registry')
+      const project = await window.api.addProject(loadingProjectPath, config.name)
+      console.log('[Renderer] Project added:', project.id)
+
+      console.log('[Renderer] Fetching updated registry')
       const updatedRegistry = await window.api.getRegistry()
+      console.log('[Renderer] Registry fetched, setting state')
+
       setRegistry(updatedRegistry)
       setSelectedProjectId(project.id)
       setLoadingProjectPath(null)
+      console.log('[Renderer] State updated, discovery complete')
     } catch (err) {
-      console.error('[Renderer] Error:', err)
+      console.error('[Renderer] Error in handleDiscoveryComplete:', err)
       setAddError(err instanceof Error ? err.message : 'Failed to add project')
       handleDiscoveryCancel()
     }
@@ -86,7 +99,7 @@ function App() {
 
   const handleStartAll = async () => {
     if (!selectedProject) return
-    const config = await window.api.analyzeProject(selectedProject.path)
+    const config = await window.api.loadProjectConfig(selectedProject.path)
     for (const service of config.services) {
       await window.api.startService(selectedProject.id, service.id)
     }
@@ -94,7 +107,7 @@ function App() {
 
   const handleStopAll = async () => {
     if (!selectedProject) return
-    const config = await window.api.analyzeProject(selectedProject.path)
+    const config = await window.api.loadProjectConfig(selectedProject.path)
     for (const service of config.services) {
       await window.api.stopService(selectedProject.id, service.id)
     }

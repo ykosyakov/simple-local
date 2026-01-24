@@ -9,7 +9,17 @@
       "Bash(npm view:*)",
       "Bash(timeout 15 npm run dev:*)",
       "Bash(npx electron:*)",
-      "Bash(npm run test:run:*)"
+      "Bash(npm run test:run:*)",
+      "Bash(npm run typecheck:web:*)",
+      "Bash(git rm:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(grep:*)",
+      "Bash(git show:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run lint)",
+      "Bash(./node_modules/.bin/eslint:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(gh issue view:*)"
     ]
   }
 }

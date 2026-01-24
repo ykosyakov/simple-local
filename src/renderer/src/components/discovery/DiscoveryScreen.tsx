@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { DiscoveryProgress } from './DiscoveryProgress'
 import { DiscoveryTerminal } from './DiscoveryTerminal'
@@ -22,6 +22,7 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
   const [logs, setLogs] = useState<string[]>([])
   const [discoveredServices, setDiscoveredServices] = useState<Service[]>([])
   const [manualServices, setManualServices] = useState<Service[]>([])
+  const discoveryStartedForRef = useRef<string | null>(null)
 
   const runDiscovery = useCallback(async () => {
     setScreenState('discovering')
@@ -44,6 +45,11 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
   }, [projectPath])
 
   useEffect(() => {
+    // Guard against double execution (React strict mode, re-renders)
+    // Only run if we haven't started discovery for this exact path
+    if (discoveryStartedForRef.current === projectPath) return
+    discoveryStartedForRef.current = projectPath
+
     const unsubscribe = window.api.onDiscoveryProgress?.((progress) => {
       if (progress.projectPath !== projectPath) return
 

@@ -11,14 +11,21 @@ interface ProjectViewProps {
 
 export function ProjectView({ project }: ProjectViewProps) {
   const [config, setConfig] = useState<ProjectConfig | null>(null)
+  const [configError, setConfigError] = useState<string | null>(null)
   const [statuses, setStatuses] = useState<Map<string, ServiceStatus['status']>>(new Map())
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
 
   const loadConfig = useCallback(async () => {
-    const result = await window.api.analyzeProject(project.path)
-    setConfig(result)
-    if (result.services.length > 0 && !selectedServiceId) {
-      setSelectedServiceId(result.services[0].id)
+    try {
+      setConfigError(null)
+      const result = await window.api.loadProjectConfig(project.path)
+      setConfig(result)
+      if (result.services.length > 0 && !selectedServiceId) {
+        setSelectedServiceId(result.services[0].id)
+      }
+    } catch (err) {
+      console.error('[ProjectView] Failed to load config:', err)
+      setConfigError(err instanceof Error ? err.message : 'Failed to load project configuration')
     }
   }, [project.path, selectedServiceId])
 
@@ -75,6 +82,19 @@ export function ProjectView({ project }: ProjectViewProps) {
   }
 
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
+
+  if (configError) {
+    return (
+      <div className="empty-state h-full">
+        <Server className="empty-state-icon" style={{ color: 'var(--danger)' }} strokeWidth={1} />
+        <h3 className="empty-state-title">Failed to load configuration</h3>
+        <p className="empty-state-description">{configError}</p>
+        <button onClick={loadConfig} className="btn btn-primary mt-4">
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   if (!config) {
     return (
