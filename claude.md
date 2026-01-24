@@ -117,3 +117,28 @@ All colors are defined in `src/renderer/src/assets/main.css`:
 **LogViewer:** Terminal aesthetic with scanlines, line numbers, "jump to bottom" button when scrolled up.
 
 **Modals:** Blurred backdrop, icon in header matching action type, consistent button placement.
+
+## TypeScript Patterns
+
+### Extending Electron's App Interface
+
+To add custom properties to Electron's `app` object (e.g., `app.isQuitting`), use `declare global` with `namespace Electron`:
+
+```typescript
+// src/main/electron-types.ts
+declare global {
+  namespace Electron {
+    interface App {
+      isQuitting?: boolean;
+    }
+  }
+}
+export {}
+```
+
+Then import it in files that use the property:
+```typescript
+import './electron-types'
+```
+
+**Do NOT use** `declare module 'electron'` - it causes "Duplicate identifier 'App'" errors.
