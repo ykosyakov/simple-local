@@ -18,15 +18,16 @@ export function setupIpcHandlers(): {
   settings: SettingsService
 } {
   const registry = new RegistryService()
-  const container = new ContainerService()
+  const settings = new SettingsService()
+  const savedSettings = settings.getSettings()
+  const container = new ContainerService(savedSettings?.containerRuntime.socketPath)
   const config = new ProjectConfigService()
   const discovery = new DiscoveryService()
   const prerequisites = new PrerequisitesService()
-  const settings = new SettingsService()
 
   setupRegistryHandlers(registry)
   setupServiceHandlers(container, config, discovery, registry)
-  setupPrerequisitesHandlers(prerequisites, settings)
+  setupPrerequisitesHandlers(prerequisites, settings, container)
 
   // Dialog handler for folder selection
   ipcMain.handle('dialog:selectFolder', async () => {

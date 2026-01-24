@@ -11,6 +11,10 @@ export class ContainerService extends EventEmitter {
     this.docker = new Docker(socketPath ? { socketPath } : undefined)
   }
 
+  updateSocketPath(socketPath: string): void {
+    this.docker = new Docker({ socketPath })
+  }
+
   getContainerName(projectName: string, serviceId: string): string {
     // Sanitize names for Docker
     const sanitized = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]/g, '-')
