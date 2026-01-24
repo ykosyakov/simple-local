@@ -94,23 +94,37 @@ export function setupServiceHandlers(
   })
 
   ipcMain.handle('discovery:analyze', async (_event, projectPath: string) => {
+    console.log('[IPC] discovery:analyze called for:', projectPath)
+
     // Try AI discovery first, fall back to basic
+    console.log('[IPC] Attempting AI discovery...')
     let result = await discovery.runAIDiscovery(projectPath)
 
     if (!result) {
+      console.log('[IPC] AI discovery failed or timed out, falling back to basic discovery')
       result = await discovery.basicDiscovery(projectPath)
+    } else {
+      console.log('[IPC] AI discovery succeeded')
     }
 
+    console.log('[IPC] Discovery complete, returning config with', result.services.length, 'services')
     return result
   })
 
   ipcMain.handle('discovery:save', async (_event, projectPath: string, projectConfig) => {
+    console.log('[IPC] discovery:save called for:', projectPath)
+    console.log('[IPC] Saving config with', projectConfig.services.length, 'services')
+
     await config.saveConfig(projectPath, projectConfig)
+    console.log('[IPC] Config saved')
 
     // Generate devcontainer files
     for (const service of projectConfig.services) {
+      console.log('[IPC] Generating devcontainer for:', service.id)
       const devcontainerConfig = await config.generateDevcontainerConfig(service, projectConfig.name)
       await config.saveDevcontainer(projectPath, service, devcontainerConfig)
     }
+
+    console.log('[IPC] All devcontainer files saved')
   })
 }

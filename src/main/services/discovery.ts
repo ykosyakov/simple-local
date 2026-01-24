@@ -1,7 +1,9 @@
 import * as fs from 'fs/promises'
 import * as path from 'path'
-import { spawn } from 'child_process'
+import { spawn, ChildProcess } from 'child_process'
 import type { ProjectConfig, Service } from '../../shared/types'
+
+const AI_DISCOVERY_TIMEOUT = 30000 // 30 seconds
 
 interface ScanResult {
   packageJsonPaths: string[]
@@ -138,7 +140,12 @@ Detect:
     projectPath: string,
     cliTool: 'claude' | 'codex' = 'claude'
   ): Promise<ProjectConfig | null> {
+    console.log('[Discovery] Starting AI discovery for:', projectPath)
+    console.log('[Discovery] Scanning project structure...')
+
     const scanResult = await this.scanProjectStructure(projectPath)
+    console.log('[Discovery] Scan result:', JSON.stringify(scanResult, null, 2))
+
     const prompt = this.buildDiscoveryPrompt(scanResult)
 
     return new Promise((resolve) => {
@@ -146,26 +153,70 @@ Detect:
         ? ['--print', prompt]
         : ['--prompt', prompt]
 
-      const proc = spawn(cliTool, args, {
-        cwd: projectPath,
-        shell: true,
-      })
+      console.log(`[Discovery] Spawning ${cliTool} with args:`, args.slice(0, 1))
+
+      let proc: ChildProcess
+      let timeoutId: NodeJS.Timeout
+      let resolved = false
+
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId)
+        if (proc && !proc.killed) {
+          console.log('[Discovery] Killing AI process')
+          proc.kill('SIGTERM')
+        }
+      }
+
+      const resolveOnce = (value: ProjectConfig | null) => {
+        if (resolved) return
+        resolved = true
+        cleanup()
+        resolve(value)
+      }
+
+      try {
+        proc = spawn(cliTool, args, {
+          cwd: projectPath,
+          shell: true,
+        })
+      } catch (err) {
+        console.error('[Discovery] Failed to spawn AI process:', err)
+        resolveOnce(null)
+        return
+      }
+
+      // Set timeout
+      timeoutId = setTimeout(() => {
+        console.log(`[Discovery] AI discovery timed out after ${AI_DISCOVERY_TIMEOUT}ms`)
+        resolveOnce(null)
+      }, AI_DISCOVERY_TIMEOUT)
 
       let output = ''
       let error = ''
 
       proc.stdout?.on('data', (data) => {
-        output += data.toString()
+        const chunk = data.toString()
+        output += chunk
+        console.log('[Discovery] stdout chunk:', chunk.slice(0, 200))
       })
 
       proc.stderr?.on('data', (data) => {
-        error += data.toString()
+        const chunk = data.toString()
+        error += chunk
+        console.log('[Discovery] stderr:', chunk.slice(0, 200))
+      })
+
+      proc.on('error', (err) => {
+        console.error('[Discovery] Process error:', err)
+        resolveOnce(null)
       })
 
       proc.on('close', (code) => {
+        console.log('[Discovery] AI process closed with code:', code)
+
         if (code !== 0) {
-          console.error('AI discovery failed:', error)
-          resolve(null)
+          console.error('[Discovery] AI discovery failed:', error)
+          resolveOnce(null)
           return
         }
 
@@ -173,16 +224,18 @@ Detect:
           // Extract JSON from output (might have extra text)
           const jsonMatch = output.match(/\{[\s\S]*\}/)
           if (!jsonMatch) {
-            resolve(null)
+            console.log('[Discovery] No JSON found in output')
+            resolveOnce(null)
             return
           }
 
           const parsed = JSON.parse(jsonMatch[0])
+          console.log('[Discovery] Parsed AI output:', JSON.stringify(parsed, null, 2))
           const config = this.convertToProjectConfig(parsed, projectPath)
-          resolve(config)
-        } catch {
-          console.error('Failed to parse AI output:', output)
-          resolve(null)
+          resolveOnce(config)
+        } catch (err) {
+          console.error('[Discovery] Failed to parse AI output:', err)
+          resolveOnce(null)
         }
       })
     })
@@ -223,31 +276,44 @@ Detect:
 
   // Fallback: Basic discovery without AI
   async basicDiscovery(projectPath: string): Promise<ProjectConfig> {
+    console.log('[Discovery] Starting basic discovery for:', projectPath)
+
     const scanResult = await this.scanProjectStructure(projectPath)
+    console.log('[Discovery] Basic scan found:', scanResult.packageJsonPaths.length, 'package.json files')
+
     const services: Service[] = []
     let portOffset = 0
 
     for (const pkgPath of scanResult.packageJsonPaths) {
-      const info = await this.parsePackageJson(pkgPath)
-      const relativePath = path.relative(projectPath, path.dirname(pkgPath))
+      try {
+        const info = await this.parsePackageJson(pkgPath)
+        console.log('[Discovery] Parsed package.json:', info.name, 'devScript:', info.devScript)
 
-      if (info.devScript) {
-        services.push({
-          id: info.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-          name: info.name,
-          path: relativePath || '.',
-          command: info.devScript.includes('bun') ? `bun run dev` : `npm run dev`,
-          port: info.port || 3000 + portOffset,
-          env: {},
-          devcontainer: `.simple-run/devcontainers/${info.name}.json`,
-        })
-        portOffset++
+        const relativePath = path.relative(projectPath, path.dirname(pkgPath))
+
+        if (info.devScript) {
+          services.push({
+            id: info.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            name: info.name,
+            path: relativePath || '.',
+            command: info.devScript.includes('bun') ? `bun run dev` : `npm run dev`,
+            port: info.port || 3000 + portOffset,
+            env: {},
+            devcontainer: `.simple-run/devcontainers/${info.name}.json`,
+          })
+          portOffset++
+        }
+      } catch (err) {
+        console.error('[Discovery] Failed to parse:', pkgPath, err)
       }
     }
 
-    return {
+    const config = {
       name: path.basename(projectPath),
       services,
     }
+
+    console.log('[Discovery] Basic discovery result:', JSON.stringify(config, null, 2))
+    return config
   }
 }

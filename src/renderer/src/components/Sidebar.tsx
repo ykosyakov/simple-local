@@ -1,28 +1,23 @@
-import { useEffect, useState } from 'react'
-import { FolderPlus, Settings, Circle } from 'lucide-react'
+import { FolderPlus, Settings, Circle, Loader2 } from 'lucide-react'
 import type { Project } from '../../../shared/types'
 
 interface SidebarProps {
+  projects: Project[]
   selectedProjectId?: string
   onSelectProject: (id: string) => void
   onAddProject: () => void
   onOpenSettings: () => void
+  isAddingProject?: boolean
 }
 
 export function Sidebar({
+  projects,
   selectedProjectId,
   onSelectProject,
   onAddProject,
-  onOpenSettings
+  onOpenSettings,
+  isAddingProject = false
 }: SidebarProps) {
-  const [projects, setProjects] = useState<Project[]>([])
-
-  useEffect(() => {
-    window.api.getRegistry().then((registry) => {
-      setProjects(registry.projects)
-    })
-  }, [])
-
   return (
     <aside className="flex w-56 flex-col border-r border-gray-700 bg-gray-800">
       <div className="p-4">
@@ -51,10 +46,15 @@ export function Sidebar({
 
         <button
           onClick={onAddProject}
-          className="mt-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-400 hover:bg-gray-700/50 hover:text-gray-200"
+          disabled={isAddingProject}
+          className="mt-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-400 hover:bg-gray-700/50 hover:text-gray-200 disabled:opacity-50"
         >
-          <FolderPlus className="h-4 w-4" />
-          Add Project
+          {isAddingProject ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <FolderPlus className="h-4 w-4" />
+          )}
+          {isAddingProject ? 'Adding...' : 'Add Project'}
         </button>
       </div>
 

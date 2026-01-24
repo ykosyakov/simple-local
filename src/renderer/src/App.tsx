@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { ProjectView } from './components/ProjectView'
-import type { Project, Registry } from '../../shared/types'
+import type { Registry } from '../../shared/types'
 
 function App(): JSX.Element {
   const [registry, setRegistry] = useState<Registry | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [isAddingProject, setIsAddingProject] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.getRegistry().then(setRegistry)
@@ -15,20 +17,37 @@ function App(): JSX.Element {
   const selectedProject = registry?.projects.find((p) => p.id === selectedProjectId)
 
   const handleAddProject = async () => {
+    console.log('[Renderer] Add project clicked')
     const folderPath = await window.api.selectFolder()
+    console.log('[Renderer] Selected folder:', folderPath)
     if (!folderPath) return
 
-    // Analyze and save config
-    const config = await window.api.analyzeProject(folderPath)
-    await window.api.saveProjectConfig(folderPath, config)
+    setIsAddingProject(true)
+    setAddError(null)
 
-    // Add to registry
-    const project = await window.api.addProject(folderPath, config.name)
+    try {
+      console.log('[Renderer] Calling analyzeProject...')
+      const config = await window.api.analyzeProject(folderPath)
+      console.log('[Renderer] Analysis complete:', config)
 
-    // Refresh registry
-    const updatedRegistry = await window.api.getRegistry()
-    setRegistry(updatedRegistry)
-    setSelectedProjectId(project.id)
+      console.log('[Renderer] Calling saveProjectConfig...')
+      await window.api.saveProjectConfig(folderPath, config)
+      console.log('[Renderer] Config saved')
+
+      console.log('[Renderer] Calling addProject...')
+      const project = await window.api.addProject(folderPath, config.name)
+      console.log('[Renderer] Project added:', project)
+
+      const updatedRegistry = await window.api.getRegistry()
+      setRegistry(updatedRegistry)
+      setSelectedProjectId(project.id)
+      console.log('[Renderer] Done!')
+    } catch (err) {
+      console.error('[Renderer] Error:', err)
+      setAddError(err instanceof Error ? err.message : 'Failed to add project')
+    } finally {
+      setIsAddingProject(false)
+    }
   }
 
   const handleStartAll = async () => {
@@ -50,10 +69,12 @@ function App(): JSX.Element {
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
       <Sidebar
+        projects={registry?.projects ?? []}
         selectedProjectId={selectedProjectId ?? undefined}
         onSelectProject={setSelectedProjectId}
         onAddProject={handleAddProject}
         onOpenSettings={() => {/* TODO */}}
+        isAddingProject={isAddingProject}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -64,6 +85,18 @@ function App(): JSX.Element {
         />
 
         <main className="flex-1 overflow-auto p-4">
+          {addError && (
+            <div className="mb-4 rounded-lg bg-red-900/50 border border-red-700 p-3 text-red-200">
+              <span className="font-medium">Error:</span> {addError}
+              <button
+                onClick={() => setAddError(null)}
+                className="ml-2 text-red-400 hover:text-red-200"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
           {selectedProject ? (
             <ProjectView project={selectedProject} />
           ) : (
