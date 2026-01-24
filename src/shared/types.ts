@@ -73,3 +73,39 @@ export interface DiscoveryProgress {
   message: string
   log?: string  // Raw terminal output
 }
+
+// Prerequisites check types
+
+export type ContainerRuntimeId = 'docker-desktop' | 'colima'
+export type AiAgentId = 'claude' | 'codex'
+
+export interface RuntimeCheck {
+  id: ContainerRuntimeId
+  name: string
+  available: boolean
+  running: boolean
+  socketPath: string
+  error?: string
+}
+
+export interface AgentCheck {
+  id: AiAgentId
+  name: string
+  available: boolean
+}
+
+export interface PrerequisitesResult {
+  runtimes: RuntimeCheck[]
+  agents: AgentCheck[]
+}
+
+export interface AppSettings {
+  containerRuntime: {
+    selected: ContainerRuntimeId
+    socketPath: string
+  }
+  aiAgent: {
+    selected: AiAgentId
+  }
+  setupCompletedAt: string
+}
