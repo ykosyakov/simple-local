@@ -1,4 +1,4 @@
-import { FolderPlus, Settings, Circle, Loader2, Trash2 } from 'lucide-react'
+import { FolderPlus, Settings, Loader2, Trash2, Zap } from 'lucide-react'
 import type { Project } from '../../../shared/types'
 
 interface SidebarProps {
@@ -21,65 +21,115 @@ export function Sidebar({
   isAddingProject = false
 }: SidebarProps) {
   return (
-    <aside className="flex w-56 flex-col border-r border-gray-700 bg-gray-800">
-      <div className="p-4">
-        <h1 className="text-lg font-semibold">Simple Run</h1>
+    <aside
+      className="flex w-64 flex-col"
+      style={{
+        background: 'var(--bg-surface)',
+        borderRight: '1px solid var(--border-subtle)'
+      }}
+    >
+      {/* App Header */}
+      <div className="flex items-center gap-3 p-5">
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-lg"
+          style={{
+            background: 'var(--accent-muted)',
+            border: '1px solid var(--accent-primary)'
+          }}
+        >
+          <Zap className="h-5 w-5" style={{ color: 'var(--accent-primary)' }} />
+        </div>
+        <h1 className="app-title text-lg">Simple Run</h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2">
-        <div className="mb-2 px-2 text-xs font-medium uppercase text-gray-500">
+      <div className="divider mx-4" />
+
+      {/* Projects List */}
+      <div className="flex-1 overflow-y-auto px-3 py-4">
+        <div
+          className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-wider"
+          style={{ color: 'var(--text-muted)' }}
+        >
           Projects
         </div>
 
-        {projects.map((project) => (
-          <div
-            key={project.id}
-            className={`group flex w-full items-center rounded transition-colors ${
-              selectedProjectId === project.id
-                ? 'bg-gray-700 text-white'
-                : 'text-gray-300 hover:bg-gray-700/50'
-            }`}
-          >
-            <button
+        <div className="space-y-1">
+          {projects.map((project) => (
+            <div
+              key={project.id}
+              className={`project-item group ${
+                selectedProjectId === project.id ? 'project-item-selected' : ''
+              }`}
               onClick={() => onSelectProject(project.id)}
-              className="flex flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm"
             >
-              <Circle className="h-2 w-2 fill-current text-green-500" />
-              {project.name}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onDeleteProject(project)
-              }}
-              className="mr-1 rounded p-1 opacity-0 transition-opacity hover:bg-gray-600 group-hover:opacity-100"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-400" />
-            </button>
-          </div>
-        ))}
+              {/* Status indicator */}
+              <div
+                className="h-2 w-2 rounded-full"
+                style={{
+                  background: 'var(--status-running)',
+                  boxShadow: '0 0 8px var(--status-running-glow)'
+                }}
+              />
 
+              {/* Project name */}
+              <span
+                className="flex-1 truncate text-sm font-medium"
+                style={{
+                  color: selectedProjectId === project.id
+                    ? 'var(--text-primary)'
+                    : 'var(--text-secondary)'
+                }}
+              >
+                {project.name}
+              </span>
+
+              {/* Delete button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteProject(project)
+                }}
+                className="btn-icon opacity-0 transition-opacity group-hover:opacity-100"
+                style={{ padding: '4px' }}
+              >
+                <Trash2
+                  className="h-3.5 w-3.5 transition-colors"
+                  style={{ color: 'var(--text-muted)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--danger)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add Project Button */}
         <button
           onClick={onAddProject}
           disabled={isAddingProject}
-          className="mt-2 flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-400 hover:bg-gray-700/50 hover:text-gray-200 disabled:opacity-50"
+          className="project-item mt-2 w-full disabled:opacity-50"
+          style={{ color: 'var(--text-muted)' }}
         >
           {isAddingProject ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--accent-primary)' }} />
           ) : (
             <FolderPlus className="h-4 w-4" />
           )}
-          {isAddingProject ? 'Adding...' : 'Add Project'}
+          <span className="text-sm">
+            {isAddingProject ? 'Analyzing...' : 'Add Project'}
+          </span>
         </button>
       </div>
 
-      <div className="border-t border-gray-700 p-2">
+      {/* Settings */}
+      <div className="p-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
         <button
           onClick={onOpenSettings}
-          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-gray-400 hover:bg-gray-700/50 hover:text-gray-200"
+          className="project-item w-full"
+          style={{ color: 'var(--text-muted)' }}
         >
           <Settings className="h-4 w-4" />
-          Settings
+          <span className="text-sm">Settings</span>
         </button>
       </div>
     </aside>

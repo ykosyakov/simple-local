@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { ServiceCard } from './ServiceCard'
 import { LogViewer } from './LogViewer'
+import { Server } from 'lucide-react'
 import type { Project, ProjectConfig, ServiceStatus } from '../../../shared/types'
 
 interface ProjectViewProps {
@@ -33,7 +34,6 @@ export function ProjectView({ project }: ProjectViewProps) {
     loadConfig()
     refreshStatuses()
 
-    // Poll status every 3 seconds
     const interval = setInterval(refreshStatuses, 3000)
     return () => clearInterval(interval)
   }, [loadConfig, refreshStatuses])
@@ -57,17 +57,74 @@ export function ProjectView({ project }: ProjectViewProps) {
 
   if (!config) {
     return (
-      <div className="flex h-full items-center justify-center text-gray-400">
-        Loading project configuration...
+      <div className="empty-state h-full">
+        <div
+          className="h-12 w-12 animate-spin rounded-full"
+          style={{
+            border: '3px solid var(--border-subtle)',
+            borderTopColor: 'var(--accent-primary)',
+          }}
+        />
+        <p style={{ color: 'var(--text-muted)' }}>Loading project configuration...</p>
       </div>
     )
   }
 
+  if (config.services.length === 0) {
+    return (
+      <div className="empty-state h-full">
+        <Server className="empty-state-icon" strokeWidth={1} />
+        <h3 className="empty-state-title">No services found</h3>
+        <p className="empty-state-description">
+          This project doesn't have any services configured yet
+        </p>
+      </div>
+    )
+  }
+
+  const runningCount = Array.from(statuses.values()).filter((s) => s === 'running').length
+  const totalCount = config.services.length
+
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full flex-col gap-6">
+      {/* Status Summary */}
+      <div
+        className="flex items-center gap-4 rounded-lg px-4 py-3"
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <div
+            className="h-3 w-3 rounded-full"
+            style={{
+              background: runningCount > 0 ? 'var(--status-running)' : 'var(--status-stopped)',
+              boxShadow: runningCount > 0 ? '0 0 10px var(--status-running-glow)' : 'none',
+            }}
+          />
+          <span
+            className="text-sm font-medium"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            {runningCount} of {totalCount} services running
+          </span>
+        </div>
+        <div className="flex-1" />
+        <div
+          className="text-xs"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {project.path}
+        </div>
+      </div>
+
       {/* Service Cards Grid */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-        {config.services.map((service) => (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {config.services.map((service, index) => (
           <ServiceCard
             key={service.id}
             service={service}
@@ -77,6 +134,7 @@ export function ProjectView({ project }: ProjectViewProps) {
             onStart={() => handleStart(service.id)}
             onStop={() => handleStop(service.id)}
             onRestart={() => handleRestart(service.id)}
+            index={index}
           />
         ))}
       </div>

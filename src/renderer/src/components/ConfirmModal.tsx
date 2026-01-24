@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { X, AlertTriangle } from 'lucide-react'
 
 interface ConfirmModalProps {
   isOpen: boolean
@@ -20,30 +20,67 @@ export function ConfirmModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-sm rounded-lg bg-gray-800 shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
-          <h3 className="text-lg font-medium">{title}</h3>
-          <button onClick={onCancel} className="text-gray-400 hover:text-white">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
+    >
+      <div
+        className="w-full max-w-md animate-fade-up rounded-xl overflow-hidden"
+        style={{
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border-subtle)',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+        }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: '1px solid var(--border-subtle)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-lg"
+              style={{
+                background: 'var(--danger-muted)',
+                border: '1px solid var(--danger)',
+              }}
+            >
+              <AlertTriangle className="h-5 w-5" style={{ color: 'var(--danger)' }} />
+            </div>
+            <h3
+              className="text-lg font-semibold"
+              style={{
+                fontFamily: 'var(--font-display)',
+                color: 'var(--text-primary)',
+              }}
+            >
+              {title}
+            </h3>
+          </div>
+          <button
+            onClick={onCancel}
+            className="btn-icon"
+          >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-4">
-          <p className="text-gray-300">{message}</p>
+        {/* Content */}
+        <div className="px-5 py-4">
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            {message}
+          </p>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-gray-700 px-4 py-3">
-          <button
-            onClick={onCancel}
-            className="rounded bg-gray-700 px-4 py-2 text-sm hover:bg-gray-600"
-          >
+        {/* Footer */}
+        <div
+          className="flex justify-end gap-3 px-5 py-4"
+          style={{ borderTop: '1px solid var(--border-subtle)' }}
+        >
+          <button onClick={onCancel} className="btn btn-ghost">
             Cancel
           </button>
-          <button
-            onClick={onConfirm}
-            className="rounded bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-500"
-          >
+          <button onClick={onConfirm} className="btn btn-danger">
             {confirmLabel}
           </button>
         </div>

@@ -9,20 +9,30 @@ interface ServiceCardProps {
   onStart: () => void
   onStop: () => void
   onRestart: () => void
+  index?: number
 }
 
-const STATUS_COLORS = {
-  stopped: 'bg-gray-500',
-  starting: 'bg-yellow-500 animate-pulse',
-  running: 'bg-green-500',
-  error: 'bg-red-500',
-}
-
-const STATUS_TEXT = {
-  stopped: 'Stopped',
-  starting: 'Starting...',
-  running: 'Running',
-  error: 'Error',
+const STATUS_CONFIG = {
+  stopped: {
+    color: 'var(--status-stopped)',
+    glow: 'none',
+    label: 'Offline',
+  },
+  starting: {
+    color: 'var(--status-starting)',
+    glow: '0 0 8px var(--status-starting-glow)',
+    label: 'Starting',
+  },
+  running: {
+    color: 'var(--status-running)',
+    glow: '0 0 8px var(--status-running-glow)',
+    label: 'Online',
+  },
+  error: {
+    color: 'var(--status-error)',
+    glow: '0 0 8px var(--status-error-glow)',
+    label: 'Error',
+  },
 }
 
 export function ServiceCard({
@@ -33,36 +43,77 @@ export function ServiceCard({
   onStart,
   onStop,
   onRestart,
+  index = 0,
 }: ServiceCardProps) {
   const isRunning = status === 'running'
   const isStarting = status === 'starting'
+  const config = STATUS_CONFIG[status]
 
   return (
     <div
       onClick={onSelect}
-      className={`cursor-pointer rounded-lg border p-4 transition-all ${
-        isSelected
-          ? 'border-blue-500 bg-gray-700'
-          : 'border-gray-700 bg-gray-800 hover:border-gray-600'
-      }`}
+      className="animate-fade-up cursor-pointer rounded-xl p-4 transition-all"
+      style={{
+        background: isSelected ? 'var(--bg-elevated)' : 'var(--bg-surface)',
+        border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
+        boxShadow: isRunning
+          ? '0 0 0 1px var(--status-running), 0 0 30px var(--status-running-glow)'
+          : isStarting
+            ? '0 0 0 1px var(--status-starting), 0 0 20px var(--status-starting-glow)'
+            : 'none',
+        animationDelay: `${index * 50}ms`,
+        opacity: 0,
+      }}
     >
+      {/* Status row */}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`h-2.5 w-2.5 rounded-full ${STATUS_COLORS[status]}`} />
-          <span className="font-medium">{service.name}</span>
-        </div>
-        <span className="text-xs text-gray-400">{STATUS_TEXT[status]}</span>
-      </div>
-
-      <div className="mb-3 text-sm text-gray-400">
-        <span className="font-mono">:{service.port}</span>
-        {service.debugPort && (
-          <span className="ml-2 font-mono text-xs">
-            (debug: {service.debugPort})
+          <div
+            className={`h-2 w-2 rounded-full ${isStarting ? 'status-pulse' : ''}`}
+            style={{
+              background: config.color,
+              boxShadow: config.glow,
+            }}
+          />
+          <span
+            className="text-[11px] font-medium uppercase tracking-wide"
+            style={{ color: config.color }}
+          >
+            {config.label}
           </span>
-        )}
+        </div>
+        <span className="port-display">:{service.port}</span>
       </div>
 
+      {/* Service name */}
+      <h3
+        className="mb-1 text-sm font-semibold leading-tight"
+        style={{
+          fontFamily: 'var(--font-display)',
+          color: 'var(--text-primary)',
+        }}
+        title={service.name}
+      >
+        {service.name}
+      </h3>
+
+      {/* Debug port if exists */}
+      {service.debugPort && (
+        <div
+          className="mb-3 text-[11px]"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--text-muted)',
+          }}
+        >
+          debug:{service.debugPort}
+        </div>
+      )}
+
+      {/* Spacer if no debug port */}
+      {!service.debugPort && <div className="mb-3" />}
+
+      {/* Actions */}
       <div className="flex gap-2">
         {!isRunning && !isStarting && (
           <button
@@ -70,9 +121,10 @@ export function ServiceCard({
               e.stopPropagation()
               onStart()
             }}
-            className="flex items-center gap-1 rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-500"
+            className="btn btn-primary flex-1"
+            style={{ padding: '0.5rem' }}
           >
-            <Play className="h-3 w-3" />
+            <Play className="h-4 w-4" />
             Start
           </button>
         )}
@@ -84,9 +136,10 @@ export function ServiceCard({
                 e.stopPropagation()
                 onStop()
               }}
-              className="flex items-center gap-1 rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-500"
+              className="btn btn-danger flex-1"
+              style={{ padding: '0.5rem' }}
             >
-              <Square className="h-3 w-3" />
+              <Square className="h-4 w-4" />
               Stop
             </button>
             <button
@@ -94,9 +147,11 @@ export function ServiceCard({
                 e.stopPropagation()
                 onRestart()
               }}
-              className="flex items-center gap-1 rounded bg-gray-600 px-2 py-1 text-xs font-medium text-white hover:bg-gray-500"
+              className="btn btn-ghost"
+              style={{ padding: '0.5rem' }}
+              title="Restart service"
             >
-              <RotateCcw className="h-3 w-3" />
+              <RotateCcw className="h-4 w-4" />
             </button>
           </>
         )}

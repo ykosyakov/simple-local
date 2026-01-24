@@ -1,4 +1,4 @@
-import { Play, Square } from 'lucide-react'
+import { Play, Square, Activity } from 'lucide-react'
 
 interface HeaderProps {
   projectName?: string
@@ -8,23 +8,49 @@ interface HeaderProps {
 
 export function Header({ projectName, onStartAll, onStopAll }: HeaderProps) {
   return (
-    <header className="flex items-center justify-between border-b border-gray-700 px-4 py-3">
-      <h2 className="text-lg font-medium">
-        {projectName || 'Select a project'}
-      </h2>
+    <header
+      className="flex items-center justify-between px-6 py-4"
+      style={{ borderBottom: '1px solid var(--border-subtle)' }}
+    >
+      <div className="flex items-center gap-3">
+        {projectName ? (
+          <>
+            <Activity className="h-5 w-5" style={{ color: 'var(--accent-primary)' }} />
+            <h2
+              className="text-xl font-semibold"
+              style={{
+                fontFamily: 'var(--font-display)',
+                color: 'var(--text-primary)'
+              }}
+            >
+              {projectName}
+            </h2>
+          </>
+        ) : (
+          <h2
+            className="text-xl"
+            style={{
+              fontFamily: 'var(--font-display)',
+              color: 'var(--text-muted)'
+            }}
+          >
+            Select a project
+          </h2>
+        )}
+      </div>
 
       {projectName && (
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <button
             onClick={onStartAll}
-            className="flex items-center gap-1.5 rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-500"
+            className="btn btn-primary"
           >
             <Play className="h-4 w-4" />
-            Start All
+            Launch All
           </button>
           <button
             onClick={onStopAll}
-            className="flex items-center gap-1.5 rounded bg-gray-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-gray-500"
+            className="btn btn-ghost"
           >
             <Square className="h-4 w-4" />
             Stop All

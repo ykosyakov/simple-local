@@ -3,9 +3,10 @@ import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { ProjectView } from './components/ProjectView'
 import { ConfirmModal } from './components/ConfirmModal'
+import { Layers } from 'lucide-react'
 import type { Project, Registry } from '../../shared/types'
 
-function App(): JSX.Element {
+function App() {
   const [registry, setRegistry] = useState<Registry | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [isAddingProject, setIsAddingProject] = useState(false)
@@ -84,7 +85,7 @@ function App(): JSX.Element {
   }
 
   return (
-    <div className="flex h-screen bg-gray-900 text-gray-100">
+    <div className="flex h-screen overflow-hidden gradient-mesh noise">
       <Sidebar
         projects={registry?.projects ?? []}
         selectedProjectId={selectedProjectId ?? undefined}
@@ -110,13 +111,22 @@ function App(): JSX.Element {
           onStopAll={handleStopAll}
         />
 
-        <main className="flex-1 overflow-auto p-4">
+        <main className="flex-1 overflow-auto p-6">
           {addError && (
-            <div className="mb-4 rounded-lg bg-red-900/50 border border-red-700 p-3 text-red-200">
-              <span className="font-medium">Error:</span> {addError}
+            <div className="mb-4 flex items-center gap-3 rounded-lg p-4"
+              style={{
+                background: 'var(--danger-muted)',
+                border: '1px solid var(--danger)'
+              }}
+            >
+              <div className="flex-1">
+                <span className="font-medium" style={{ color: 'var(--danger)' }}>Error: </span>
+                <span style={{ color: 'var(--text-primary)' }}>{addError}</span>
+              </div>
               <button
                 onClick={() => setAddError(null)}
-                className="ml-2 text-red-400 hover:text-red-200"
+                className="btn-icon"
+                style={{ color: 'var(--danger)' }}
               >
                 Dismiss
               </button>
@@ -126,8 +136,12 @@ function App(): JSX.Element {
           {selectedProject ? (
             <ProjectView project={selectedProject} />
           ) : (
-            <div className="flex h-full items-center justify-center text-gray-500">
-              Select a project or add a new one
+            <div className="empty-state h-full">
+              <Layers className="empty-state-icon" strokeWidth={1} />
+              <h3 className="empty-state-title">No project selected</h3>
+              <p className="empty-state-description">
+                Select a project from the sidebar or add a new one to get started
+              </p>
             </div>
           )}
         </main>

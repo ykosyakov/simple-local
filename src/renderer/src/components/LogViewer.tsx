@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Terminal, Download, Trash2 } from 'lucide-react'
+import { Terminal, Download, Trash2, ChevronDown } from 'lucide-react'
 
 interface LogViewerProps {
   projectId: string
@@ -11,15 +11,14 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   const [logs, setLogs] = useState<string[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef(true)
+  const [showScrollButton, setShowScrollButton] = useState(false)
 
   useEffect(() => {
-    // Start streaming logs
     window.api.startLogStream(projectId, serviceId)
 
-    // Listen for log data
     const unsubscribe = window.api.onLogData((data) => {
       if (data.projectId === projectId && data.serviceId === serviceId) {
-        setLogs((prev) => [...prev.slice(-1000), data.data]) // Keep last 1000 lines
+        setLogs((prev) => [...prev.slice(-1000), data.data])
       }
     })
 
@@ -30,7 +29,6 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   }, [projectId, serviceId])
 
   useEffect(() => {
-    // Auto-scroll to bottom
     if (autoScrollRef.current && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight
     }
@@ -39,8 +37,17 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   const handleScroll = () => {
     if (!containerRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current
-    // Enable auto-scroll if user scrolls near bottom
-    autoScrollRef.current = scrollHeight - scrollTop - clientHeight < 50
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50
+    autoScrollRef.current = isNearBottom
+    setShowScrollButton(!isNearBottom && logs.length > 20)
+  }
+
+  const scrollToBottom = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight
+      autoScrollRef.current = true
+      setShowScrollButton(false)
+    }
   }
 
   const clearLogs = () => setLogs([])
@@ -56,23 +63,53 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   }
 
   return (
-    <div className="flex h-full flex-col rounded-lg border border-gray-700 bg-gray-800">
-      <div className="flex items-center justify-between border-b border-gray-700 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-4 w-4 text-gray-400" />
-          <span className="text-sm font-medium">Logs: {serviceName}</span>
+    <div
+      className="relative flex h-full flex-col overflow-hidden rounded-xl"
+      style={{
+        background: 'var(--bg-deep)',
+        border: '1px solid var(--border-subtle)',
+      }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-3"
+        style={{
+          background: 'var(--bg-surface)',
+          borderBottom: '1px solid var(--border-subtle)',
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <Terminal className="h-4 w-4" style={{ color: 'var(--accent-primary)' }} />
+          <span
+            className="text-sm font-medium"
+            style={{
+              fontFamily: 'var(--font-display)',
+              color: 'var(--text-primary)',
+            }}
+          >
+            {serviceName}
+          </span>
+          <span
+            className="text-xs"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            {logs.length} lines
+          </span>
         </div>
         <div className="flex gap-1">
           <button
             onClick={downloadLogs}
-            className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+            className="btn-icon"
             title="Download logs"
           >
             <Download className="h-4 w-4" />
           </button>
           <button
             onClick={clearLogs}
-            className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+            className="btn-icon"
             title="Clear logs"
           >
             <Trash2 className="h-4 w-4" />
@@ -80,21 +117,54 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
         </div>
       </div>
 
+      {/* Logs */}
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-auto p-3 font-mono text-xs leading-relaxed"
+        className="terminal relative flex-1 overflow-auto scanlines"
       >
         {logs.length === 0 ? (
-          <div className="text-gray-500">Waiting for logs...</div>
+          <div
+            className="flex h-full items-center justify-center"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <span style={{ fontFamily: 'var(--font-mono)' }}>
+              Waiting for logs...
+            </span>
+          </div>
         ) : (
-          logs.map((line, i) => (
-            <div key={i} className="whitespace-pre-wrap text-gray-300">
-              {line}
-            </div>
-          ))
+          <div className="py-2">
+            {logs.map((line, i) => (
+              <div
+                key={i}
+                className="terminal-line whitespace-pre-wrap py-0.5"
+              >
+                <span style={{ color: 'var(--text-muted)', marginRight: '1rem' }}>
+                  {String(i + 1).padStart(4, ' ')}
+                </span>
+                {line}
+              </div>
+            ))}
+          </div>
         )}
       </div>
+
+      {/* Scroll to bottom button */}
+      {showScrollButton && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg px-3 py-2 transition-all"
+          style={{
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
+            color: 'var(--text-secondary)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          }}
+        >
+          <ChevronDown className="h-4 w-4" />
+          <span className="text-xs font-medium">Jump to bottom</span>
+        </button>
+      )}
     </div>
   )
 }
