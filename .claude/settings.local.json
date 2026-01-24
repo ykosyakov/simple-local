@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npm view:*)",
+      "Bash(timeout 15 npm run dev:*)",
+      "Bash(npx electron:*)"
+    ]
+  }
+}
