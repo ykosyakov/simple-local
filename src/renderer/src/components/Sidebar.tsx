@@ -63,13 +63,20 @@ export function Sidebar({
               onClick={() => onSelectProject(project.id)}
             >
               {/* Status indicator */}
-              <div
-                className="h-2 w-2 rounded-full"
-                style={{
-                  background: 'var(--status-running)',
-                  boxShadow: '0 0 8px var(--status-running-glow)'
-                }}
-              />
+              {project.status === 'loading' ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin"
+                  style={{ color: 'var(--accent-primary)' }}
+                />
+              ) : (
+                <div
+                  className="h-2 w-2 rounded-full"
+                  style={{
+                    background: 'var(--status-running)',
+                    boxShadow: '0 0 8px var(--status-running-glow)'
+                  }}
+                />
+              )}
 
               {/* Project name */}
               <span
