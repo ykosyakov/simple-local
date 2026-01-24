@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { ServiceCard } from './ServiceCard'
 import { LogViewer } from './LogViewer'
+import { HiddenServices } from './project/HiddenServices'
 import { Server } from 'lucide-react'
 import type { Project, ProjectConfig, ServiceStatus } from '../../../shared/types'
 
@@ -53,6 +54,16 @@ export function ProjectView({ project }: ProjectViewProps) {
     await handleStart(serviceId)
   }
 
+  const handleActivateService = async (serviceId: string) => {
+    if (!config) return
+    const updatedServices = config.services.map((s) =>
+      s.id === serviceId ? { ...s, active: true } : s
+    )
+    const updatedConfig = { ...config, services: updatedServices }
+    await window.api.saveProjectConfig(project.path, updatedConfig)
+    loadConfig()
+  }
+
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
 
   if (!config) {
@@ -82,8 +93,11 @@ export function ProjectView({ project }: ProjectViewProps) {
     )
   }
 
+  const activeServices = config?.services.filter((s) => s.active !== false) ?? []
+  const hiddenServices = config?.services.filter((s) => s.active === false) ?? []
+
   const runningCount = Array.from(statuses.values()).filter((s) => s === 'running').length
-  const totalCount = config.services.length
+  const totalCount = activeServices.length
 
   return (
     <div className="flex h-full flex-col gap-6">
@@ -124,7 +138,7 @@ export function ProjectView({ project }: ProjectViewProps) {
 
       {/* Service Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {config.services.map((service, index) => (
+        {activeServices.map((service, index) => (
           <ServiceCard
             key={service.id}
             service={service}
@@ -149,6 +163,12 @@ export function ProjectView({ project }: ProjectViewProps) {
           />
         </div>
       )}
+
+      {/* Hidden Services */}
+      <HiddenServices
+        services={hiddenServices}
+        onActivate={handleActivateService}
+      />
     </div>
   )
 }
