@@ -14,6 +14,7 @@ export function ProjectView({ project }: ProjectViewProps) {
   const [configError, setConfigError] = useState<string | null>(null)
   const [statuses, setStatuses] = useState<Map<string, ServiceStatus['status']>>(new Map())
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const loadConfig = useCallback(async () => {
     try {
@@ -47,38 +48,77 @@ export function ProjectView({ project }: ProjectViewProps) {
   }, [loadConfig, refreshStatuses])
 
   const handleStart = async (serviceId: string) => {
-    await window.api.startService(project.id, serviceId)
-    refreshStatuses()
+    try {
+      setActionError(null)
+      await window.api.startService(project.id, serviceId)
+    } catch (err) {
+      console.error('[ProjectView] Failed to start service:', err)
+      const serviceName = config?.services.find((s) => s.id === serviceId)?.name || serviceId
+      setActionError(`Failed to start ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      refreshStatuses()
+    }
   }
 
   const handleStop = async (serviceId: string) => {
-    await window.api.stopService(project.id, serviceId)
-    refreshStatuses()
+    try {
+      setActionError(null)
+      await window.api.stopService(project.id, serviceId)
+    } catch (err) {
+      console.error('[ProjectView] Failed to stop service:', err)
+      const serviceName = config?.services.find((s) => s.id === serviceId)?.name || serviceId
+      setActionError(`Failed to stop ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      refreshStatuses()
+    }
   }
 
   const handleRestart = async (serviceId: string) => {
-    await handleStop(serviceId)
-    await handleStart(serviceId)
+    try {
+      setActionError(null)
+      await window.api.stopService(project.id, serviceId)
+      await window.api.startService(project.id, serviceId)
+    } catch (err) {
+      console.error('[ProjectView] Failed to restart service:', err)
+      const serviceName = config?.services.find((s) => s.id === serviceId)?.name || serviceId
+      setActionError(`Failed to restart ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      refreshStatuses()
+    }
   }
 
   const handleActivateService = async (serviceId: string) => {
     if (!config) return
-    const updatedServices = config.services.map((s) =>
-      s.id === serviceId ? { ...s, active: true } : s
-    )
-    const updatedConfig = { ...config, services: updatedServices }
-    await window.api.saveProjectConfig(project.path, updatedConfig)
-    loadConfig()
+    try {
+      setActionError(null)
+      const updatedServices = config.services.map((s) =>
+        s.id === serviceId ? { ...s, active: true } : s
+      )
+      const updatedConfig = { ...config, services: updatedServices }
+      await window.api.saveProjectConfig(project.path, updatedConfig)
+      loadConfig()
+    } catch (err) {
+      console.error('[ProjectView] Failed to activate service:', err)
+      const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
+      setActionError(`Failed to activate ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
   }
 
   const handleHideService = async (serviceId: string) => {
     if (!config) return
-    const updatedServices = config.services.map((s) =>
-      s.id === serviceId ? { ...s, active: false } : s
-    )
-    const updatedConfig = { ...config, services: updatedServices }
-    await window.api.saveProjectConfig(project.path, updatedConfig)
-    loadConfig()
+    try {
+      setActionError(null)
+      const updatedServices = config.services.map((s) =>
+        s.id === serviceId ? { ...s, active: false } : s
+      )
+      const updatedConfig = { ...config, services: updatedServices }
+      await window.api.saveProjectConfig(project.path, updatedConfig)
+      loadConfig()
+    } catch (err) {
+      console.error('[ProjectView] Failed to hide service:', err)
+      const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
+      setActionError(`Failed to hide ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
   }
 
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
@@ -165,6 +205,28 @@ export function ProjectView({ project }: ProjectViewProps) {
           {project.path}
         </div>
       </div>
+
+      {/* Error Banner */}
+      {actionError && (
+        <div
+          className="flex items-center gap-3 rounded-lg px-4 py-3"
+          style={{
+            background: 'rgba(255, 71, 87, 0.15)',
+            border: '1px solid var(--danger)',
+          }}
+        >
+          <span className="flex-1 text-sm" style={{ color: 'var(--danger)' }}>
+            {actionError}
+          </span>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-sm hover:underline"
+            style={{ color: 'var(--danger)' }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Service Cards Grid */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
