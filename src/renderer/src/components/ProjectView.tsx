@@ -44,8 +44,22 @@ export function ProjectView({ project }: ProjectViewProps) {
     refreshStatuses()
 
     const interval = setInterval(refreshStatuses, 3000)
-    return () => clearInterval(interval)
-  }, [loadConfig, refreshStatuses])
+
+    const unsubscribeStatus = window.api.onStatusChange?.((data) => {
+      if (data.projectId === project.id) {
+        setStatuses((prev) => {
+          const next = new Map(prev)
+          next.set(data.serviceId, data.status as ServiceStatus['status'])
+          return next
+        })
+      }
+    })
+
+    return () => {
+      clearInterval(interval)
+      unsubscribeStatus?.()
+    }
+  }, [loadConfig, refreshStatuses, project.id])
 
   const handleStart = async (serviceId: string) => {
     try {
@@ -118,6 +132,23 @@ export function ProjectView({ project }: ProjectViewProps) {
       console.error('[ProjectView] Failed to hide service:', err)
       const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
       setActionError(`Failed to hide ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }
+
+  const handleModeChange = async (serviceId: string, mode: 'native' | 'container') => {
+    if (!config) return
+    try {
+      setActionError(null)
+      const updatedServices = config.services.map((s) =>
+        s.id === serviceId ? { ...s, mode } : s
+      )
+      const updatedConfig = { ...config, services: updatedServices }
+      await window.api.saveProjectConfig(project.path, updatedConfig)
+      loadConfig()
+    } catch (err) {
+      console.error('[ProjectView] Failed to change mode:', err)
+      const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
+      setActionError(`Failed to change mode for ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
   }
 
@@ -241,6 +272,7 @@ export function ProjectView({ project }: ProjectViewProps) {
             onStop={() => handleStop(service.id)}
             onRestart={() => handleRestart(service.id)}
             onHide={() => handleHideService(service.id)}
+            onModeChange={(mode) => handleModeChange(service.id, mode)}
             index={index}
           />
         ))}
