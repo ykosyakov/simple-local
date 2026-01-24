@@ -8,7 +8,6 @@ interface SidebarProps {
   onAddProject: () => void
   onOpenSettings: () => void
   onDeleteProject: (project: Project) => void
-  isAddingProject?: boolean
 }
 
 export function Sidebar({
@@ -17,8 +16,7 @@ export function Sidebar({
   onSelectProject,
   onAddProject,
   onOpenSettings,
-  onDeleteProject,
-  isAddingProject = false
+  onDeleteProject
 }: SidebarProps) {
   return (
     <aside
@@ -113,18 +111,11 @@ export function Sidebar({
         {/* Add Project Button */}
         <button
           onClick={onAddProject}
-          disabled={isAddingProject}
-          className="project-item mt-2 w-full disabled:opacity-50"
+          className="project-item mt-2 w-full"
           style={{ color: 'var(--text-muted)' }}
         >
-          {isAddingProject ? (
-            <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--accent-primary)' }} />
-          ) : (
-            <FolderPlus className="h-4 w-4" />
-          )}
-          <span className="text-sm">
-            {isAddingProject ? 'Analyzing...' : 'Add Project'}
-          </span>
+          <FolderPlus className="h-4 w-4" />
+          <span className="text-sm">Add Project</span>
         </button>
       </div>
 

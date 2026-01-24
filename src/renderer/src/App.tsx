@@ -3,13 +3,14 @@ import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { ProjectView } from './components/ProjectView'
 import { ConfirmModal } from './components/ConfirmModal'
+import { DiscoveryScreen } from './components/discovery'
 import { Layers } from 'lucide-react'
-import type { Project, Registry } from '../../shared/types'
+import type { Project, Registry, Service, ProjectConfig } from '../../shared/types'
 
 function App() {
   const [registry, setRegistry] = useState<Registry | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-  const [isAddingProject, setIsAddingProject] = useState(false)
+  const [loadingProjectPath, setLoadingProjectPath] = useState<string | null>(null)
   const [addError, setAddError] = useState<string | null>(null)
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
 
@@ -25,32 +26,62 @@ function App() {
     console.log('[Renderer] Selected folder:', folderPath)
     if (!folderPath) return
 
-    setIsAddingProject(true)
     setAddError(null)
 
+    // Create loading project immediately
+    const tempId = `loading-${Date.now()}`
+    const loadingProject: Project = {
+      id: tempId,
+      name: folderPath.split('/').pop() || folderPath,
+      path: folderPath,
+      portRange: [0, 0],
+      debugPortRange: [0, 0],
+      lastOpened: new Date().toISOString(),
+      status: 'loading',
+    }
+
+    setRegistry((prev) =>
+      prev ? { ...prev, projects: [...prev.projects, loadingProject] } : prev
+    )
+    setSelectedProjectId(tempId)
+    setLoadingProjectPath(folderPath)
+  }
+
+  const handleDiscoveryComplete = async (services: Service[]) => {
+    if (!loadingProjectPath) return
+
     try {
-      console.log('[Renderer] Calling analyzeProject...')
-      const config = await window.api.analyzeProject(folderPath)
-      console.log('[Renderer] Analysis complete:', config)
+      const config: ProjectConfig = {
+        name: loadingProjectPath.split('/').pop() || 'project',
+        services,
+      }
 
-      console.log('[Renderer] Calling saveProjectConfig...')
-      await window.api.saveProjectConfig(folderPath, config)
-      console.log('[Renderer] Config saved')
-
-      console.log('[Renderer] Calling addProject...')
-      const project = await window.api.addProject(folderPath, config.name)
-      console.log('[Renderer] Project added:', project)
+      await window.api.saveProjectConfig(loadingProjectPath, config)
+      const project = await window.api.addProject(loadingProjectPath, config.name)
 
       const updatedRegistry = await window.api.getRegistry()
       setRegistry(updatedRegistry)
       setSelectedProjectId(project.id)
-      console.log('[Renderer] Done!')
+      setLoadingProjectPath(null)
     } catch (err) {
       console.error('[Renderer] Error:', err)
       setAddError(err instanceof Error ? err.message : 'Failed to add project')
-    } finally {
-      setIsAddingProject(false)
+      handleDiscoveryCancel()
     }
+  }
+
+  const handleDiscoveryCancel = () => {
+    // Remove the loading project from the list
+    setRegistry((prev) =>
+      prev
+        ? {
+            ...prev,
+            projects: prev.projects.filter((p) => p.status !== 'loading'),
+          }
+        : prev
+    )
+    setLoadingProjectPath(null)
+    setSelectedProjectId(null)
   }
 
   const handleStartAll = async () => {
@@ -93,7 +124,6 @@ function App() {
         onAddProject={handleAddProject}
         onOpenSettings={() => {/* TODO */}}
         onDeleteProject={setProjectToDelete}
-        isAddingProject={isAddingProject}
       />
 
       <ConfirmModal
@@ -133,7 +163,13 @@ function App() {
             </div>
           )}
 
-          {selectedProject ? (
+          {loadingProjectPath ? (
+            <DiscoveryScreen
+              projectPath={loadingProjectPath}
+              onComplete={handleDiscoveryComplete}
+              onCancel={handleDiscoveryCancel}
+            />
+          ) : selectedProject ? (
             <ProjectView project={selectedProject} />
           ) : (
             <div className="empty-state h-full">
