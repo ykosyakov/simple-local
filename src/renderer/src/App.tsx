@@ -4,8 +4,11 @@ import { Header } from './components/Header'
 import { ProjectView } from './components/ProjectView'
 import { ConfirmModal } from './components/ConfirmModal'
 import { DiscoveryScreen } from './components/discovery'
+import { SetupScreen } from './components/SetupScreen'
 import { Layers } from 'lucide-react'
-import type { Project, Registry, Service, ProjectConfig } from '../../shared/types'
+import type { Project, Registry, Service, ProjectConfig, PrerequisitesResult, AppSettings } from '../../shared/types'
+
+type AppState = 'checking' | 'setup' | 'ready'
 
 function App() {
   const [registry, setRegistry] = useState<Registry | null>(null)
@@ -13,9 +16,47 @@ function App() {
   const [loadingProjectPath, setLoadingProjectPath] = useState<string | null>(null)
   const [addError, setAddError] = useState<string | null>(null)
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
+  const [appState, setAppState] = useState<AppState>('checking')
+  const [prerequisites, setPrerequisites] = useState<PrerequisitesResult | null>(null)
+  const [isRechecking, setIsRechecking] = useState(false)
 
   useEffect(() => {
     window.api.getRegistry().then(setRegistry)
+  }, [])
+
+  useEffect(() => {
+    const checkStartup = async () => {
+      try {
+        const [prereqs, settings] = await Promise.all([
+          window.api.checkPrerequisites(),
+          window.api.getSettings(),
+        ])
+
+        setPrerequisites(prereqs)
+
+        if (settings) {
+          // Validate saved settings still work
+          const savedRuntime = prereqs.runtimes.find(
+            (r) => r.id === settings.containerRuntime.selected
+          )
+          const savedAgent = prereqs.agents.find(
+            (a) => a.id === settings.aiAgent.selected
+          )
+
+          if (savedRuntime?.running && savedAgent?.available) {
+            setAppState('ready')
+            return
+          }
+        }
+
+        setAppState('setup')
+      } catch (error) {
+        console.error('Failed to check prerequisites:', error)
+        setAppState('setup')
+      }
+    }
+
+    checkStartup()
   }, [])
 
   const selectedProject = registry?.projects.find((p) => p.id === selectedProjectId)
@@ -126,6 +167,48 @@ function App() {
     }
 
     setProjectToDelete(null)
+  }
+
+  const handleSetupComplete = async (settings: AppSettings) => {
+    await window.api.saveSettings(settings)
+    setAppState('ready')
+  }
+
+  const handleRecheck = async () => {
+    setIsRechecking(true)
+    try {
+      const prereqs = await window.api.checkPrerequisites()
+      setPrerequisites(prereqs)
+    } catch (error) {
+      console.error('Failed to recheck prerequisites:', error)
+    } finally {
+      setIsRechecking(false)
+    }
+  }
+
+  if (appState === 'checking') {
+    return (
+      <div className="flex h-screen items-center justify-center gradient-mesh noise">
+        <div className="text-center">
+          <div
+            className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
+            style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
+          />
+          <p style={{ color: 'var(--text-secondary)' }}>Checking prerequisites...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (appState === 'setup' && prerequisites) {
+    return (
+      <SetupScreen
+        prerequisites={prerequisites}
+        onComplete={handleSetupComplete}
+        onRecheck={handleRecheck}
+        isRechecking={isRechecking}
+      />
+    )
   }
 
   return (
