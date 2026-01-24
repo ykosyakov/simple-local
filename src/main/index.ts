@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc'
 import { setupTray } from './tray'
+import './electron-types'
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({

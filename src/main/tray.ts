@@ -1,4 +1,5 @@
 import { app, Menu, Tray, nativeImage, BrowserWindow } from 'electron'
+import './electron-types'
 import * as path from 'path'
 
 let tray: Tray | null = null
@@ -72,9 +73,3 @@ export function destroyTray(): void {
   }
 }
 
-// Extend app with isQuitting flag
-declare module 'electron' {
-  interface App {
-    isQuitting?: boolean
-  }
-}

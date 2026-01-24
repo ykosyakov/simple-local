@@ -117,10 +117,10 @@ export function EnvEditorModal({ isOpen, service, onClose, onSave }: EnvEditorMo
 
                   <div className="absolute right-2 top-1/2 flex -translate-y-1/2 gap-1">
                     {v.isAutoWired && (
-                      <Zap className="h-4 w-4 text-yellow-500" title="Auto-wired" />
+                      <span title="Auto-wired"><Zap className="h-4 w-4 text-yellow-500" /></span>
                     )}
                     {v.isLocked && (
-                      <Lock className="h-4 w-4 text-gray-500" title="Locked" />
+                      <span title="Locked"><Lock className="h-4 w-4 text-gray-500" /></span>
                     )}
                     {v.isSecret && (
                       <button

@@ -1,6 +1,7 @@
 import Docker from 'dockerode'
 import { spawn } from 'child_process'
 import { EventEmitter } from 'events'
+import type { Readable } from 'stream'
 import type { ServiceStatus } from '../../shared/types'
 
 export class ContainerService extends EventEmitter {
@@ -142,7 +143,7 @@ export class ContainerService extends EventEmitter {
     // Return cleanup function
     return () => {
       stream.removeListener('data', handleData)
-      stream.destroy()
+      ;(stream as unknown as Readable).destroy()
     }
   }
 
