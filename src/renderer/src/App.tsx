@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { Header } from './components/Header'
 import { ProjectView } from './components/ProjectView'
-import type { Registry } from '../../shared/types'
+import { ConfirmModal } from './components/ConfirmModal'
+import type { Project, Registry } from '../../shared/types'
 
 function App(): JSX.Element {
   const [registry, setRegistry] = useState<Registry | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [isAddingProject, setIsAddingProject] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
 
   useEffect(() => {
     window.api.getRegistry().then(setRegistry)
@@ -66,6 +68,21 @@ function App(): JSX.Element {
     }
   }
 
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return
+
+    await window.api.removeProject(projectToDelete.id)
+    const updatedRegistry = await window.api.getRegistry()
+    setRegistry(updatedRegistry)
+
+    if (selectedProjectId === projectToDelete.id) {
+      const remaining = updatedRegistry.projects
+      setSelectedProjectId(remaining.length > 0 ? remaining[0].id : null)
+    }
+
+    setProjectToDelete(null)
+  }
+
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
       <Sidebar
@@ -74,7 +91,16 @@ function App(): JSX.Element {
         onSelectProject={setSelectedProjectId}
         onAddProject={handleAddProject}
         onOpenSettings={() => {/* TODO */}}
+        onDeleteProject={setProjectToDelete}
         isAddingProject={isAddingProject}
+      />
+
+      <ConfirmModal
+        isOpen={projectToDelete !== null}
+        title="Delete Project"
+        message={`Remove "${projectToDelete?.name}" from Simple Run? Files on disk will not be affected.`}
+        onConfirm={handleDeleteProject}
+        onCancel={() => setProjectToDelete(null)}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">

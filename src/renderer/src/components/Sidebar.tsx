@@ -1,4 +1,4 @@
-import { FolderPlus, Settings, Circle, Loader2 } from 'lucide-react'
+import { FolderPlus, Settings, Circle, Loader2, Trash2 } from 'lucide-react'
 import type { Project } from '../../../shared/types'
 
 interface SidebarProps {
@@ -7,6 +7,7 @@ interface SidebarProps {
   onSelectProject: (id: string) => void
   onAddProject: () => void
   onOpenSettings: () => void
+  onDeleteProject: (project: Project) => void
   isAddingProject?: boolean
 }
 
@@ -16,6 +17,7 @@ export function Sidebar({
   onSelectProject,
   onAddProject,
   onOpenSettings,
+  onDeleteProject,
   isAddingProject = false
 }: SidebarProps) {
   return (
@@ -30,18 +32,31 @@ export function Sidebar({
         </div>
 
         {projects.map((project) => (
-          <button
+          <div
             key={project.id}
-            onClick={() => onSelectProject(project.id)}
-            className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
+            className={`group flex w-full items-center rounded transition-colors ${
               selectedProjectId === project.id
                 ? 'bg-gray-700 text-white'
                 : 'text-gray-300 hover:bg-gray-700/50'
             }`}
           >
-            <Circle className="h-2 w-2 fill-current text-green-500" />
-            {project.name}
-          </button>
+            <button
+              onClick={() => onSelectProject(project.id)}
+              className="flex flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm"
+            >
+              <Circle className="h-2 w-2 fill-current text-green-500" />
+              {project.name}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onDeleteProject(project)
+              }}
+              className="mr-1 rounded p-1 opacity-0 transition-opacity hover:bg-gray-600 group-hover:opacity-100"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-gray-400 hover:text-red-400" />
+            </button>
+          </div>
         ))}
 
         <button
