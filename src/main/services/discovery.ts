@@ -40,6 +40,16 @@ const FRAMEWORK_PATTERNS: Record<string, RegExp> = {
   bun: /bun/i,
 }
 
+const FRONTEND_FRAMEWORKS = new Set(['next', 'react', 'vue', 'vite', 'webpack', 'parcel'])
+const BACKEND_FRAMEWORKS = new Set(['express', 'fastify', 'nest', 'django', 'flask', 'rails', 'spring'])
+
+function getDefaultMode(framework?: string): 'native' | 'container' {
+  if (!framework) return 'native'
+  if (FRONTEND_FRAMEWORKS.has(framework.toLowerCase())) return 'native'
+  if (BACKEND_FRAMEWORKS.has(framework.toLowerCase())) return 'container'
+  return 'native'
+}
+
 export class DiscoveryService {
   async scanProjectStructure(projectPath: string, depth = 2): Promise<ScanResult> {
     const result: ScanResult = {
@@ -354,6 +364,7 @@ Detect:
       dependsOn: s.dependsOn,
       devcontainer: `.simple-run/devcontainers/${s.id}.json`,
       active: true,
+      mode: getDefaultMode(s.framework || s.type),
     }))
 
     // Apply connections as env var references
@@ -399,6 +410,7 @@ Detect:
             env: {},
             devcontainer: `.simple-run/devcontainers/${info.name}.json`,
             active: true,
+            mode: getDefaultMode(info.framework),
           })
           portOffset++
         }

@@ -86,6 +86,7 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
       env: {},
       devcontainer: `.simple-run/devcontainers/${data.name}.json`,
       active: true,
+      mode: 'native',
     }
     setManualServices((prev) => [...prev, newService])
   }
