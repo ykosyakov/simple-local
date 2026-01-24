@@ -197,6 +197,15 @@ export class ContainerService extends EventEmitter {
   ): Promise<() => void> {
     const container = this.docker.getContainer(containerName)
 
+    try {
+      await container.inspect()
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.includes('no such container')) {
+        return () => {}
+      }
+      throw error
+    }
+
     const stream = await container.logs({
       follow: true,
       stdout: true,
@@ -205,8 +214,6 @@ export class ContainerService extends EventEmitter {
     })
 
     const handleData = (chunk: Buffer) => {
-      // Docker stream has 8-byte header for multiplexed streams
-      // Skip header and emit log content
       const content = chunk.slice(8).toString('utf-8')
       if (content.trim()) {
         onLog(content)
@@ -215,7 +222,6 @@ export class ContainerService extends EventEmitter {
 
     stream.on('data', handleData)
 
-    // Return cleanup function
     return () => {
       stream.removeListener('data', handleData)
       ;(stream as unknown as Readable).destroy()

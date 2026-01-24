@@ -140,4 +140,21 @@ describe('ContainerService', () => {
       )
     })
   })
+
+  describe('streamLogs', () => {
+    it('returns no-op cleanup when container does not exist', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.getContainer).mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+        logs: vi.fn(),
+      } as any)
+
+      const onLog = vi.fn()
+      const cleanup = await containerService.streamLogs('nonexistent', onLog)
+
+      expect(cleanup).toBeInstanceOf(Function)
+      cleanup()
+      expect(onLog).not.toHaveBeenCalled()
+    })
+  })
 })
