@@ -1,4 +1,4 @@
-import { Play, Square, RotateCcw } from 'lucide-react'
+import { Play, Square, RotateCcw, EyeOff } from 'lucide-react'
 import type { Service, ServiceStatus } from '../../../shared/types'
 
 interface ServiceCardProps {
@@ -9,6 +9,7 @@ interface ServiceCardProps {
   onStart: () => void
   onStop: () => void
   onRestart: () => void
+  onHide?: () => void
   index?: number
 }
 
@@ -43,6 +44,7 @@ export function ServiceCard({
   onStart,
   onStop,
   onRestart,
+  onHide,
   index = 0,
 }: ServiceCardProps) {
   const isRunning = status === 'running'
@@ -114,7 +116,7 @@ export function ServiceCard({
       {!service.debugPort && <div className="mb-3" />}
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="group flex gap-2">
         {!isRunning && !isStarting && (
           <button
             onClick={(e) => {
@@ -154,6 +156,19 @@ export function ServiceCard({
               <RotateCcw className="h-4 w-4" />
             </button>
           </>
+        )}
+
+        {onHide && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onHide()
+            }}
+            className="btn-icon opacity-0 transition-opacity group-hover:opacity-100"
+            title="Hide service"
+          >
+            <EyeOff className="h-4 w-4" />
+          </button>
         )}
       </div>
     </div>

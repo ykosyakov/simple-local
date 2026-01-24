@@ -64,6 +64,16 @@ export function ProjectView({ project }: ProjectViewProps) {
     loadConfig()
   }
 
+  const handleHideService = async (serviceId: string) => {
+    if (!config) return
+    const updatedServices = config.services.map((s) =>
+      s.id === serviceId ? { ...s, active: false } : s
+    )
+    const updatedConfig = { ...config, services: updatedServices }
+    await window.api.saveProjectConfig(project.path, updatedConfig)
+    loadConfig()
+  }
+
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
 
   if (!config) {
@@ -148,6 +158,7 @@ export function ProjectView({ project }: ProjectViewProps) {
             onStart={() => handleStart(service.id)}
             onStop={() => handleStop(service.id)}
             onRestart={() => handleRestart(service.id)}
+            onHide={() => handleHideService(service.id)}
             index={index}
           />
         ))}
