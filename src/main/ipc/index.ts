@@ -5,9 +5,11 @@ import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { PrerequisitesService } from '../services/prerequisites'
 import { SettingsService } from '../services/settings'
+import { AgentTerminal } from '../services/agent-terminal'
 import { setupRegistryHandlers } from './registry-handlers'
 import { setupServiceHandlers } from './service-handlers'
 import { setupPrerequisitesHandlers } from './prerequisites-handlers'
+import { setupAgentTerminalHandlers } from './agent-terminal-handlers'
 
 export function setupIpcHandlers(): {
   registry: RegistryService
@@ -16,6 +18,7 @@ export function setupIpcHandlers(): {
   discovery: DiscoveryService
   prerequisites: PrerequisitesService
   settings: SettingsService
+  agentTerminal: AgentTerminal
 } {
   const registry = new RegistryService()
   const settings = new SettingsService()
@@ -24,10 +27,12 @@ export function setupIpcHandlers(): {
   const config = new ProjectConfigService()
   const discovery = new DiscoveryService()
   const prerequisites = new PrerequisitesService()
+  const agentTerminal = new AgentTerminal()
 
   setupRegistryHandlers(registry)
   setupServiceHandlers(container, config, discovery, registry)
   setupPrerequisitesHandlers(prerequisites, settings, container)
+  setupAgentTerminalHandlers(agentTerminal)
 
   // Dialog handler for folder selection
   ipcMain.handle('dialog:selectFolder', async () => {
@@ -37,5 +42,5 @@ export function setupIpcHandlers(): {
     return result.canceled ? null : result.filePaths[0]
   })
 
-  return { registry, container, config, discovery, prerequisites, settings }
+  return { registry, container, config, discovery, prerequisites, settings, agentTerminal }
 }
