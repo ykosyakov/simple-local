@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { ServiceCard } from './ServiceCard'
 import { LogViewer } from './LogViewer'
 import { HiddenServices } from './project/HiddenServices'
-import { Server } from 'lucide-react'
+import { ConfigEditorModal } from './ConfigEditorModal'
+import { Server, Code2 } from 'lucide-react'
 import type { Project, ProjectConfig, ServiceStatus } from '../../../shared/types'
 
 interface ProjectViewProps {
@@ -15,6 +16,7 @@ export function ProjectView({ project }: ProjectViewProps) {
   const [statuses, setStatuses] = useState<Map<string, ServiceStatus['status']>>(new Map())
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [isConfigEditorOpen, setIsConfigEditorOpen] = useState(false)
 
   const loadConfig = useCallback(async () => {
     try {
@@ -152,6 +154,17 @@ export function ProjectView({ project }: ProjectViewProps) {
     }
   }
 
+  const handleSaveConfig = async (updatedConfig: ProjectConfig) => {
+    try {
+      setActionError(null)
+      await window.api.saveProjectConfig(project.path, updatedConfig)
+      loadConfig()
+    } catch (err) {
+      console.error('[ProjectView] Failed to save config:', err)
+      setActionError(`Failed to save config: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }
+
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
 
   if (configError) {
@@ -235,6 +248,14 @@ export function ProjectView({ project }: ProjectViewProps) {
         >
           {project.path}
         </div>
+        <button
+          onClick={() => setIsConfigEditorOpen(true)}
+          className="btn btn-ghost ml-4"
+          title="Edit project config"
+        >
+          <Code2 className="h-4 w-4" />
+          Edit Config
+        </button>
       </div>
 
       {/* Error Banner */}
@@ -293,6 +314,14 @@ export function ProjectView({ project }: ProjectViewProps) {
       <HiddenServices
         services={hiddenServices}
         onActivate={handleActivateService}
+      />
+
+      {/* Config Editor Modal */}
+      <ConfigEditorModal
+        isOpen={isConfigEditorOpen}
+        config={config}
+        onClose={() => setIsConfigEditorOpen(false)}
+        onSave={handleSaveConfig}
       />
     </div>
   )
