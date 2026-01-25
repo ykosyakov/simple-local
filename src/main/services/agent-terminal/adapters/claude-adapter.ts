@@ -17,6 +17,11 @@ export class ClaudeAdapter implements AgentAdapter {
       args.push(...options.args)
     }
 
+    // Add allowed tools if specified (safer than --dangerously-skip-permissions)
+    if (options.allowedTools && options.allowedTools.length > 0) {
+      args.push('--allowedTools', options.allowedTools.join(','))
+    }
+
     if (options.prompt) {
       args.push('-p', options.prompt)
     }

@@ -10,6 +10,12 @@ export interface SpawnOptions {
   cwd: string
   prompt?: string
   args?: string[]
+  /**
+   * Tools to allow without prompting.
+   * Passed to Claude CLI as --allowedTools flag.
+   * e.g. ['Read', 'Glob', 'Grep', 'Write']
+   */
+  allowedTools?: string[]
 }
 
 export interface AgentSession {
@@ -48,6 +54,7 @@ export class AgentTerminal {
     const args = adapter.buildArgs({
       prompt: options.prompt,
       args: options.args,
+      allowedTools: options.allowedTools,
     })
     const env = adapter.buildEnv()
 

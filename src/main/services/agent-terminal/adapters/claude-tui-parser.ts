@@ -23,8 +23,19 @@ const RESULT_PATTERN = /^(\s*)[●○◐◑▸►▶→]?\s*(Found|Created|Updat
 const THINKING_PATTERN = /(?:thinking|thought|churning)\s*(?:for\s*)?(\d+)s?/i
 const CHURNED_PATTERN = /[;·]\s*Churned?\s+for\s+(\d+)s/i
 
-// User input marker (bullet + text) - reserved for future use
-// const USER_INPUT_PATTERN = /^[○●◯◉❯>]\s*(.+)/
+// Permission patterns - Claude CLI asks "Allow <Tool>?" or "Allow <Tool> for <scope>?"
+// Options are typically: Yes (y), No (n), Always (a), Don't ask again for this session
+const PERMISSION_PATTERNS = [
+  /Allow\s+(\w+)(?:\s+for)?.*\?\s*(?:\[([^\]]+)\])?/i,  // "Allow Read? [Y/n/a]" or "Allow Bash for this session?"
+  /Do you want to allow\s+(\w+)/i,                       // "Do you want to allow Write"
+]
+
+// Permission response keys
+export const PERMISSION_KEYS = {
+  YES: 'y',
+  NO: 'n',
+  ALWAYS: 'a',  // Allow for this session
+} as const
 
 export interface TuiParseResult {
   events: AgentEvent[]
@@ -91,20 +102,26 @@ export function parseTuiChunk(raw: string): TuiParseResult {
       thinkingSeconds = parseInt(churnedMatch[1], 10)
     }
 
-    // Check for questions/permissions
-    if (trimmed.includes('Allow') || trimmed.includes('permission') || trimmed.includes('?')) {
-      if (trimmed.includes('Allow') && (trimmed.includes('Yes') || trimmed.includes('No'))) {
+    // Check for permission requests
+    for (const pattern of PERMISSION_PATTERNS) {
+      const permMatch = trimmed.match(pattern)
+      if (permMatch) {
+        const tool = permMatch[1]
         events.push({
           type: 'permission-request',
-          tool: 'unknown',
+          tool: tool,
           details: trimmed
         })
-      } else if (trimmed.endsWith('?') && !trimmed.includes('shortcuts')) {
-        events.push({
-          type: 'question',
-          text: trimmed
-        })
+        break
       }
+    }
+
+    // Check for other questions (not permissions)
+    if (trimmed.endsWith('?') && !trimmed.includes('Allow') && !trimmed.includes('shortcuts')) {
+      events.push({
+        type: 'question',
+        text: trimmed
+      })
     }
   }
 

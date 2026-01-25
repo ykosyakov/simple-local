@@ -4,6 +4,8 @@ import type { AgentEvent, AiAgentId } from '../../../../shared/types'
 export interface AdapterOptions {
   prompt?: string
   args?: string[]
+  /** Tools to allow without prompting (Claude CLI --allowedTools) */
+  allowedTools?: string[]
 }
 
 export interface AgentAdapter {

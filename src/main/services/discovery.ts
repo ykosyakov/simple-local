@@ -217,7 +217,8 @@ Only include services with runnable dev commands. Exclude shared libraries witho
         agent: cliTool,
         cwd: projectPath,
         prompt: prompt,
-        args: ['--dangerously-skip-permissions'], // Auto-approve tool use for automated discovery
+        // Allow only the tools needed for discovery (passed to CLI as --allowedTools)
+        allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
       })
 
       console.log(`[Discovery] Session ID: ${session.id}`)

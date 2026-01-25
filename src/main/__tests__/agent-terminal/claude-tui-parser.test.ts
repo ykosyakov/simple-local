@@ -69,12 +69,21 @@ describe('claude-tui-parser', () => {
       })
     })
 
-    it('detects permission requests', () => {
-      const result = parseTuiChunk('Allow Bash? Yes / No')
+    it('detects permission requests with tool name', () => {
+      const result = parseTuiChunk('Allow Bash? [Y/n/a]')
       expect(result.events).toContainEqual({
         type: 'permission-request',
-        tool: 'unknown',
-        details: 'Allow Bash? Yes / No'
+        tool: 'Bash',
+        details: 'Allow Bash? [Y/n/a]'
+      })
+    })
+
+    it('detects permission requests for Read tool', () => {
+      const result = parseTuiChunk('Allow Read for this session?')
+      expect(result.events).toContainEqual({
+        type: 'permission-request',
+        tool: 'Read',
+        details: 'Allow Read for this session?'
       })
     })
   })
