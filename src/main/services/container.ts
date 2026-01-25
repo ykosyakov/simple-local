@@ -92,8 +92,14 @@ export class ContainerService extends EventEmitter {
     workspaceFolder: string,
     configPath: string,
     command: string,
-    env: Record<string, string>
+    env: Record<string, string>,
+    onLog?: (data: string) => void
   ): Promise<void> {
+    const log = (data: string) => {
+      if (onLog) onLog(data)
+      this.emit('log', data)
+    }
+
     return new Promise((resolve, reject) => {
       // First, start the devcontainer
       const upArgs = this.buildDevcontainerCommand('up', workspaceFolder, configPath)
@@ -104,11 +110,11 @@ export class ContainerService extends EventEmitter {
       })
 
       upProcess.stdout?.on('data', (data) => {
-        this.emit('log', data.toString())
+        log(data.toString())
       })
 
       upProcess.stderr?.on('data', (data) => {
-        this.emit('log', data.toString())
+        log(data.toString())
       })
 
       upProcess.on('close', (code) => {
@@ -126,11 +132,11 @@ export class ContainerService extends EventEmitter {
         })
 
         execProcess.stdout?.on('data', (data) => {
-          this.emit('log', data.toString())
+          log(data.toString())
         })
 
         execProcess.stderr?.on('data', (data) => {
-          this.emit('log', data.toString())
+          log(data.toString())
         })
 
         // Don't wait for exec to finish - it's a long-running dev server

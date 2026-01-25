@@ -85,7 +85,7 @@ export function setupServiceHandlers(
       sendStatus('starting')
       sendLog('\n══════ Starting service ══════\n')
 
-      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv)
+      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv, sendLog)
       sendStatus('running')
     }
   })
@@ -282,7 +282,7 @@ export function setupServiceHandlers(
       await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
 
       sendLog('\n══════ Starting service ══════\n')
-      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv)
+      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv, sendLog)
     }
   }
 
