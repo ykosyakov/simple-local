@@ -19,9 +19,33 @@ export interface ApiServer {
 export async function createApiServer(options: ApiServerOptions): Promise<ApiServer> {
   const { port, registry, container, config } = options
 
-  const server = createServer((req, res) => {
-    res.writeHead(404, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ error: 'Not found' }))
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url || '/', `http://${req.headers.host}`)
+
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Content-Type', 'application/json')
+
+    try {
+      if (req.method === 'GET' && url.pathname === '/projects') {
+        const { projects } = registry.getRegistry()
+        res.writeHead(200)
+        res.end(JSON.stringify({
+          projects: projects.map(p => ({
+            id: p.id,
+            name: p.name,
+            path: p.path,
+            status: p.status,
+          }))
+        }))
+        return
+      }
+
+      res.writeHead(404)
+      res.end(JSON.stringify({ error: 'Not found', code: 'NOT_FOUND' }))
+    } catch (err) {
+      res.writeHead(500)
+      res.end(JSON.stringify({ error: 'Internal server error', code: 'INTERNAL_ERROR' }))
+    }
   })
 
   return new Promise((resolve, reject) => {
