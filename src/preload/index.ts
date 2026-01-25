@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo } from '../shared/types'
 
 const api = {
   // Registry
@@ -61,6 +61,42 @@ const api = {
     ipcRenderer.invoke('settings:get'),
   saveSettings: (settings: AppSettings): Promise<void> =>
     ipcRenderer.invoke('settings:save', settings),
+
+  // Agent Terminal
+  agentTerminal: {
+    spawn: (options: {
+      agent: AiAgentId
+      cwd: string
+      prompt?: string
+      args?: string[]
+    }): Promise<AgentSessionInfo> => ipcRenderer.invoke('agent-terminal:spawn', options),
+
+    send: (sessionId: string, input: string): Promise<void> =>
+      ipcRenderer.invoke('agent-terminal:send', sessionId, input),
+
+    interrupt: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke('agent-terminal:interrupt', sessionId),
+
+    kill: (sessionId: string): Promise<void> =>
+      ipcRenderer.invoke('agent-terminal:kill', sessionId),
+
+    killAll: (): Promise<void> => ipcRenderer.invoke('agent-terminal:kill-all'),
+
+    list: (): Promise<AgentSessionInfo[]> => ipcRenderer.invoke('agent-terminal:list'),
+
+    onEvent: (callback: (sessionId: string, event: AgentEvent) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sessionId: string, agentEvent: AgentEvent) =>
+        callback(sessionId, agentEvent)
+      ipcRenderer.on('agent-terminal:event', handler)
+      return () => ipcRenderer.removeListener('agent-terminal:event', handler)
+    },
+
+    onClosed: (callback: (sessionId: string) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
+      ipcRenderer.on('agent-terminal:closed', handler)
+      return () => ipcRenderer.removeListener('agent-terminal:closed', handler)
+    },
+  },
 }
 
 contextBridge.exposeInMainWorld('api', api)
