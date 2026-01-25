@@ -111,6 +111,57 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
         return
       }
 
+      // GET /projects/:projectId/services/:serviceId
+      const serviceMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)$/)
+      if (req.method === 'GET' && serviceMatch) {
+        const [, projectId, serviceId] = serviceMatch
+        const { projects } = registry.getRegistry()
+        const project = projects.find(p => p.id === projectId)
+
+        if (!project) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const projectConfig = await config.loadConfig(project.path)
+        if (!projectConfig) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const service = projectConfig.services.find(s => s.id === serviceId)
+        if (!service) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        let status: string
+        if (service.mode === 'native') {
+          status = container.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
+        } else {
+          const containerName = container.getContainerName(projectConfig.name, service.id)
+          status = await container.getContainerStatus(containerName)
+        }
+
+        res.writeHead(200)
+        res.end(JSON.stringify({
+          service: {
+            id: service.id,
+            name: service.name,
+            port: service.port,
+            debugPort: service.debugPort,
+            mode: service.mode,
+            command: service.command,
+            debugCommand: service.debugCommand,
+            status,
+          }
+        }))
+        return
+      }
+
       res.writeHead(404)
       res.end(JSON.stringify({ error: 'Not found', code: 'NOT_FOUND' }))
     } catch (err) {

@@ -139,4 +139,29 @@ describe('ApiServer', () => {
       expect(data.services[0].status).toBeDefined()
     })
   })
+
+  describe('GET /projects/:projectId/services/:serviceId', () => {
+    it('returns 404 for non-existent service', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/nonexistent`)
+      expect(res.status).toBe(404)
+    })
+
+    it('returns service details with status', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/api`)
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.service).toMatchObject({
+        id: 'api',
+        name: 'API Server',
+        port: 3001,
+        mode: 'native',
+        command: 'npm run dev',
+      })
+      expect(data.service.status).toBeDefined()
+    })
+  })
 })
