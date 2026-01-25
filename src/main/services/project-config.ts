@@ -58,15 +58,15 @@ export class ProjectConfigService {
       forwardPorts: [service.port, service.debugPort].filter(Boolean),
       postStartCommand: isNode ? 'npm install || bun install' : undefined,
       mounts: [
-        `source=\${localWorkspaceFolder}/${service.path},target=/workspace,type=bind`
+        `source=\${localWorkspaceFolder},target=/workspace,type=bind`
       ],
       runArgs: ['--name', `simple-local-${projectName}-${service.id}`],
     }
   }
 
   async saveDevcontainer(projectPath: string, service: Service, config: object): Promise<string> {
-    const devcontainerDir = path.join(projectPath, CONFIG_DIR, 'devcontainers')
-    const devcontainerPath = path.join(devcontainerDir, `${service.id}.json`)
+    const devcontainerDir = path.join(projectPath, CONFIG_DIR, 'devcontainers', service.id)
+    const devcontainerPath = path.join(devcontainerDir, 'devcontainer.json')
 
     await fs.mkdir(devcontainerDir, { recursive: true })
     await fs.writeFile(devcontainerPath, JSON.stringify(config, null, 2), 'utf-8')

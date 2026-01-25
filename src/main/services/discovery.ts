@@ -312,7 +312,7 @@ Only include services with runnable commands. Exclude shared libraries without r
       debugPort: s.debugPort,
       env: s.env || {},
       dependsOn: s.dependsOn,
-      devcontainer: `.simple-local/devcontainers/${s.id}.json`,
+      devcontainer: `.simple-local/devcontainers/${s.id}/devcontainer.json`,
       active: true,
       mode: getDefaultMode(s.framework || s.type),
     }))
@@ -351,14 +351,15 @@ Only include services with runnable commands. Exclude shared libraries without r
         const relativePath = path.relative(projectPath, path.dirname(pkgPath))
 
         if (info.devScript) {
+          const serviceId = info.name.toLowerCase().replace(/[^a-z0-9]/g, '-')
           services.push({
-            id: info.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+            id: serviceId,
             name: info.name,
             path: relativePath || '.',
             command: info.devScript.includes('bun') ? `bun run dev` : `npm run dev`,
             port: info.port || 3000 + portOffset,
             env: {},
-            devcontainer: `.simple-local/devcontainers/${info.name}.json`,
+            devcontainer: `.simple-local/devcontainers/${serviceId}/devcontainer.json`,
             active: true,
             mode: getDefaultMode(info.framework),
           })
