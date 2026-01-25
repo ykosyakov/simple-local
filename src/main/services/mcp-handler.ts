@@ -135,6 +135,103 @@ export class McpHandler {
       }
     }
 
+    if (method === 'tools/call') {
+      const { name, arguments: args } = request.params as { name: string; arguments: Record<string, string> }
+
+      try {
+        let text: string
+
+        switch (name) {
+          case 'list_projects': {
+            const projects = await this.deps.listProjects()
+            if (projects.length === 0) {
+              text = 'No projects found in Simple Run.'
+            } else {
+              text = 'Projects:\n' + projects.map(p => `- ${p.name} (${p.id}): ${p.status}`).join('\n')
+            }
+            break
+          }
+
+          case 'get_project': {
+            const project = await this.deps.getProject(args.projectId)
+            if (!project) {
+              text = `Project '${args.projectId}' not found.`
+            } else {
+              text = `Project: ${project.name}\nPath: ${project.path}\nStatus: ${project.status}`
+            }
+            break
+          }
+
+          case 'list_services': {
+            const services = await this.deps.listServices(args.projectId)
+            if (services.length === 0) {
+              text = 'No services found for this project.'
+            } else {
+              text = 'Services:\n' + services.map(s => `- ${s.name} (${s.id}): ${s.status} on port ${s.port}`).join('\n')
+            }
+            break
+          }
+
+          case 'get_service_status': {
+            const service = await this.deps.getServiceStatus(args.projectId, args.serviceId)
+            if (!service) {
+              text = `Service '${args.serviceId}' not found.`
+            } else {
+              text = `Service: ${service.name}\nStatus: ${service.status}\nPort: ${service.port}`
+            }
+            break
+          }
+
+          case 'get_logs': {
+            const logs = await this.deps.getLogs(args.projectId, args.serviceId)
+            if (logs.length === 0) {
+              text = 'No logs available for this service.'
+            } else {
+              text = 'Recent logs:\n' + logs.slice(-50).join('\n')
+            }
+            break
+          }
+
+          case 'start_service':
+            await this.deps.startService(args.projectId, args.serviceId)
+            text = `Started service '${args.serviceId}'.`
+            break
+
+          case 'stop_service':
+            await this.deps.stopService(args.projectId, args.serviceId)
+            text = `Stopped service '${args.serviceId}'.`
+            break
+
+          case 'restart_service':
+            await this.deps.restartService(args.projectId, args.serviceId)
+            text = `Restarted service '${args.serviceId}'.`
+            break
+
+          default:
+            return {
+              jsonrpc: '2.0',
+              id,
+              error: { code: -32602, message: `Unknown tool: ${name}` },
+            }
+        }
+
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: { content: [{ type: 'text', text }] },
+        }
+      } catch (err) {
+        return {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            content: [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+            isError: true,
+          },
+        }
+      }
+    }
+
     return {
       jsonrpc: '2.0',
       id,
