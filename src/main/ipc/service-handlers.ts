@@ -9,7 +9,7 @@ const MAX_LOG_LINES = 1000
 
 export interface ServiceHandlersResult {
   getLogBuffer: (projectId: string, serviceId: string) => string[]
-  startService: (projectId: string, serviceId: string) => Promise<void>
+  startService: (projectId: string, serviceId: string, mode?: 'native' | 'container') => Promise<void>
   stopService: (projectId: string, serviceId: string) => Promise<void>
 }
 
@@ -234,7 +234,7 @@ export function setupServiceHandlers(
     return logBuffers.get(key) || []
   }
 
-  const startService = async (projectId: string, serviceId: string): Promise<void> => {
+  const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
     const project = registry.getRegistry().projects.find((p) => p.id === projectId)
     if (!project) throw new Error('Project not found')
 
@@ -246,6 +246,7 @@ export function setupServiceHandlers(
 
     const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
     const servicePath = `${project.path}/${service.path}`
+    const effectiveMode = modeOverride || service.mode
 
     const key = `${projectId}:${serviceId}`
     const sendLog = (data: string) => {
@@ -259,7 +260,7 @@ export function setupServiceHandlers(
 
     const sendStatus = (_status: string) => {}
 
-    if (service.mode === 'native') {
+    if (effectiveMode === 'native') {
       if (service.port) {
         const killed = container.killProcessOnPort(service.port)
         if (killed) {

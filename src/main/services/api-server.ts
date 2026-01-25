@@ -10,7 +10,7 @@ export interface ApiServerOptions {
   container: ContainerService
   config: ProjectConfigService
   getLogBuffer?: (projectId: string, serviceId: string) => string[]
-  onServiceStart?: (projectId: string, serviceId: string) => Promise<void>
+  onServiceStart?: (projectId: string, serviceId: string, mode?: 'native' | 'container') => Promise<void>
   onServiceStop?: (projectId: string, serviceId: string) => Promise<void>
 }
 
@@ -66,7 +66,37 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       return { id: service.id, name: service.name, port: service.port, status }
     },
     getLogs: async (projectId, serviceId) => options.getLogBuffer?.(projectId, serviceId) ?? [],
-    startService: async (projectId, serviceId) => { await options.onServiceStart?.(projectId, serviceId) },
+    startService: async (projectId, serviceId, mode) => {
+      const { projects } = registry.getRegistry()
+      const project = projects.find(p => p.id === projectId)
+      if (!project) throw new Error('Project not found')
+
+      const projectConfig = await config.loadConfig(project.path)
+      if (!projectConfig) throw new Error('Project config not found')
+
+      const service = projectConfig.services.find(s => s.id === serviceId)
+      if (!service) throw new Error('Service not found')
+
+      const currentMode = service.mode
+      const targetMode = mode || currentMode
+
+      let isRunning = false
+      if (currentMode === 'native') {
+        isRunning = container.isNativeServiceRunning(serviceId)
+      } else {
+        const status = await container.getContainerStatus(container.getContainerName(projectConfig.name, serviceId))
+        isRunning = status === 'running'
+      }
+
+      const needsRestart = isRunning && !!mode && mode !== currentMode
+
+      if (needsRestart) {
+        await options.onServiceStop?.(projectId, serviceId)
+      }
+
+      await options.onServiceStart?.(projectId, serviceId, targetMode)
+      return { restarted: needsRestart }
+    },
     stopService: async (projectId, serviceId) => { await options.onServiceStop?.(projectId, serviceId) },
     restartService: async (projectId, serviceId) => {
       await options.onServiceStop?.(projectId, serviceId)

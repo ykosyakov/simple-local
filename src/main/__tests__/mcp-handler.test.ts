@@ -11,7 +11,7 @@ describe('McpHandler', () => {
       listServices: async () => [],
       getServiceStatus: async () => null,
       getLogs: async () => [],
-      startService: async () => {},
+      startService: async () => ({ restarted: false }),
       stopService: async () => {},
       restartService: async () => {},
     })
@@ -77,7 +77,7 @@ describe('McpHandler', () => {
         listServices: async () => [],
         getServiceStatus: async () => null,
         getLogs: async () => [],
-        startService: async () => {},
+        startService: async () => ({ restarted: false }),
         stopService: async () => {},
         restartService: async () => {},
       })
@@ -108,6 +108,7 @@ describe('McpHandler', () => {
         startService: async (projectId, serviceId) => {
           startedProject = projectId
           startedService = serviceId
+          return { restarted: false }
         },
         stopService: async () => {},
         restartService: async () => {},
