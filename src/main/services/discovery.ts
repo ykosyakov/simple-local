@@ -122,41 +122,52 @@ export class DiscoveryService {
     }
   }
 
-  buildDiscoveryPrompt(scanResult: ScanResult): string {
-    return `Analyze this project structure and return a JSON configuration.
+  buildDiscoveryPrompt(scanResult: ScanResult, resultFilePath: string): string {
+    const packageFiles = scanResult.packageJsonPaths.map(p => `- ${p}`).join('\n')
+    const dockerFiles = scanResult.dockerComposePaths.length
+      ? scanResult.dockerComposePaths.map(p => `- ${p}`).join('\n')
+      : '(none)'
+    const envFiles = scanResult.envFiles.length
+      ? scanResult.envFiles.map(p => `- ${p}`).join('\n')
+      : '(none)'
+
+    return `Analyze this project to discover runnable dev services.
 
 Found files:
-- package.json files: ${scanResult.packageJsonPaths.join(', ')}
-- Docker Compose files: ${scanResult.dockerComposePaths.join(', ') || 'none'}
-- Environment files: ${scanResult.envFiles.join(', ') || 'none'}
+Package.json files:
+${packageFiles}
 
-Return ONLY valid JSON in this exact format:
+Docker Compose files:
+${dockerFiles}
+
+Environment files:
+${envFiles}
+
+IMPORTANT: Write your result to this exact file: ${resultFilePath}
+
+Use the Write tool to create the file with this JSON:
 {
   "services": [
     {
-      "id": "string (lowercase, no spaces)",
-      "name": "string (display name)",
-      "path": "string (relative path from project root)",
-      "command": "string (dev command, e.g., 'bun run dev')",
-      "port": number,
-      "env": { "key": "value" },
-      "dependsOn": ["serviceId"] // optional
+      "id": "lowercase-no-spaces",
+      "name": "Display Name",
+      "path": "relative/path",
+      "command": "npm run dev",
+      "port": 3000,
+      "env": {},
+      "dependsOn": []
     }
   ],
-  "connections": [
-    {
-      "from": "serviceId",
-      "to": "serviceId",
-      "envVar": "VARIABLE_NAME"
-    }
-  ]
+  "connections": []
 }
 
-Detect:
-1. Each runnable service (frontend, backend, etc.)
-2. Default ports from scripts or configs
-3. Inter-service connections from env vars
-4. Proper startup order based on dependencies`
+Steps:
+1. Read each package.json to find dev/start scripts
+2. Determine ports from scripts or config files
+3. Identify service dependencies
+4. Write the JSON result to ${resultFilePath}
+
+Only include services with runnable dev commands. Exclude shared libraries without dev scripts.`
   }
 
   async runAIDiscovery(
@@ -183,8 +194,19 @@ Detect:
 
     onProgress?.({ projectPath, step: 'scanning', message: `Found ${scanResult.packageJsonPaths.length} package.json files` })
 
-    const prompt = this.buildDiscoveryPrompt(scanResult)
+    // Result file for reliable JSON output (more reliable than parsing TUI)
+    const resultDir = path.join(projectPath, '.simple-run')
+    const resultFile = path.join(resultDir, 'discovery-result.json')
+    await fs.mkdir(resultDir, { recursive: true })
 
+    // Clean up any previous result
+    try {
+      await fs.unlink(resultFile)
+    } catch {
+      // File doesn't exist, that's fine
+    }
+
+    const prompt = this.buildDiscoveryPrompt(scanResult, resultFile)
     const terminal = new AgentTerminal()
 
     try {
@@ -195,18 +217,15 @@ Detect:
         agent: cliTool,
         cwd: projectPath,
         prompt: prompt,
+        args: ['--dangerously-skip-permissions'], // Auto-approve tool use for automated discovery
       })
 
       console.log(`[Discovery] Session ID: ${session.id}`)
-
-      let fullText = ''
 
       // Subscribe to events for progress reporting
       session.events$.subscribe({
         next: (event) => {
           if (event.type === 'output') {
-            fullText += event.text
-            // Report progress with raw output
             onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: event.text })
           } else if (event.type === 'tool-start') {
             onProgress?.({ projectPath, step: 'ai-analysis', message: `Using ${event.tool}...` })
@@ -225,23 +244,22 @@ Detect:
         throw new Error('AI analysis timed out')
       })
 
-      console.log('[Discovery] Session completed, output length:', fullText.length)
-
+      console.log('[Discovery] Session completed')
       onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
 
-      // Extract JSON from output
-      const jsonMatch = fullText.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) {
-        console.log('[Discovery] No JSON found in output. Text was:', fullText.slice(0, 500))
-        onProgress?.({ projectPath, step: 'error', message: 'No valid JSON in AI response' })
+      // Read result from file (more reliable than parsing TUI output)
+      try {
+        const resultContent = await fs.readFile(resultFile, 'utf-8')
+        const parsed = JSON.parse(resultContent)
+        console.log('[Discovery] Parsed result:', JSON.stringify(parsed, null, 2))
+
+        onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
+        return this.convertToProjectConfig(parsed, projectPath)
+      } catch (readErr) {
+        console.error('[Discovery] Failed to read result file:', readErr)
+        onProgress?.({ projectPath, step: 'error', message: 'Agent did not produce valid result file' })
         return null
       }
-
-      const parsed = JSON.parse(jsonMatch[0])
-      console.log('[Discovery] Parsed AI output:', JSON.stringify(parsed, null, 2))
-
-      onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
-      return this.convertToProjectConfig(parsed, projectPath)
 
     } catch (err) {
       console.error('[Discovery] AI discovery failed:', err)

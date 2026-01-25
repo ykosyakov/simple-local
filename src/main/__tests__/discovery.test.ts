@@ -7,7 +7,7 @@ vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>()
   return {
     ...actual,
-    exec: vi.fn((cmd, cb) => cb?.(null, { stdout: '/usr/bin/claude', stderr: '' })),
+    exec: vi.fn((_cmd, cb) => cb?.(null, { stdout: '/usr/bin/claude', stderr: '' })),
   }
 })
 
@@ -64,14 +64,18 @@ describe('DiscoveryService', () => {
 
   describe('buildDiscoveryPrompt', () => {
     it('creates structured prompt for AI', () => {
-      const prompt = discovery.buildDiscoveryPrompt({
-        packageJsonPaths: ['/project/frontend/package.json'],
-        dockerComposePaths: [],
-        envFiles: ['/project/frontend/.env'],
-      })
+      const prompt = discovery.buildDiscoveryPrompt(
+        {
+          packageJsonPaths: ['/project/frontend/package.json'],
+          dockerComposePaths: [],
+          envFiles: ['/project/frontend/.env'],
+        },
+        '/project/.simple-run/discovery-result.json'
+      )
 
       expect(prompt).toContain('package.json')
       expect(prompt).toContain('JSON')
+      expect(prompt).toContain('discovery-result.json')
     })
   })
 })
