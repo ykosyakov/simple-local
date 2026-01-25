@@ -2,6 +2,7 @@ import { createServer, IncomingMessage, ServerResponse, Server } from 'http'
 import type { RegistryService } from './registry'
 import type { ContainerService } from './container'
 import type { ProjectConfigService } from './project-config'
+import { McpHandler } from './mcp-handler'
 
 export interface ApiServerOptions {
   port: number
@@ -21,6 +22,57 @@ export interface ApiServer {
 
 export async function createApiServer(options: ApiServerOptions): Promise<ApiServer> {
   const { port, registry, container, config } = options
+
+  const mcpHandler = new McpHandler({
+    listProjects: async () => {
+      const { projects } = registry.getRegistry()
+      return projects.map(p => ({ id: p.id, name: p.name, path: p.path, status: p.status }))
+    },
+    getProject: async (projectId) => {
+      const { projects } = registry.getRegistry()
+      const project = projects.find(p => p.id === projectId)
+      return project ? { id: project.id, name: project.name, path: project.path, status: project.status } : null
+    },
+    listServices: async (projectId) => {
+      const { projects } = registry.getRegistry()
+      const project = projects.find(p => p.id === projectId)
+      if (!project) return []
+      const projectConfig = await config.loadConfig(project.path)
+      if (!projectConfig) return []
+      return Promise.all(projectConfig.services.map(async (s) => {
+        let status: string
+        if (s.mode === 'native') {
+          status = container.isNativeServiceRunning(s.id) ? 'running' : 'stopped'
+        } else {
+          status = await container.getContainerStatus(container.getContainerName(projectConfig.name, s.id))
+        }
+        return { id: s.id, name: s.name, port: s.port, mode: s.mode, status }
+      }))
+    },
+    getServiceStatus: async (projectId, serviceId) => {
+      const { projects } = registry.getRegistry()
+      const project = projects.find(p => p.id === projectId)
+      if (!project) return null
+      const projectConfig = await config.loadConfig(project.path)
+      if (!projectConfig) return null
+      const service = projectConfig.services.find(s => s.id === serviceId)
+      if (!service) return null
+      let status: string
+      if (service.mode === 'native') {
+        status = container.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
+      } else {
+        status = await container.getContainerStatus(container.getContainerName(projectConfig.name, service.id))
+      }
+      return { id: service.id, name: service.name, port: service.port, status }
+    },
+    getLogs: async (projectId, serviceId) => options.getLogBuffer?.(projectId, serviceId) ?? [],
+    startService: async (projectId, serviceId) => { await options.onServiceStart?.(projectId, serviceId) },
+    stopService: async (projectId, serviceId) => { await options.onServiceStop?.(projectId, serviceId) },
+    restartService: async (projectId, serviceId) => {
+      await options.onServiceStop?.(projectId, serviceId)
+      await options.onServiceStart?.(projectId, serviceId)
+    },
+  })
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host}`)
@@ -290,6 +342,27 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
           res.writeHead(500)
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to restart service', code: 'RESTART_FAILED' }))
         }
+        return
+      }
+
+      // POST /mcp - MCP Streamable HTTP transport
+      if (req.method === 'POST' && url.pathname === '/mcp') {
+        let body = ''
+        req.on('data', (chunk) => { body += chunk })
+        req.on('end', async () => {
+          try {
+            const request = JSON.parse(body)
+            const response = await mcpHandler.handle(request)
+            res.writeHead(200)
+            res.end(JSON.stringify(response))
+          } catch (err) {
+            res.writeHead(400)
+            res.end(JSON.stringify({
+              jsonrpc: '2.0',
+              error: { code: -32700, message: 'Parse error' },
+            }))
+          }
+        })
         return
       }
 

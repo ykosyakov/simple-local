@@ -225,4 +225,45 @@ describe('ApiServer', () => {
       expect(data.success).toBe(true)
     })
   })
+
+  describe('POST /mcp', () => {
+    it('handles initialize request', async () => {
+      registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2024-11-05',
+            capabilities: {},
+            clientInfo: { name: 'test', version: '1.0' },
+          },
+        }),
+      })
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.result.serverInfo.name).toBe('simple-run')
+    })
+
+    it('handles tools/list request', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 2,
+          method: 'tools/list',
+        }),
+      })
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.result.tools).toHaveLength(8)
+    })
+  })
 })
