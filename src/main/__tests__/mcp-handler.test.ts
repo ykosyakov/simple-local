@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { McpHandler, JsonRpcRequest, JsonRpcResponse } from '../services/mcp-handler'
+import { McpHandler, JsonRpcRequest } from '../services/mcp-handler'
 
 describe('McpHandler', () => {
   let handler: McpHandler
@@ -51,9 +51,10 @@ describe('McpHandler', () => {
       }
 
       const response = await handler.handle(request)
+      const result = response.result as { tools: Array<{ name: string }> }
 
-      expect(response.result.tools).toHaveLength(8)
-      expect(response.result.tools.map((t: { name: string }) => t.name)).toEqual([
+      expect(result.tools).toHaveLength(8)
+      expect(result.tools.map((t: { name: string }) => t.name)).toEqual([
         'list_projects',
         'get_project',
         'list_services',

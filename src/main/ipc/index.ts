@@ -19,6 +19,9 @@ export function setupIpcHandlers(): {
   prerequisites: PrerequisitesService
   settings: SettingsService
   agentTerminal: AgentTerminal
+  getLogBuffer: (projectId: string, serviceId: string) => string[]
+  startService: (projectId: string, serviceId: string) => Promise<void>
+  stopService: (projectId: string, serviceId: string) => Promise<void>
 } {
   const registry = new RegistryService()
   const settings = new SettingsService()
@@ -30,7 +33,7 @@ export function setupIpcHandlers(): {
   const agentTerminal = new AgentTerminal()
 
   setupRegistryHandlers(registry)
-  setupServiceHandlers(container, config, discovery, registry)
+  const { getLogBuffer, startService, stopService } = setupServiceHandlers(container, config, discovery, registry)
   setupPrerequisitesHandlers(prerequisites, settings, container)
   setupAgentTerminalHandlers(agentTerminal)
 
@@ -42,5 +45,5 @@ export function setupIpcHandlers(): {
     return result.canceled ? null : result.filePaths[0]
   })
 
-  return { registry, container, config, discovery, prerequisites, settings, agentTerminal }
+  return { registry, container, config, discovery, prerequisites, settings, agentTerminal, getLogBuffer, startService, stopService }
 }

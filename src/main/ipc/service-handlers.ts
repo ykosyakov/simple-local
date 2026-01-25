@@ -5,13 +5,22 @@ import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
 import type { DiscoveryProgress } from '../../shared/types'
 
+const MAX_LOG_LINES = 1000
+
+export interface ServiceHandlersResult {
+  getLogBuffer: (projectId: string, serviceId: string) => string[]
+  startService: (projectId: string, serviceId: string) => Promise<void>
+  stopService: (projectId: string, serviceId: string) => Promise<void>
+}
+
 export function setupServiceHandlers(
   container: ContainerService,
   config: ProjectConfigService,
   discovery: DiscoveryService,
   registry: RegistryService
-): void {
+): ServiceHandlersResult {
   const logCleanupFns = new Map<string, () => void>()
+  const logBuffers = new Map<string, string[]>()
 
   ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
     const project = registry.getRegistry().projects.find((p) => p.id === projectId)
@@ -27,6 +36,14 @@ export function setupServiceHandlers(
     const servicePath = `${project.path}/${service.path}`
 
     const sendLog = (data: string) => {
+      const key = `${projectId}:${serviceId}`
+      const buffer = logBuffers.get(key) || []
+      buffer.push(data)
+      if (buffer.length > MAX_LOG_LINES) {
+        buffer.splice(0, buffer.length - MAX_LOG_LINES)
+      }
+      logBuffers.set(key, buffer)
+
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.webContents.send('service:logs:data', { projectId, serviceId, data })
     }
@@ -37,6 +54,12 @@ export function setupServiceHandlers(
     }
 
     if (service.mode === 'native') {
+      if (service.port) {
+        const killed = container.killProcessOnPort(service.port)
+        if (killed) {
+          sendLog(`Killed existing process on port ${service.port}\n`)
+        }
+      }
       container.startNativeService(
         serviceId,
         service.command,
@@ -46,11 +69,13 @@ export function setupServiceHandlers(
         sendStatus
       )
     } else {
+      const devcontainerConfigPath = `${project.path}/.simple-run/devcontainers/${service.id}.json`
+
       sendStatus('building')
       sendLog('══════ Building container ══════\n')
 
       try {
-        await container.buildContainer(servicePath, sendLog)
+        await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
       } catch (err) {
         sendStatus('error')
         sendLog(`Build failed: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
@@ -60,7 +85,7 @@ export function setupServiceHandlers(
       sendStatus('starting')
       sendLog('\n══════ Starting service ══════\n')
 
-      await container.startService(servicePath, service.command, resolvedEnv)
+      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv)
       sendStatus('running')
     }
   })
@@ -92,12 +117,20 @@ export function setupServiceHandlers(
 
     const statuses = await Promise.all(
       projectConfig.services.map(async (service) => {
-        const containerName = container.getContainerName(projectConfig.name, service.id)
-        const status = await container.getContainerStatus(containerName)
-        return {
-          serviceId: service.id,
-          status,
-          containerId: containerName,
+        if (service.mode === 'native') {
+          const isRunning = container.isNativeServiceRunning(service.id)
+          return {
+            serviceId: service.id,
+            status: isRunning ? 'running' : 'stopped',
+          }
+        } else {
+          const containerName = container.getContainerName(projectConfig.name, service.id)
+          const status = await container.getContainerStatus(containerName)
+          return {
+            serviceId: service.id,
+            status,
+            containerId: containerName,
+          }
         }
       })
     )
@@ -132,6 +165,16 @@ export function setupServiceHandlers(
     const key = `${projectId}:${serviceId}`
     logCleanupFns.get(key)?.()
     logCleanupFns.delete(key)
+  })
+
+  ipcMain.handle('service:logs:get', (_event, projectId: string, serviceId: string) => {
+    const key = `${projectId}:${serviceId}`
+    return logBuffers.get(key) || []
+  })
+
+  ipcMain.handle('service:logs:clear', (_event, projectId: string, serviceId: string) => {
+    const key = `${projectId}:${serviceId}`
+    logBuffers.delete(key)
   })
 
   ipcMain.handle('discovery:analyze', async (event, projectPath: string) => {
@@ -185,4 +228,80 @@ export function setupServiceHandlers(
 
     console.log('[IPC] All devcontainer files saved')
   })
+
+  const getLogBuffer = (projectId: string, serviceId: string): string[] => {
+    const key = `${projectId}:${serviceId}`
+    return logBuffers.get(key) || []
+  }
+
+  const startService = async (projectId: string, serviceId: string): Promise<void> => {
+    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
+    if (!project) throw new Error('Project not found')
+
+    const projectConfig = await config.loadConfig(project.path)
+    if (!projectConfig) throw new Error('Project config not found')
+
+    const service = projectConfig.services.find((s) => s.id === serviceId)
+    if (!service) throw new Error('Service not found')
+
+    const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
+    const servicePath = `${project.path}/${service.path}`
+
+    const key = `${projectId}:${serviceId}`
+    const sendLog = (data: string) => {
+      const buffer = logBuffers.get(key) || []
+      buffer.push(data)
+      if (buffer.length > MAX_LOG_LINES) {
+        buffer.splice(0, buffer.length - MAX_LOG_LINES)
+      }
+      logBuffers.set(key, buffer)
+    }
+
+    const sendStatus = (_status: string) => {}
+
+    if (service.mode === 'native') {
+      if (service.port) {
+        const killed = container.killProcessOnPort(service.port)
+        if (killed) {
+          sendLog(`Killed existing process on port ${service.port}\n`)
+        }
+      }
+      container.startNativeService(
+        serviceId,
+        service.command,
+        servicePath,
+        resolvedEnv,
+        sendLog,
+        sendStatus
+      )
+    } else {
+      const devcontainerConfigPath = `${project.path}/.simple-run/devcontainers/${service.id}.json`
+
+      sendLog('══════ Building container ══════\n')
+      await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
+
+      sendLog('\n══════ Starting service ══════\n')
+      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv)
+    }
+  }
+
+  const stopService = async (projectId: string, serviceId: string): Promise<void> => {
+    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
+    if (!project) throw new Error('Project not found')
+
+    const projectConfig = await config.loadConfig(project.path)
+    if (!projectConfig) throw new Error('Project config not found')
+
+    const service = projectConfig.services.find((s) => s.id === serviceId)
+    if (!service) throw new Error('Service not found')
+
+    if (service.mode === 'native') {
+      container.stopNativeService(serviceId)
+    } else {
+      const containerName = container.getContainerName(projectConfig.name, serviceId)
+      await container.stopService(containerName)
+    }
+  }
+
+  return { getLogBuffer, startService, stopService }
 }
