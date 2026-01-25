@@ -1,5 +1,5 @@
 import Docker from 'dockerode'
-import { spawn } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
 import type { ServiceStatus } from '../../shared/types'
@@ -44,9 +44,14 @@ export class ContainerService extends EventEmitter {
   buildDevcontainerCommand(
     action: 'up' | 'build' | 'exec',
     workspaceFolder: string,
+    configPath?: string,
     execCommand?: string
   ): string[] {
     const args = ['devcontainer', action, '--workspace-folder', workspaceFolder]
+
+    if (configPath) {
+      args.push('--config', configPath)
+    }
 
     if (action === 'exec' && execCommand) {
       args.push(execCommand)
@@ -57,10 +62,11 @@ export class ContainerService extends EventEmitter {
 
   async buildContainer(
     workspaceFolder: string,
+    configPath: string,
     onLog: (data: string) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const args = this.buildDevcontainerCommand('build', workspaceFolder)
+      const args = this.buildDevcontainerCommand('build', workspaceFolder, configPath)
 
       const proc = spawn('npx', args, {
         env: process.env,
@@ -84,12 +90,13 @@ export class ContainerService extends EventEmitter {
 
   async startService(
     workspaceFolder: string,
+    configPath: string,
     command: string,
     env: Record<string, string>
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       // First, start the devcontainer
-      const upArgs = this.buildDevcontainerCommand('up', workspaceFolder)
+      const upArgs = this.buildDevcontainerCommand('up', workspaceFolder, configPath)
 
       const upProcess = spawn('npx', upArgs, {
         env: { ...process.env, ...env },
@@ -111,7 +118,7 @@ export class ContainerService extends EventEmitter {
         }
 
         // Then exec the command inside
-        const execArgs = this.buildDevcontainerCommand('exec', workspaceFolder, command)
+        const execArgs = this.buildDevcontainerCommand('exec', workspaceFolder, configPath, command)
 
         const execProcess = spawn('npx', execArgs, {
           env: { ...process.env, ...env },
@@ -189,6 +196,30 @@ export class ContainerService extends EventEmitter {
     proc.kill('SIGTERM')
     this.nativeProcesses.delete(serviceId)
     return true
+  }
+
+  isNativeServiceRunning(serviceId: string): boolean {
+    return this.nativeProcesses.has(serviceId)
+  }
+
+  killProcessOnPort(port: number): boolean {
+    try {
+      const result = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf-8' }).trim()
+      if (result) {
+        const pids = result.split('\n').filter(Boolean)
+        for (const pid of pids) {
+          try {
+            execSync(`kill -9 ${pid}`)
+          } catch {
+            // Process may have already exited
+          }
+        }
+        return true
+      }
+    } catch {
+      // No process on port or lsof failed
+    }
+    return false
   }
 
   async streamLogs(

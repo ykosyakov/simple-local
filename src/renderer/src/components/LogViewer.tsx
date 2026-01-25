@@ -14,7 +14,17 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   const [showScrollButton, setShowScrollButton] = useState(false)
 
   useEffect(() => {
-    window.api.startLogStream(projectId, serviceId)
+    let mounted = true
+
+    const init = async () => {
+      const storedLogs = await window.api.getLogs(projectId, serviceId)
+      if (mounted) {
+        setLogs(storedLogs)
+      }
+      window.api.startLogStream(projectId, serviceId)
+    }
+
+    init()
 
     const unsubscribe = window.api.onLogData((data) => {
       if (data.projectId === projectId && data.serviceId === serviceId) {
@@ -23,6 +33,7 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
     })
 
     return () => {
+      mounted = false
       unsubscribe()
       window.api.stopLogStream(projectId, serviceId)
     }
@@ -50,7 +61,10 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
     }
   }
 
-  const clearLogs = () => setLogs([])
+  const clearLogs = () => {
+    setLogs([])
+    window.api.clearLogs(projectId, serviceId)
+  }
 
   const downloadLogs = () => {
     const blob = new Blob([logs.join('\n')], { type: 'text/plain' })

@@ -137,7 +137,7 @@ export class DiscoveryService {
       ? scanResult.envFiles.map(p => `- ${p}`).join('\n')
       : '(none)'
 
-    return `Analyze this project to discover runnable dev services.
+    return `Analyze this project to discover runnable services and their debug configurations.
 
 Found files:
 Package.json files:
@@ -159,7 +159,9 @@ Use the Write tool to create the file with this JSON:
       "name": "Display Name",
       "path": "relative/path",
       "command": "npm run dev",
+      "debugCommand": "npm run debug",
       "port": 3000,
+      "debugPort": 9229,
       "env": {},
       "dependsOn": []
     }
@@ -168,12 +170,21 @@ Use the Write tool to create the file with this JSON:
 }
 
 Steps:
-1. Read each package.json to find dev/start scripts
+1. Read each package.json to find:
+   - Run commands: "dev", "start", "serve" scripts
+   - Debug commands: "debug", "dev:debug", "start:debug", or scripts containing --inspect flags
 2. Determine ports from scripts or config files
-3. Identify service dependencies
-4. Write the JSON result to ${resultFilePath}
+3. Look for debug ports (commonly 9229 for Node.js --inspect)
+4. Identify service dependencies
+5. Write the JSON result to ${resultFilePath}
 
-Only include services with runnable dev commands. Exclude shared libraries without dev scripts.`
+Field notes:
+- "command": Primary dev/run command (required)
+- "debugCommand": Debug command with inspector enabled (optional, omit if not found)
+- "port": Application port
+- "debugPort": Node inspector port if debug command exists (typically 9229)
+
+Only include services with runnable commands. Exclude shared libraries without run scripts.`
   }
 
   async runAIDiscovery(
@@ -296,7 +307,9 @@ Only include services with runnable dev commands. Exclude shared libraries witho
       name: s.name || s.id,
       path: s.path,
       command: s.command,
+      debugCommand: s.debugCommand,
       port: s.port || 3000 + index,
+      debugPort: s.debugPort,
       env: s.env || {},
       dependsOn: s.dependsOn,
       devcontainer: `.simple-run/devcontainers/${s.id}.json`,

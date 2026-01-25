@@ -24,6 +24,10 @@ const api = {
     ipcRenderer.invoke('service:logs:start', projectId, serviceId),
   stopLogStream: (projectId: string, serviceId: string): Promise<void> =>
     ipcRenderer.invoke('service:logs:stop', projectId, serviceId),
+  getLogs: (projectId: string, serviceId: string): Promise<string[]> =>
+    ipcRenderer.invoke('service:logs:get', projectId, serviceId),
+  clearLogs: (projectId: string, serviceId: string): Promise<void> =>
+    ipcRenderer.invoke('service:logs:clear', projectId, serviceId),
   onLogData: (callback: (data: { projectId: string; serviceId: string; data: string }) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: { projectId: string; serviceId: string; data: string }) => callback(data)
     ipcRenderer.on('service:logs:data', handler)

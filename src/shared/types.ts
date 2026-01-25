@@ -15,6 +15,7 @@ export interface Service {
   name: string
   path: string
   command: string
+  debugCommand?: string
   port: number
   debugPort?: number
   env: Record<string, string>

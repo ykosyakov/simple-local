@@ -131,11 +131,11 @@ describe('ContainerService', () => {
       vi.mocked(spawn).mockReturnValue(mockProcess as any)
 
       const onLog = vi.fn()
-      await containerService.buildContainer('/path/to/workspace', onLog)
+      await containerService.buildContainer('/path/to/workspace', '/path/to/config.json', onLog)
 
       expect(spawn).toHaveBeenCalledWith(
         'npx',
-        ['devcontainer', 'build', '--workspace-folder', '/path/to/workspace'],
+        ['devcontainer', 'build', '--workspace-folder', '/path/to/workspace', '--config', '/path/to/config.json'],
         expect.any(Object)
       )
     })
