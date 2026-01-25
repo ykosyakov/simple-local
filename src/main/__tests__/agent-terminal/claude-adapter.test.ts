@@ -52,5 +52,50 @@ describe('ClaudeAdapter', () => {
       const events = await eventsPromise
       expect(events).toContainEqual({ type: 'output', text: 'hello' })
     })
+
+    it('detects tool usage from TUI output', async () => {
+      const adapter = new ClaudeAdapter()
+      const input$ = new Subject<string>()
+
+      const eventsPromise = new Promise<unknown[]>((resolve) => {
+        const events: unknown[] = []
+        adapter.parse(input$.asObservable()).subscribe({
+          next: (e) => events.push(e),
+          complete: () => resolve(events),
+        })
+      })
+
+      input$.next('  WebSearch("bitcoin price API")\n')
+      input$.complete()
+
+      const events = await eventsPromise
+      expect(events).toContainEqual({
+        type: 'tool-start',
+        tool: 'WebSearch',
+        input: 'bitcoin price API'
+      })
+    })
+
+    it('detects thinking status', async () => {
+      const adapter = new ClaudeAdapter()
+      const input$ = new Subject<string>()
+
+      const eventsPromise = new Promise<unknown[]>((resolve) => {
+        const events: unknown[] = []
+        adapter.parse(input$.asObservable()).subscribe({
+          next: (e) => events.push(e),
+          complete: () => resolve(events),
+        })
+      })
+
+      input$.next('Churning (thinking for 5s)\n')
+      input$.complete()
+
+      const events = await eventsPromise
+      expect(events).toContainEqual({
+        type: 'thinking',
+        text: 'Thinking for 5s'
+      })
+    })
   })
 })

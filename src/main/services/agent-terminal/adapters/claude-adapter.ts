@@ -1,6 +1,7 @@
-import { Observable, map } from 'rxjs'
+import { Observable, mergeMap, of } from 'rxjs'
 import type { AgentAdapter, AdapterOptions } from './types'
 import type { AgentEvent, AiAgentId } from '../../../../shared/types'
+import { parseTuiChunk } from './claude-tui-parser'
 
 export class ClaudeAdapter implements AgentAdapter {
   readonly agentId: AiAgentId = 'claude'
@@ -28,6 +29,11 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   parse(raw$: Observable<string>): Observable<AgentEvent> {
-    return raw$.pipe(map((text) => ({ type: 'output' as const, text })))
+    return raw$.pipe(
+      mergeMap((chunk) => {
+        const result = parseTuiChunk(chunk)
+        return of(...result.events)
+      })
+    )
   }
 }
