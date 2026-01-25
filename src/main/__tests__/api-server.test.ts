@@ -164,4 +164,16 @@ describe('ApiServer', () => {
       expect(data.service.status).toBeDefined()
     })
   })
+
+  describe('GET /projects/:projectId/services/:serviceId/logs', () => {
+    it('returns empty logs array when no logs', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/api/logs`)
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data).toEqual({ logs: [], truncated: false })
+    })
+  })
 })

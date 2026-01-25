@@ -8,6 +8,7 @@ export interface ApiServerOptions {
   registry: RegistryService
   container: ContainerService
   config: ProjectConfigService
+  getLogBuffer?: (projectId: string, serviceId: string) => string[]
 }
 
 export interface ApiServer {
@@ -158,6 +159,31 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
             debugCommand: service.debugCommand,
             status,
           }
+        }))
+        return
+      }
+
+      // GET /projects/:projectId/services/:serviceId/logs
+      const logsMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/logs$/)
+      if (req.method === 'GET' && logsMatch) {
+        const [, projectId, serviceId] = logsMatch
+        const { projects } = registry.getRegistry()
+        const project = projects.find(p => p.id === projectId)
+
+        if (!project) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const logs = options.getLogBuffer?.(projectId, serviceId) ?? []
+        const maxLogs = 500
+        const truncated = logs.length > maxLogs
+
+        res.writeHead(200)
+        res.end(JSON.stringify({
+          logs: truncated ? logs.slice(-maxLogs) : logs,
+          truncated,
         }))
         return
       }
