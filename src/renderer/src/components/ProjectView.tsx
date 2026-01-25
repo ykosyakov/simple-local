@@ -3,14 +3,15 @@ import { ServiceCard } from './ServiceCard'
 import { LogViewer } from './LogViewer'
 import { HiddenServices } from './project/HiddenServices'
 import { ConfigEditorModal } from './ConfigEditorModal'
-import { Server, Code2 } from 'lucide-react'
+import { Server, Code2, RefreshCw } from 'lucide-react'
 import type { Project, ProjectConfig, ServiceStatus } from '../../../shared/types'
 
 interface ProjectViewProps {
   project: Project
+  onRerunDiscovery?: () => void
 }
 
-export function ProjectView({ project }: ProjectViewProps) {
+export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [config, setConfig] = useState<ProjectConfig | null>(null)
   const [configError, setConfigError] = useState<string | null>(null)
   const [statuses, setStatuses] = useState<Map<string, ServiceStatus['status']>>(new Map())
@@ -168,14 +169,31 @@ export function ProjectView({ project }: ProjectViewProps) {
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
 
   if (configError) {
+    const isConfigMissing = configError.toLowerCase().includes('no config found')
+
     return (
       <div className="empty-state h-full">
         <Server className="empty-state-icon" style={{ color: 'var(--danger)' }} strokeWidth={1} />
-        <h3 className="empty-state-title">Failed to load configuration</h3>
-        <p className="empty-state-description">{configError}</p>
-        <button onClick={loadConfig} className="btn btn-primary mt-4">
-          Retry
-        </button>
+        <h3 className="empty-state-title">
+          {isConfigMissing ? 'Configuration not found' : 'Failed to load configuration'}
+        </h3>
+        <p className="empty-state-description">
+          {isConfigMissing
+            ? 'The project configuration file is missing. This can happen if the file was deleted or moved.'
+            : configError}
+        </p>
+        <div className="mt-4 flex gap-3">
+          {isConfigMissing && onRerunDiscovery ? (
+            <button onClick={onRerunDiscovery} className="btn btn-primary">
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Re-run Discovery
+            </button>
+          ) : (
+            <button onClick={loadConfig} className="btn btn-primary">
+              Retry
+            </button>
+          )}
+        </div>
       </div>
     )
   }

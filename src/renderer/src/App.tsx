@@ -123,19 +123,34 @@ function App() {
       await window.api.saveProjectConfig(loadingProjectPath, config);
       console.log("[Renderer] Config saved successfully");
 
-      console.log("[Renderer] Adding project to registry");
-      const project = await window.api.addProject(
-        loadingProjectPath,
-        config.name,
+      // Check if this is a re-discovery for an existing project
+      const existingProject = registry?.projects.find(
+        (p) => p.path === loadingProjectPath && p.status !== "loading",
       );
-      console.log("[Renderer] Project added:", project.id);
+
+      let projectId: string;
+      if (existingProject) {
+        console.log(
+          "[Renderer] Re-discovery for existing project:",
+          existingProject.id,
+        );
+        projectId = existingProject.id;
+      } else {
+        console.log("[Renderer] Adding project to registry");
+        const project = await window.api.addProject(
+          loadingProjectPath,
+          config.name,
+        );
+        console.log("[Renderer] Project added:", project.id);
+        projectId = project.id;
+      }
 
       console.log("[Renderer] Fetching updated registry");
       const updatedRegistry = await window.api.getRegistry();
       console.log("[Renderer] Registry fetched, setting state");
 
       setRegistry(updatedRegistry);
-      setSelectedProjectId(project.id);
+      setSelectedProjectId(projectId);
       setLoadingProjectPath(null);
       console.log("[Renderer] State updated, discovery complete");
     } catch (err) {
@@ -157,6 +172,11 @@ function App() {
     );
     setLoadingProjectPath(null);
     setSelectedProjectId(null);
+  };
+
+  const handleRerunDiscovery = () => {
+    if (!selectedProject) return;
+    setLoadingProjectPath(selectedProject.path);
   };
 
   const handleStartAll = async () => {
@@ -300,7 +320,10 @@ function App() {
               onCancel={handleDiscoveryCancel}
             />
           ) : selectedProject ? (
-            <ProjectView project={selectedProject} />
+            <ProjectView
+              project={selectedProject}
+              onRerunDiscovery={handleRerunDiscovery}
+            />
           ) : (
             <div className="empty-state h-full">
               <Layers className="empty-state-icon" strokeWidth={1} />

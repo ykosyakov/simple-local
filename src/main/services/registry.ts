@@ -1,5 +1,9 @@
 import Store from 'electron-store'
+import { homedir } from 'os'
+import { join } from 'path'
 import type { Registry, Project, GlobalSettings } from '../../shared/types'
+
+const CONFIG_DIR = join(homedir(), '.simple-local')
 
 const DEFAULT_SETTINGS: GlobalSettings = {
   dockerSocket: 'auto',
@@ -14,6 +18,7 @@ export class RegistryService {
   constructor() {
     this.store = new Store<Registry>({
       name: 'registry',
+      cwd: CONFIG_DIR,
       defaults: {
         projects: [],
         settings: DEFAULT_SETTINGS,

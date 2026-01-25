@@ -1,5 +1,9 @@
 import Store from 'electron-store'
+import { homedir } from 'os'
+import { join } from 'path'
 import type { AppSettings } from '../../shared/types'
+
+const CONFIG_DIR = join(homedir(), '.simple-local')
 
 export class SettingsService {
   private store: Store<{ appSettings?: AppSettings }>
@@ -7,6 +11,7 @@ export class SettingsService {
   constructor() {
     this.store = new Store<{ appSettings?: AppSettings }>({
       name: 'settings',
+      cwd: CONFIG_DIR,
     })
   }
 
