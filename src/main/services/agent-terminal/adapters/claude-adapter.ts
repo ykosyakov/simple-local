@@ -27,13 +27,13 @@ export class ClaudeAdapter implements AgentAdapter {
     const args: string[] = []
 
     if (options.prompt) {
-      args.push('-p', '--output-format', 'stream-json', '--include-partial-messages')
+      args.push('-p', '--output-format', 'stream-json', '--verbose')
       if (options.args) {
         args.push(...options.args)
       }
       args.push(options.prompt)
     } else {
-      args.push('--output-format', 'stream-json', '--include-partial-messages')
+      args.push('--output-format', 'stream-json')
       if (options.args) {
         args.push(...options.args)
       }
