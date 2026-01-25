@@ -197,4 +197,32 @@ describe('ApiServer', () => {
       expect(data.success).toBe(true)
     })
   })
+
+  describe('POST /projects/:projectId/services/:serviceId/stop', () => {
+    it('returns success for valid service', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/api/stop`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.success).toBe(true)
+    })
+  })
+
+  describe('POST /projects/:projectId/services/:serviceId/restart', () => {
+    it('returns success for valid service', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/api/restart`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.success).toBe(true)
+    })
+  })
 })

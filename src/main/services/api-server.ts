@@ -228,6 +228,71 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
         return
       }
 
+      // POST /projects/:projectId/services/:serviceId/stop
+      const stopMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/stop$/)
+      if (req.method === 'POST' && stopMatch) {
+        const [, projectId, serviceId] = stopMatch
+        const { projects } = registry.getRegistry()
+        const project = projects.find(p => p.id === projectId)
+
+        if (!project) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const projectConfig = await config.loadConfig(project.path)
+        const service = projectConfig?.services.find(s => s.id === serviceId)
+        if (!service) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        try {
+          await options.onServiceStop?.(projectId, serviceId)
+          res.writeHead(200)
+          res.end(JSON.stringify({ success: true }))
+        } catch (err) {
+          res.writeHead(500)
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to stop service', code: 'STOP_FAILED' }))
+        }
+        return
+      }
+
+      // POST /projects/:projectId/services/:serviceId/restart
+      const restartMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/restart$/)
+      if (req.method === 'POST' && restartMatch) {
+        const [, projectId, serviceId] = restartMatch
+        const { projects } = registry.getRegistry()
+        const project = projects.find(p => p.id === projectId)
+
+        if (!project) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const projectConfig = await config.loadConfig(project.path)
+        const service = projectConfig?.services.find(s => s.id === serviceId)
+        if (!service) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        try {
+          await options.onServiceStop?.(projectId, serviceId)
+          await options.onServiceStart?.(projectId, serviceId)
+          res.writeHead(200)
+          res.end(JSON.stringify({ success: true }))
+        } catch (err) {
+          res.writeHead(500)
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to restart service', code: 'RESTART_FAILED' }))
+        }
+        return
+      }
+
       res.writeHead(404)
       res.end(JSON.stringify({ error: 'Not found', code: 'NOT_FOUND' }))
     } catch (err) {
