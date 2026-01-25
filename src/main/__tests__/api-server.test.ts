@@ -21,6 +21,22 @@ vi.mock('electron-store', () => ({
   },
 }))
 
+// Mock ProjectConfigService to return test services
+class MockProjectConfigService {
+  async loadConfig(path: string) {
+    if (path === '/path/to/app') {
+      return {
+        name: 'my-app',
+        services: [
+          { id: 'api', name: 'API Server', port: 3001, mode: 'native' as const, command: 'npm run dev', path: '.', env: {}, active: true },
+          { id: 'web', name: 'Web App', port: 3000, mode: 'native' as const, command: 'npm start', path: '.', env: {}, active: true },
+        ]
+      }
+    }
+    return null
+  }
+}
+
 describe('ApiServer', () => {
   let server: ApiServer
   let registry: RegistryService
@@ -28,7 +44,7 @@ describe('ApiServer', () => {
   beforeEach(async () => {
     registry = new RegistryService()
     const container = new ContainerService()
-    const config = new ProjectConfigService()
+    const config = new MockProjectConfigService() as unknown as ProjectConfigService
     server = await createApiServer({
       port: 0, // Random available port
       registry,
@@ -97,6 +113,30 @@ describe('ApiServer', () => {
         path: '/path/to/app',
         status: 'ready',
       })
+    })
+  })
+
+  describe('GET /projects/:projectId/services', () => {
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/nonexistent/services`)
+      expect(res.status).toBe(404)
+    })
+
+    it('returns services with status', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services`)
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.services).toHaveLength(2)
+      expect(data.services[0]).toMatchObject({
+        id: 'api',
+        name: 'API Server',
+        port: 3001,
+        mode: 'native',
+      })
+      expect(data.services[0].status).toBeDefined()
     })
   })
 })

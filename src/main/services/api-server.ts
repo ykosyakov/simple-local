@@ -67,6 +67,50 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
         return
       }
 
+      // GET /projects/:projectId/services
+      const servicesMatch = url.pathname.match(/^\/projects\/([^/]+)\/services$/)
+      if (req.method === 'GET' && servicesMatch) {
+        const projectId = servicesMatch[1]
+        const { projects } = registry.getRegistry()
+        const project = projects.find(p => p.id === projectId)
+
+        if (!project) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const projectConfig = await config.loadConfig(project.path)
+        if (!projectConfig) {
+          res.writeHead(200)
+          res.end(JSON.stringify({ services: [] }))
+          return
+        }
+
+        const services = await Promise.all(
+          projectConfig.services.map(async (service) => {
+            let status: string
+            if (service.mode === 'native') {
+              status = container.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
+            } else {
+              const containerName = container.getContainerName(projectConfig.name, service.id)
+              status = await container.getContainerStatus(containerName)
+            }
+            return {
+              id: service.id,
+              name: service.name,
+              port: service.port,
+              mode: service.mode,
+              status,
+            }
+          })
+        )
+
+        res.writeHead(200)
+        res.end(JSON.stringify({ services }))
+        return
+      }
+
       res.writeHead(404)
       res.end(JSON.stringify({ error: 'Not found', code: 'NOT_FOUND' }))
     } catch (err) {
