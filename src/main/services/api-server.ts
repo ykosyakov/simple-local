@@ -9,6 +9,8 @@ export interface ApiServerOptions {
   container: ContainerService
   config: ProjectConfigService
   getLogBuffer?: (projectId: string, serviceId: string) => string[]
+  onServiceStart?: (projectId: string, serviceId: string) => Promise<void>
+  onServiceStop?: (projectId: string, serviceId: string) => Promise<void>
 }
 
 export interface ApiServer {
@@ -185,6 +187,44 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
           logs: truncated ? logs.slice(-maxLogs) : logs,
           truncated,
         }))
+        return
+      }
+
+      // POST /projects/:projectId/services/:serviceId/start
+      const startMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/start$/)
+      if (req.method === 'POST' && startMatch) {
+        const [, projectId, serviceId] = startMatch
+        const { projects } = registry.getRegistry()
+        const project = projects.find(p => p.id === projectId)
+
+        if (!project) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const projectConfig = await config.loadConfig(project.path)
+        if (!projectConfig) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        const service = projectConfig.services.find(s => s.id === serviceId)
+        if (!service) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        try {
+          await options.onServiceStart?.(projectId, serviceId)
+          res.writeHead(200)
+          res.end(JSON.stringify({ success: true }))
+        } catch (err) {
+          res.writeHead(500)
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to start service', code: 'START_FAILED' }))
+        }
         return
       }
 

@@ -176,4 +176,25 @@ describe('ApiServer', () => {
       expect(data).toEqual({ logs: [], truncated: false })
     })
   })
+
+  describe('POST /projects/:projectId/services/:serviceId/start', () => {
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/nonexistent/services/api/start`, {
+        method: 'POST',
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns success for valid service', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/api/start`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.success).toBe(true)
+    })
+  })
 })
