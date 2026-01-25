@@ -137,8 +137,9 @@ export function setupServiceHandlers(
   ipcMain.handle('discovery:analyze', async (event, projectPath: string) => {
     console.log('[IPC] discovery:analyze called for:', projectPath)
 
+    const win = BrowserWindow.fromWebContents(event.sender)
     const sendProgress = (progress: DiscoveryProgress) => {
-      event.sender.send('discovery:progress', progress)
+      win?.webContents.send('discovery:progress', progress)
     }
 
     // Try AI discovery first, fall back to basic

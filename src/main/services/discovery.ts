@@ -9,6 +9,12 @@ import { AgentTerminal } from './agent-terminal'
 const execAsync = promisify(exec)
 const AI_DISCOVERY_TIMEOUT = 120000 // 2 minutes for AI analysis
 
+// Strip ANSI escape codes for clean log output
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+}
+
 async function isCommandAvailable(command: string): Promise<boolean> {
   try {
     await execAsync(`which ${command}`)
@@ -223,12 +229,20 @@ Only include services with runnable dev commands. Exclude shared libraries witho
 
       console.log(`[Discovery] Session ID: ${session.id}`)
 
-      // Subscribe to events for progress reporting
+      // Subscribe to raw output for logging (captures all terminal output)
+      session.raw$.subscribe({
+        next: (text) => {
+          const cleanText = stripAnsi(text)
+          if (cleanText.trim()) {
+            onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: cleanText })
+          }
+        },
+      })
+
+      // Subscribe to parsed events for status updates
       session.events$.subscribe({
         next: (event) => {
-          if (event.type === 'output') {
-            onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: event.text })
-          } else if (event.type === 'tool-start') {
+          if (event.type === 'tool-start') {
             onProgress?.({ projectPath, step: 'ai-analysis', message: `Using ${event.tool}...` })
           }
         },

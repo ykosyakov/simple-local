@@ -7,7 +7,7 @@ import { ManualServiceForm } from './ManualServiceForm'
 import type { Service, DiscoveryStep } from '../../../../shared/types'
 import type { ServiceFormData } from '../../../../shared/schemas'
 
-type ScreenState = 'discovering' | 'selecting' | 'error' | 'manual'
+type ScreenState = 'discovering' | 'review' | 'selecting' | 'error' | 'manual'
 
 interface DiscoveryScreenProps {
   projectPath: string
@@ -34,7 +34,9 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
       const config = await window.api.analyzeProject(projectPath)
       if (config.services.length > 0) {
         setDiscoveredServices(config.services)
-        setScreenState('selecting')
+        setCurrentStep('complete')
+        setMessage('Discovery complete')
+        setScreenState('review')
       } else {
         setScreenState('error')
       }
@@ -44,12 +46,8 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
     }
   }, [projectPath])
 
+  // Subscribe to progress events - separate from discovery initiation
   useEffect(() => {
-    // Guard against double execution (React strict mode, re-renders)
-    // Only run if we haven't started discovery for this exact path
-    if (discoveryStartedForRef.current === projectPath) return
-    discoveryStartedForRef.current = projectPath
-
     const unsubscribe = window.api.onDiscoveryProgress?.((progress) => {
       if (progress.projectPath !== projectPath) return
 
@@ -61,11 +59,16 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
       }
     })
 
-    runDiscovery()
-
     return () => {
       unsubscribe?.()
     }
+  }, [projectPath])
+
+  // Start discovery - separate effect with guard
+  useEffect(() => {
+    if (discoveryStartedForRef.current === projectPath) return
+    discoveryStartedForRef.current = projectPath
+    runDiscovery()
   }, [projectPath, runDiscovery])
 
   const handleSelectionConfirm = (selectedIds: string[]) => {
@@ -112,7 +115,7 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
         {screenState === 'discovering' && (
           <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--accent-primary)' }} />
         )}
-        {screenState === 'selecting' && (
+        {(screenState === 'review' || screenState === 'selecting') && (
           <CheckCircle className="h-6 w-6" style={{ color: 'var(--status-running)' }} />
         )}
         {(screenState === 'error' || screenState === 'manual') && (
@@ -128,7 +131,8 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
             }}
           >
             {screenState === 'discovering' && 'Discovering project...'}
-            {screenState === 'selecting' && 'Discovery complete'}
+            {screenState === 'review' && 'Discovery complete'}
+            {screenState === 'selecting' && 'Select services'}
             {screenState === 'error' && 'Discovery failed'}
             {screenState === 'manual' && 'Add services manually'}
           </h2>
@@ -152,6 +156,36 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
           <div className="flex justify-end">
             <button onClick={onCancel} className="btn btn-ghost">
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {screenState === 'review' && (
+        <div className="space-y-6">
+          <DiscoveryProgress currentStep={currentStep} message={message} />
+          <DiscoveryTerminal logs={logs} />
+          <div
+            className="rounded-lg p-3"
+            style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}
+          >
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Found {discoveredServices.length} service{discoveredServices.length !== 1 ? 's' : ''}:
+            </p>
+            <ul className="mt-2 space-y-1">
+              {discoveredServices.map((s) => (
+                <li key={s.id} className="text-sm" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                  {s.name} <span style={{ color: 'var(--text-muted)' }}>:{s.port}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex justify-end gap-3">
+            <button onClick={onCancel} className="btn btn-ghost">
+              Cancel
+            </button>
+            <button onClick={() => setScreenState('selecting')} className="btn btn-primary">
+              Continue to Selection
             </button>
           </div>
         </div>

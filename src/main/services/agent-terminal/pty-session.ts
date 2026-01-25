@@ -45,6 +45,13 @@ export class PtySession {
 
     this.ptyProcess.onData((data) => {
       if (!this.disposed) {
+        // Filter out Node.js debugger noise
+        if (data.includes('Debugger listening on') ||
+            data.includes('docs/inspector') ||
+            data.includes('Debugger attached') ||
+            data.includes('Waiting for the debugger to disconnect')) {
+          return
+        }
         this.outputSubject.next(Buffer.from(data))
       }
     })
