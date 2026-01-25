@@ -23,8 +23,8 @@ const RESULT_PATTERN = /^(\s*)[●○◐◑▸►▶→]?\s*(Found|Created|Updat
 const THINKING_PATTERN = /(?:thinking|thought|churning)\s*(?:for\s*)?(\d+)s?/i
 const CHURNED_PATTERN = /[;·]\s*Churned?\s+for\s+(\d+)s/i
 
-// User input marker (bullet + text)
-const USER_INPUT_PATTERN = /^[○●◯◉❯>]\s*(.+)/
+// User input marker (bullet + text) - reserved for future use
+// const USER_INPUT_PATTERN = /^[○●◯◉❯>]\s*(.+)/
 
 export interface TuiParseResult {
   events: AgentEvent[]

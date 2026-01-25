@@ -3,15 +3,13 @@ import { DiscoveryService } from '../services/discovery'
 import * as fs from 'fs/promises'
 
 vi.mock('fs/promises')
-vi.mock('child_process', () => ({
-  spawn: vi.fn(() => ({
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
-    on: vi.fn((event, cb) => {
-      if (event === 'close') setTimeout(() => cb(0), 10)
-    }),
-  })),
-}))
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>()
+  return {
+    ...actual,
+    exec: vi.fn((cmd, cb) => cb?.(null, { stdout: '/usr/bin/claude', stderr: '' })),
+  }
+})
 
 describe('DiscoveryService', () => {
   let discovery: DiscoveryService

@@ -1,8 +1,10 @@
 import * as fs from 'fs/promises'
 import * as path from 'path'
-import { spawn, ChildProcess, exec } from 'child_process'
+import { exec } from 'child_process'
 import { promisify } from 'util'
-import type { ProjectConfig, Service, DiscoveryProgress } from '../../shared/types'
+import { firstValueFrom, timeout } from 'rxjs'
+import type { ProjectConfig, Service, DiscoveryProgress, AiAgentId } from '../../shared/types'
+import { AgentTerminal } from './agent-terminal'
 
 const execAsync = promisify(exec)
 const AI_DISCOVERY_TIMEOUT = 120000 // 2 minutes for AI analysis
@@ -159,7 +161,7 @@ Detect:
 
   async runAIDiscovery(
     projectPath: string,
-    cliTool: 'claude' | 'codex' = 'claude',
+    cliTool: AiAgentId = 'claude',
     onProgress?: (progress: DiscoveryProgress) => void
   ): Promise<ProjectConfig | null> {
     console.log('[Discovery] Starting AI discovery for:', projectPath)
@@ -183,169 +185,71 @@ Detect:
 
     const prompt = this.buildDiscoveryPrompt(scanResult)
 
-    return new Promise((resolve) => {
-      // Use streaming JSON output for real-time progress
-      // https://code.claude.com/docs/en/cli-reference
-      const args = cliTool === 'claude'
-        ? ['-p', '--output-format', 'stream-json', '--include-partial-messages', 'Analyze the project and return JSON config as instructed']
-        : ['--prompt', 'Analyze the project and return JSON config as instructed']
+    const terminal = new AgentTerminal()
 
-      console.log(`[Discovery] Spawning ${cliTool} with args:`, args)
-      console.log(`[Discovery] Will pipe prompt (${prompt.length} chars) via stdin`)
-
+    try {
+      console.log(`[Discovery] Spawning ${cliTool} via AgentTerminal`)
       onProgress?.({ projectPath, step: 'ai-analysis', message: `Running ${cliTool} analysis...` })
 
-      let proc: ChildProcess
-      let timeoutId: NodeJS.Timeout
-      let resolved = false
+      const session = terminal.spawn({
+        agent: cliTool,
+        cwd: projectPath,
+        prompt: prompt,
+      })
 
-      const cleanup = () => {
-        if (timeoutId) clearTimeout(timeoutId)
-        if (proc && !proc.killed) {
-          console.log('[Discovery] Killing AI process')
-          proc.kill('SIGTERM')
-        }
-      }
+      console.log(`[Discovery] Session ID: ${session.id}`)
 
-      const resolveOnce = (value: ProjectConfig | null) => {
-        if (resolved) return
-        resolved = true
-        cleanup()
-        resolve(value)
-      }
+      let fullText = ''
 
-      try {
-        proc = spawn(cliTool, args, {
-          cwd: projectPath,
-          shell: false,
-          stdio: ['pipe', 'pipe', 'pipe'],
-        })
-      } catch (err) {
-        console.error('[Discovery] Failed to spawn AI process:', err)
-        onProgress?.({ projectPath, step: 'error', message: `Failed to start ${cliTool}: ${err}` })
-        resolveOnce(null)
-        return
-      }
-
-      // Write prompt to stdin and close it
-      if (proc.stdin) {
-        proc.stdin.write(prompt)
-        proc.stdin.end()
-        console.log('[Discovery] Wrote prompt to stdin')
-      } else {
-        console.error('[Discovery] No stdin available')
-        resolveOnce(null)
-        return
-      }
-
-      // Set timeout
-      timeoutId = setTimeout(() => {
-        console.log(`[Discovery] AI discovery timed out after ${AI_DISCOVERY_TIMEOUT}ms`)
-        onProgress?.({ projectPath, step: 'error', message: 'AI analysis timed out' })
-        resolveOnce(null)
-      }, AI_DISCOVERY_TIMEOUT)
-
-      let fullText = '' // Accumulated text content from streaming
-      let error = ''
-      let lineBuffer = '' // Buffer for incomplete JSON lines
-
-      proc.stdout?.on('data', (data) => {
-        const chunk = data.toString()
-        lineBuffer += chunk
-
-        // Process complete lines (stream-json is newline-delimited)
-        const lines = lineBuffer.split('\n')
-        lineBuffer = lines.pop() || '' // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue
-
-          try {
-            const event = JSON.parse(line)
-
-            // Claude CLI stream-json format (from GitHub issue #4346):
-            // { type: "assistant", message: { content: [{ type: "text", text: "..." }] } }
-            if (event.type === 'assistant' && event.message?.content) {
-              for (const block of event.message.content) {
-                if (block.type === 'text' && block.text) {
-                  // Calculate new text (delta) by comparing with what we have
-                  const newText = block.text.slice(fullText.length)
-                  if (newText) {
-                    fullText = block.text
-                    onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: newText })
-                  }
-                }
-              }
-            } else if (event.result?.text) {
-              // Alternative format: final result with text
-              fullText = event.result.text
-            }
-          } catch {
-            // Not valid JSON, might be plain text output
-            console.log('[Discovery] Non-JSON line:', line.slice(0, 100))
+      // Subscribe to events for progress reporting
+      session.events$.subscribe({
+        next: (event) => {
+          if (event.type === 'output') {
+            fullText += event.text
+            // Report progress with raw output
+            onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: event.text })
+          } else if (event.type === 'tool-start') {
+            onProgress?.({ projectPath, step: 'ai-analysis', message: `Using ${event.tool}...` })
           }
-        }
+        },
       })
 
-      proc.stderr?.on('data', (data) => {
-        const chunk = data.toString()
-        error += chunk
-        console.log('[Discovery] stderr:', chunk.slice(0, 200))
+      // Wait for session to complete with timeout
+      await firstValueFrom(
+        session.pty.exit$.pipe(
+          timeout(AI_DISCOVERY_TIMEOUT)
+        )
+      ).catch(() => {
+        console.log('[Discovery] Session timed out or errored')
+        session.kill()
+        throw new Error('AI analysis timed out')
       })
 
-      proc.on('error', (err) => {
-        console.error('[Discovery] Process error:', err)
-        onProgress?.({ projectPath, step: 'error', message: `Process error: ${err.message}` })
-        resolveOnce(null)
-      })
+      console.log('[Discovery] Session completed, output length:', fullText.length)
 
-      proc.on('close', (code) => {
-        // Process any remaining buffer
-        if (lineBuffer.trim()) {
-          try {
-            const event = JSON.parse(lineBuffer)
-            if (event.result?.text) {
-              fullText = event.result.text
-            }
-          } catch {
-            // Ignore
-          }
-        }
+      onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
 
-        console.log('[Discovery] AI process closed with code:', code)
-        console.log('[Discovery] Accumulated text length:', fullText.length)
+      // Extract JSON from output
+      const jsonMatch = fullText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        console.log('[Discovery] No JSON found in output. Text was:', fullText.slice(0, 500))
+        onProgress?.({ projectPath, step: 'error', message: 'No valid JSON in AI response' })
+        return null
+      }
 
-        if (code !== 0) {
-          console.error('[Discovery] AI discovery failed with code:', code)
-          console.error('[Discovery] stderr:', error)
-          onProgress?.({ projectPath, step: 'error', message: `${cliTool} exited with code ${code}` })
-          resolveOnce(null)
-          return
-        }
+      const parsed = JSON.parse(jsonMatch[0])
+      console.log('[Discovery] Parsed AI output:', JSON.stringify(parsed, null, 2))
 
-        onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
+      onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
+      return this.convertToProjectConfig(parsed, projectPath)
 
-        try {
-          // Extract JSON from accumulated text
-          const jsonMatch = fullText.match(/\{[\s\S]*\}/)
-          if (!jsonMatch) {
-            console.log('[Discovery] No JSON found in output. Text was:', fullText.slice(0, 500))
-            onProgress?.({ projectPath, step: 'error', message: 'No valid JSON in AI response' })
-            resolveOnce(null)
-            return
-          }
-
-          const parsed = JSON.parse(jsonMatch[0])
-          console.log('[Discovery] Parsed AI output:', JSON.stringify(parsed, null, 2))
-          const config = this.convertToProjectConfig(parsed, projectPath)
-          resolveOnce(config)
-        } catch (err) {
-          console.error('[Discovery] Failed to parse AI output:', err)
-          onProgress?.({ projectPath, step: 'error', message: 'Failed to parse AI response' })
-          resolveOnce(null)
-        }
-      })
-    })
+    } catch (err) {
+      console.error('[Discovery] AI discovery failed:', err)
+      onProgress?.({ projectPath, step: 'error', message: `AI analysis failed: ${err}` })
+      return null
+    } finally {
+      terminal.dispose()
+    }
   }
 
   private convertToProjectConfig(
