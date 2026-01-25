@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-Simple Run is a desktop app for managing local dev infrastructure with devcontainer-based service isolation. Built with:
+Simple Local is a desktop app for managing local dev infrastructure with devcontainer-based service isolation. Built with:
 
 - Electron + Vite
 - React 19 + TypeScript

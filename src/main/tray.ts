@@ -1,75 +1,74 @@
-import { app, Menu, Tray, nativeImage, BrowserWindow } from 'electron'
-import './electron-types'
-import * as path from 'path'
+import { app, Menu, Tray, nativeImage, BrowserWindow } from "electron";
+import "./electron-types";
+import * as path from "path";
 
-let tray: Tray | null = null
+let tray: Tray | null = null;
 
 export function setupTray(mainWindow: BrowserWindow): void {
   // Create tray icon (use a simple icon for now)
-  const iconPath = path.join(__dirname, '../../resources/icon.png')
+  const iconPath = path.join(__dirname, "../../resources/icon.png");
 
   // Fallback to empty icon if file doesn't exist
-  let icon: Electron.NativeImage
+  let icon: Electron.NativeImage;
   try {
-    icon = nativeImage.createFromPath(iconPath)
+    icon = nativeImage.createFromPath(iconPath);
     if (icon.isEmpty()) {
       // Create a simple 16x16 colored icon as fallback
-      icon = nativeImage.createEmpty()
+      icon = nativeImage.createEmpty();
     }
   } catch {
-    icon = nativeImage.createEmpty()
+    icon = nativeImage.createEmpty();
   }
 
-  tray = new Tray(icon)
-  tray.setToolTip('Simple Run')
+  tray = new Tray(icon);
+  tray.setToolTip("Simple Local");
 
   const updateContextMenu = () => {
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Show Window',
+        label: "Show Window",
         click: () => {
-          mainWindow.show()
-          mainWindow.focus()
+          mainWindow.show();
+          mainWindow.focus();
         },
       },
-      { type: 'separator' },
+      { type: "separator" },
       {
-        label: 'Quit',
+        label: "Quit",
         click: () => {
-          app.quit()
+          app.quit();
         },
       },
-    ])
+    ]);
 
-    tray?.setContextMenu(contextMenu)
-  }
+    tray?.setContextMenu(contextMenu);
+  };
 
-  updateContextMenu()
+  updateContextMenu();
 
   // Click to show window
-  tray.on('click', () => {
+  tray.on("click", () => {
     if (mainWindow.isVisible()) {
-      mainWindow.hide()
+      mainWindow.hide();
     } else {
-      mainWindow.show()
-      mainWindow.focus()
+      mainWindow.show();
+      mainWindow.focus();
     }
-  })
+  });
 
   // Handle window close - minimize to tray instead
-  mainWindow.on('close', (event) => {
+  mainWindow.on("close", (event) => {
     if (!app.isQuitting) {
-      event.preventDefault()
-      mainWindow.hide()
+      event.preventDefault();
+      mainWindow.hide();
     }
-  })
+  });
 }
 
 // Call this before app.quit()
 export function destroyTray(): void {
   if (tray) {
-    tray.destroy()
-    tray = null
+    tray.destroy();
+    tray = null;
   }
 }
-

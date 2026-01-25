@@ -69,7 +69,7 @@ export function setupServiceHandlers(
         sendStatus
       )
     } else {
-      const devcontainerConfigPath = `${project.path}/.simple-run/devcontainers/${service.id}.json`
+      const devcontainerConfigPath = `${project.path}/.simple-local/devcontainers/${service.id}.json`
 
       sendStatus('building')
       sendLog('══════ Building container ══════\n')
@@ -275,7 +275,7 @@ export function setupServiceHandlers(
         sendStatus
       )
     } else {
-      const devcontainerConfigPath = `${project.path}/.simple-run/devcontainers/${service.id}.json`
+      const devcontainerConfigPath = `${project.path}/.simple-local/devcontainers/${service.id}.json`
 
       sendLog('══════ Building container ══════\n')
       await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)

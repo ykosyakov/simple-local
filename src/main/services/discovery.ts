@@ -212,7 +212,7 @@ Only include services with runnable commands. Exclude shared libraries without r
     onProgress?.({ projectPath, step: 'scanning', message: `Found ${scanResult.packageJsonPaths.length} package.json files` })
 
     // Result file for reliable JSON output (more reliable than parsing TUI)
-    const resultDir = path.join(projectPath, '.simple-run')
+    const resultDir = path.join(projectPath, '.simple-local')
     const resultFile = path.join(resultDir, 'discovery-result.json')
     await fs.mkdir(resultDir, { recursive: true })
 
@@ -312,7 +312,7 @@ Only include services with runnable commands. Exclude shared libraries without r
       debugPort: s.debugPort,
       env: s.env || {},
       dependsOn: s.dependsOn,
-      devcontainer: `.simple-run/devcontainers/${s.id}.json`,
+      devcontainer: `.simple-local/devcontainers/${s.id}.json`,
       active: true,
       mode: getDefaultMode(s.framework || s.type),
     }))
@@ -358,7 +358,7 @@ Only include services with runnable commands. Exclude shared libraries without r
             command: info.devScript.includes('bun') ? `bun run dev` : `npm run dev`,
             port: info.port || 3000 + portOffset,
             env: {},
-            devcontainer: `.simple-run/devcontainers/${info.name}.json`,
+            devcontainer: `.simple-local/devcontainers/${info.name}.json`,
             active: true,
             mode: getDefaultMode(info.framework),
           })

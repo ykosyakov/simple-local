@@ -1,5 +1,5 @@
 {
-  "name": "simple-run",
+  "name": "simple-local",
   "version": "1.0.0",
   "description": "Desktop app for managing local dev infrastructure with devcontainer-based service isolation",
   "main": "./out/main/index.js",

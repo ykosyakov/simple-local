@@ -2,7 +2,7 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import type { ProjectConfig, Service } from '../../shared/types'
 
-const CONFIG_DIR = '.simple-run'
+const CONFIG_DIR = '.simple-local'
 const CONFIG_FILE = 'config.json'
 
 export class ProjectConfigService {
@@ -60,7 +60,7 @@ export class ProjectConfigService {
       mounts: [
         `source=\${localWorkspaceFolder}/${service.path},target=/workspace,type=bind`
       ],
-      runArgs: ['--name', `simple-run-${projectName}-${service.id}`],
+      runArgs: ['--name', `simple-local-${projectName}-${service.id}`],
     }
   }
 

@@ -20,7 +20,7 @@ export class ContainerService extends EventEmitter {
   getContainerName(projectName: string, serviceId: string): string {
     // Sanitize names for Docker
     const sanitized = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]/g, '-')
-    return `simple-run-${sanitized(projectName)}-${sanitized(serviceId)}`
+    return `simple-local-${sanitized(projectName)}-${sanitized(serviceId)}`
   }
 
   async getContainerStatus(containerName: string): Promise<ServiceStatus['status']> {
@@ -260,7 +260,7 @@ export class ContainerService extends EventEmitter {
   }
 
   async listProjectContainers(projectName: string): Promise<string[]> {
-    const prefix = `simple-run-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`
+    const prefix = `simple-local-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`
     const containers = await this.docker.listContainers({ all: true })
 
     return containers

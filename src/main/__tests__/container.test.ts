@@ -32,12 +32,12 @@ describe('ContainerService', () => {
   describe('getContainerName', () => {
     it('generates consistent container name', () => {
       const name = containerService.getContainerName('my-project', 'frontend')
-      expect(name).toBe('simple-run-my-project-frontend')
+      expect(name).toBe('simple-local-my-project-frontend')
     })
 
     it('sanitizes special characters', () => {
       const name = containerService.getContainerName('My Project!', 'Front End')
-      expect(name).toBe('simple-run-my-project--front-end')
+      expect(name).toBe('simple-local-my-project--front-end')
     })
   })
 

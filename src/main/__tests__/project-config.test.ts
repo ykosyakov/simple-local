@@ -25,7 +25,7 @@ describe('ProjectConfigService', () => {
     it('parses and returns config if exists', async () => {
       const mockConfig = {
         name: 'Test Project',
-        services: [{ id: 'frontend', name: 'Frontend', path: './frontend', command: 'npm run dev', port: 3000, env: {}, devcontainer: '.simple-run/devcontainers/frontend.json' }],
+        services: [{ id: 'frontend', name: 'Frontend', path: './frontend', command: 'npm run dev', port: 3000, env: {}, devcontainer: '.simple-local/devcontainers/frontend.json' }],
       }
 
       vi.mocked(fs.access).mockResolvedValue(undefined)
@@ -37,7 +37,7 @@ describe('ProjectConfigService', () => {
   })
 
   describe('saveConfig', () => {
-    it('creates .simple-run directory and saves config', async () => {
+    it('creates .simple-local directory and saves config', async () => {
       vi.mocked(fs.mkdir).mockResolvedValue(undefined)
       vi.mocked(fs.writeFile).mockResolvedValue(undefined)
 
@@ -49,7 +49,7 @@ describe('ProjectConfigService', () => {
       await configService.saveConfig(mockProjectPath, config)
 
       expect(fs.mkdir).toHaveBeenCalledWith(
-        path.join(mockProjectPath, '.simple-run'),
+        path.join(mockProjectPath, '.simple-local'),
         { recursive: true }
       )
       expect(fs.writeFile).toHaveBeenCalled()

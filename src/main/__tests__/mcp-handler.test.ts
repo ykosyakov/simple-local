@@ -36,7 +36,7 @@ describe('McpHandler', () => {
       expect(response.id).toBe(1)
       expect(response.result).toMatchObject({
         protocolVersion: '2024-11-05',
-        serverInfo: { name: 'simple-run', version: '1.0.0' },
+        serverInfo: { name: 'simple-local', version: '1.0.0' },
         capabilities: { tools: {} },
       })
     })

@@ -70,7 +70,7 @@ describe('DiscoveryService', () => {
           dockerComposePaths: [],
           envFiles: ['/project/frontend/.env'],
         },
-        '/project/.simple-run/discovery-result.json'
+        '/project/.simple-local/discovery-result.json'
       )
 
       expect(prompt).toContain('package.json')

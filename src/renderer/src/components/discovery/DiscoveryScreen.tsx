@@ -87,7 +87,7 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
       command: data.command,
       port: data.port,
       env: {},
-      devcontainer: `.simple-run/devcontainers/${data.name}.json`,
+      devcontainer: `.simple-local/devcontainers/${data.name}.json`,
       active: true,
       mode: 'native',
     }

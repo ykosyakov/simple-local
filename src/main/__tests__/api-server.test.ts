@@ -247,7 +247,7 @@ describe('ApiServer', () => {
       const data = await res.json()
 
       expect(res.status).toBe(200)
-      expect(data.result.serverInfo.name).toBe('simple-run')
+      expect(data.result.serverInfo.name).toBe('simple-local')
     })
 
     it('handles tools/list request', async () => {

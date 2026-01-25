@@ -1,5 +1,5 @@
-appId: com.electron.simple-run
-productName: Simple Run
+appId: com.electron.simple-local
+productName: Simple Local
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: simple-run
+  executableName: simple-local
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

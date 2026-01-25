@@ -97,9 +97,9 @@ export function DiscoveryModal({ isOpen, projectPath, onClose, onConfirm }: Disc
               <div className="rounded border border-gray-700 bg-gray-900/50 p-3">
                 <p className="text-sm text-gray-400">Will generate:</p>
                 <ul className="mt-1 list-inside list-disc text-sm text-gray-300">
-                  <li>.simple-run/config.json</li>
+                  <li>.simple-local/config.json</li>
                   {config.services.map((s) => (
-                    <li key={s.id}>.simple-run/devcontainers/{s.id}.json</li>
+                    <li key={s.id}>.simple-local/devcontainers/{s.id}.json</li>
                   ))}
                 </ul>
               </div>

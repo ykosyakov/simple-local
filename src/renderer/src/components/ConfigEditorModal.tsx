@@ -156,7 +156,7 @@ export function ConfigEditorModal({ isOpen, config, onClose, onSave }: ConfigEdi
                 smoothScrolling: true,
               }}
               beforeMount={(monaco) => {
-                monaco.editor.defineTheme('simple-run-dark', {
+                monaco.editor.defineTheme('simple-local-dark', {
                   base: 'vs-dark',
                   inherit: true,
                   rules: [],
@@ -171,7 +171,7 @@ export function ConfigEditorModal({ isOpen, config, onClose, onSave }: ConfigEdi
                 })
               }}
               onMount={(_editor, monaco) => {
-                monaco.editor.setTheme('simple-run-dark')
+                monaco.editor.setTheme('simple-local-dark')
               }}
             />
           </div>
@@ -183,7 +183,7 @@ export function ConfigEditorModal({ isOpen, config, onClose, onSave }: ConfigEdi
           style={{ borderTop: '1px solid var(--border-subtle)' }}
         >
           <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            .simple-run/config.json
+            .simple-local/config.json
           </span>
           <div className="flex gap-3">
             <button onClick={handleFormat} className="btn btn-ghost">
