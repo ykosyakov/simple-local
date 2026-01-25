@@ -40,6 +40,33 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
         return
       }
 
+      // GET /projects/:projectId
+      const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/)
+      if (req.method === 'GET' && projectMatch) {
+        const projectId = projectMatch[1]
+        const { projects } = registry.getRegistry()
+        const project = projects.find(p => p.id === projectId)
+
+        if (!project) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          return
+        }
+
+        res.writeHead(200)
+        res.end(JSON.stringify({
+          project: {
+            id: project.id,
+            name: project.name,
+            path: project.path,
+            status: project.status,
+            portRange: project.portRange,
+            debugPortRange: project.debugPortRange,
+          }
+        }))
+        return
+      }
+
       res.writeHead(404)
       res.end(JSON.stringify({ error: 'Not found', code: 'NOT_FOUND' }))
     } catch (err) {

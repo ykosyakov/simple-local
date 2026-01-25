@@ -74,4 +74,29 @@ describe('ApiServer', () => {
       expect(data.projects[0].id).toBeDefined()
     })
   })
+
+  describe('GET /projects/:projectId', () => {
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/nonexistent`)
+      const data = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(data.code).toBe('NOT_FOUND')
+    })
+
+    it('returns project details', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}`)
+      const data = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(data.project).toMatchObject({
+        id: project.id,
+        name: 'My App',
+        path: '/path/to/app',
+        status: 'ready',
+      })
+    })
+  })
 })
