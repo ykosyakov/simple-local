@@ -45,18 +45,31 @@ export class ProjectConfigService {
   }
 
   async generateDevcontainerConfig(service: Service, projectName: string): Promise<object> {
-    const isNode = service.command.includes('npm') || service.command.includes('bun') || service.command.includes('node')
+    const isNode = service.command.includes('npm') || service.command.includes('pnpm') || service.command.includes('bun') || service.command.includes('node')
+    const isPnpm = service.command.includes('pnpm')
+    const isBun = service.command.includes('bun')
+
+    let postStartCommand: string | undefined
+    if (isNode) {
+      if (isPnpm) {
+        postStartCommand = 'sudo corepack enable && CI=true pnpm install'
+      } else if (isBun) {
+        postStartCommand = 'bun install'
+      } else {
+        postStartCommand = 'npm install'
+      }
+    }
 
     return {
       name: `${projectName}-${service.id}`,
       image: isNode
         ? 'mcr.microsoft.com/devcontainers/javascript-node:20'
         : 'mcr.microsoft.com/devcontainers/base:ubuntu',
-      features: service.command.includes('bun')
+      features: isBun
         ? { 'ghcr.io/devcontainers/features/bun:1': {} }
         : {},
       forwardPorts: [service.port, service.debugPort].filter(Boolean),
-      postStartCommand: isNode ? 'npm install || bun install' : undefined,
+      postStartCommand,
       mounts: [
         `source=\${localWorkspaceFolder},target=/workspace,type=bind`
       ],
