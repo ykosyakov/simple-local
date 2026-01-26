@@ -3,9 +3,33 @@ import { ContainerService, applyContainerEnvOverrides } from '../services/contai
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
-import type { DiscoveryProgress } from '../../shared/types'
+import type { DiscoveryProgress, Service } from '../../shared/types'
 
 const MAX_LOG_LINES = 1000
+
+function buildEnvAnalysisPrompt(projectPath: string, service: Service): string {
+  return `Analyze environment files for the service at ${projectPath}/${service.path}
+
+Look for:
+1. .env, .env.local, .env.development files in the service directory
+2. Environment variables containing localhost or 127.0.0.1 URLs
+
+For each localhost URL found, return JSON:
+{
+  "overrides": [
+    {
+      "key": "DATABASE_URL",
+      "originalPattern": "localhost:54322",
+      "containerValue": "host.docker.internal:54322",
+      "reason": "Description of what service this connects to",
+      "enabled": true
+    }
+  ]
+}
+
+Only include variables that actually need rewriting (localhost/127.0.0.1).
+Skip cloud URLs or variables that don't contain URLs.`
+}
 
 export interface ServiceHandlersResult {
   getLogBuffer: (projectId: string, serviceId: string) => string[]
@@ -231,6 +255,34 @@ export function setupServiceHandlers(
     }
 
     console.log('[IPC] All devcontainer files saved')
+  })
+
+  ipcMain.handle('service:reanalyze-env', async (event, projectId: string, serviceId: string) => {
+    console.log('[IPC] service:reanalyze-env called for:', projectId, serviceId)
+
+    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
+    if (!project) throw new Error('Project not found')
+
+    const projectConfig = await config.loadConfig(project.path)
+    if (!projectConfig) throw new Error('Project config not found')
+
+    const service = projectConfig.services.find((s) => s.id === serviceId)
+    if (!service) throw new Error('Service not found')
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const sendProgress = (progress: DiscoveryProgress) => {
+      win?.webContents.send('discovery:progress', progress)
+    }
+
+    // Run focused AI analysis just for env vars
+    const envPrompt = buildEnvAnalysisPrompt(project.path, service)
+
+    // For now, return empty array - full implementation would call AI
+    // This is a placeholder for the focused env analysis
+    console.log('[IPC] Env analysis prompt generated:', envPrompt.substring(0, 100) + '...')
+    sendProgress({ projectPath: project.path, step: 'ai-analysis', message: 'Analyzing environment variables...' })
+
+    return [] as any[]
   })
 
   const getLogBuffer = (projectId: string, serviceId: string): string[] => {

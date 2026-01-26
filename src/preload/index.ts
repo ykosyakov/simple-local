@@ -48,6 +48,8 @@ const api = {
   // Discovery (runs AI analysis)
   analyzeProject: (projectPath: string): Promise<ProjectConfig> =>
     ipcRenderer.invoke('discovery:analyze', projectPath),
+  reanalyzeServiceEnv: (projectId: string, serviceId: string) =>
+    ipcRenderer.invoke('service:reanalyze-env', projectId, serviceId),
   onDiscoveryProgress: (callback: (progress: DiscoveryProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: DiscoveryProgress) => callback(progress)
     ipcRenderer.on('discovery:progress', handler)
