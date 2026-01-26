@@ -23,6 +23,15 @@ export interface Service {
   active: boolean
   mode: 'native' | 'container'
   devcontainer?: string
+  containerEnvOverrides?: ContainerEnvOverride[]
+}
+
+export interface ContainerEnvOverride {
+  key: string
+  originalPattern: string
+  containerValue: string
+  reason: string
+  enabled: boolean
 }
 
 export interface ProjectConfig {
