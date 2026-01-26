@@ -97,7 +97,7 @@ export function EnvOverridesPanel({
       <div className="space-y-2">
         {overrides.map((override, index) => (
           <div
-            key={index}
+            key={`${override.key}-${override.originalPattern}`}
             className="flex items-start gap-2 rounded p-2"
             style={{
               background: 'var(--bg-surface)',
@@ -108,6 +108,7 @@ export function EnvOverridesPanel({
               type="checkbox"
               checked={override.enabled}
               onChange={() => toggleOverride(index)}
+              aria-label={`Enable ${override.key} override`}
               className="mt-1"
             />
             <div className="min-w-0 flex-1">
@@ -134,6 +135,7 @@ export function EnvOverridesPanel({
               className="btn-icon"
               style={{ padding: '0.25rem' }}
               title="Remove override"
+              aria-label={`Remove ${override.key} override`}
             >
               <X className="h-3 w-3" />
             </button>
