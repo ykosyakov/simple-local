@@ -2,7 +2,25 @@ import Docker from 'dockerode'
 import { spawn, execSync } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
-import type { ServiceStatus } from '../../shared/types'
+import type { ContainerEnvOverride, ServiceStatus } from '../../shared/types'
+
+export function applyContainerEnvOverrides(
+  env: Record<string, string>,
+  overrides: ContainerEnvOverride[]
+): Record<string, string> {
+  const result = { ...env }
+
+  for (const override of overrides) {
+    if (!override.enabled) continue
+
+    const value = result[override.key]
+    if (value?.includes(override.originalPattern)) {
+      result[override.key] = value.replace(override.originalPattern, override.containerValue)
+    }
+  }
+
+  return result
+}
 
 export class ContainerService extends EventEmitter {
   private docker: Docker
