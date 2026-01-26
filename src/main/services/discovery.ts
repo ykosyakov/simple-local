@@ -128,6 +128,45 @@ export class DiscoveryService {
     }
   }
 
+  buildEnvAnalysisPrompt(projectPath: string, service: Service, resultFilePath: string): string {
+    const servicePath = path.join(projectPath, service.path)
+
+    return `Analyze environment files for localhost URLs that need rewriting for container mode.
+
+Service: ${service.name}
+Directory: ${servicePath}
+
+Steps:
+1. Find all .env files in the directory: .env, .env.local, .env.development, .env.example
+2. Read each file and identify variables containing localhost or 127.0.0.1 URLs
+3. For each localhost URL found:
+   - Identify what service it connects to (Postgres, Redis, Supabase, API, etc.)
+   - Extract the port number
+   - Create an override entry
+
+IMPORTANT: Write your result to this exact file: ${resultFilePath}
+
+Use the Write tool to create the file with this JSON format:
+{
+  "overrides": [
+    {
+      "key": "DATABASE_URL",
+      "originalPattern": "localhost:54322",
+      "containerValue": "host.docker.internal:54322",
+      "reason": "Supabase local Postgres database",
+      "enabled": true
+    }
+  ]
+}
+
+Rules:
+- Only include variables with localhost or 127.0.0.1
+- Skip cloud URLs (*.supabase.co, *.amazonaws.com, etc.)
+- The "reason" should identify the service type (Redis, Postgres, Supabase, etc.)
+- Always set enabled: true
+- If no localhost URLs found, write: {"overrides": []}`
+  }
+
   buildDiscoveryPrompt(scanResult: ScanResult, resultFilePath: string): string {
     const packageFiles = scanResult.packageJsonPaths.map(p => `- ${p}`).join('\n')
     const dockerFiles = scanResult.dockerComposePaths.length

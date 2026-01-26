@@ -78,4 +78,31 @@ describe('DiscoveryService', () => {
       expect(prompt).toContain('discovery-result.json')
     })
   })
+
+  describe('buildEnvAnalysisPrompt', () => {
+    it('generates prompt with service path and result file', () => {
+      const service = {
+        id: 'backend',
+        name: 'Backend API',
+        path: 'packages/backend',
+        command: 'pnpm start:dev',
+        port: 3500,
+        env: {},
+        active: true,
+        mode: 'container' as const,
+      }
+
+      const prompt = discovery.buildEnvAnalysisPrompt(
+        '/projects/myapp',
+        service,
+        '/projects/myapp/.simple-local/env-analysis-backend.json'
+      )
+
+      expect(prompt).toContain('packages/backend')
+      expect(prompt).toContain('Backend API')
+      expect(prompt).toContain('env-analysis-backend.json')
+      expect(prompt).toContain('localhost')
+      expect(prompt).toContain('host.docker.internal')
+    })
+  })
 })
