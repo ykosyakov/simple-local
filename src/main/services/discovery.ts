@@ -3,7 +3,7 @@ import * as path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { firstValueFrom, timeout } from 'rxjs'
-import type { ProjectConfig, Service, DiscoveryProgress, AiAgentId } from '../../shared/types'
+import type { ProjectConfig, Service, DiscoveryProgress, AiAgentId, ContainerEnvOverride } from '../../shared/types'
 import { AgentTerminal } from './agent-terminal'
 
 const execAsync = promisify(exec)
@@ -165,6 +165,99 @@ Rules:
 - The "reason" should identify the service type (Redis, Postgres, Supabase, etc.)
 - Always set enabled: true
 - If no localhost URLs found, write: {"overrides": []}`
+  }
+
+  async runEnvAnalysis(
+    projectPath: string,
+    service: Service,
+    cliTool: AiAgentId = 'claude',
+    onProgress?: (progress: DiscoveryProgress) => void
+  ): Promise<ContainerEnvOverride[]> {
+    console.log('[Discovery] Starting env analysis for service:', service.id)
+
+    // Check if the CLI tool is available
+    const isAvailable = await isCommandAvailable(cliTool)
+    if (!isAvailable) {
+      console.error(`[Discovery] ${cliTool} CLI not found in PATH`)
+      onProgress?.({ projectPath, step: 'error', message: `${cliTool} CLI not found. Install it first.` })
+      return []
+    }
+
+    onProgress?.({ projectPath, step: 'scanning', message: `Analyzing ${service.name} environment...` })
+
+    // Result file for this specific service
+    const resultDir = path.join(projectPath, '.simple-local')
+    const resultFile = path.join(resultDir, `env-analysis-${service.id}.json`)
+    await fs.mkdir(resultDir, { recursive: true })
+
+    // Clean up any previous result
+    try {
+      await fs.unlink(resultFile)
+    } catch {
+      // File doesn't exist, that's fine
+    }
+
+    const prompt = this.buildEnvAnalysisPrompt(projectPath, service, resultFile)
+    const terminal = new AgentTerminal()
+
+    try {
+      console.log(`[Discovery] Spawning ${cliTool} for env analysis`)
+      onProgress?.({ projectPath, step: 'ai-analysis', message: `Running ${cliTool} analysis...` })
+
+      const session = terminal.spawn({
+        agent: cliTool,
+        cwd: path.join(projectPath, service.path),
+        prompt: prompt,
+        allowedTools: ['Read', 'Glob', 'Write'],
+      })
+
+      console.log(`[Discovery] Env analysis session ID: ${session.id}`)
+
+      // Subscribe to raw output for logging
+      session.raw$.subscribe({
+        next: (text) => {
+          const cleanText = stripAnsi(text)
+          if (cleanText.trim()) {
+            onProgress?.({ projectPath, step: 'ai-analysis', message: 'Analyzing environment files...', log: cleanText })
+          }
+        },
+      })
+
+      // Wait for session to complete with timeout
+      await firstValueFrom(
+        session.pty.exit$.pipe(
+          timeout(AI_DISCOVERY_TIMEOUT)
+        )
+      ).catch(() => {
+        console.log('[Discovery] Env analysis session timed out')
+        session.kill()
+        throw new Error('Environment analysis timed out')
+      })
+
+      console.log('[Discovery] Env analysis session completed')
+      onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
+
+      // Read result from file
+      try {
+        const resultContent = await fs.readFile(resultFile, 'utf-8')
+        const parsed = JSON.parse(resultContent)
+        console.log('[Discovery] Env analysis result:', JSON.stringify(parsed, null, 2))
+
+        onProgress?.({ projectPath, step: 'complete', message: 'Environment analysis complete' })
+        return parsed.overrides || []
+      } catch (readErr) {
+        console.error('[Discovery] Failed to read env analysis result:', readErr)
+        onProgress?.({ projectPath, step: 'error', message: 'Agent did not produce valid result' })
+        return []
+      }
+
+    } catch (err) {
+      console.error('[Discovery] Env analysis failed:', err)
+      onProgress?.({ projectPath, step: 'error', message: `Analysis failed: ${err}` })
+      return []
+    } finally {
+      terminal.dispose()
+    }
   }
 
   buildDiscoveryPrompt(scanResult: ScanResult, resultFilePath: string): string {
