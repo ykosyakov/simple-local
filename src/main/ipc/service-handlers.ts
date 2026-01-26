@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { ContainerService } from '../services/container'
+import { ContainerService, applyContainerEnvOverrides } from '../services/container'
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
@@ -33,6 +33,10 @@ export function setupServiceHandlers(
     if (!service) throw new Error('Service not found')
 
     const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
+    // Apply container env overrides if in container mode
+    const finalEnv = service.mode === 'container' && service.containerEnvOverrides
+      ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
+      : resolvedEnv
     const servicePath = `${project.path}/${service.path}`
 
     const sendLog = (data: string) => {
@@ -64,7 +68,7 @@ export function setupServiceHandlers(
         serviceId,
         service.command,
         servicePath,
-        resolvedEnv,
+        finalEnv,
         sendLog,
         sendStatus
       )
@@ -85,7 +89,7 @@ export function setupServiceHandlers(
       sendStatus('starting')
       sendLog('\n══════ Starting service ══════\n')
 
-      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv, sendLog)
+      await container.startService(servicePath, devcontainerConfigPath, service.command, finalEnv, sendLog)
       sendStatus('running')
     }
   })
@@ -247,6 +251,10 @@ export function setupServiceHandlers(
     const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
     const servicePath = `${project.path}/${service.path}`
     const effectiveMode = modeOverride || service.mode
+    // Apply container env overrides if in container mode
+    const finalEnv = effectiveMode === 'container' && service.containerEnvOverrides
+      ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
+      : resolvedEnv
 
     const key = `${projectId}:${serviceId}`
     const sendLog = (data: string) => {
@@ -271,7 +279,7 @@ export function setupServiceHandlers(
         serviceId,
         service.command,
         servicePath,
-        resolvedEnv,
+        finalEnv,
         sendLog,
         sendStatus
       )
@@ -282,7 +290,7 @@ export function setupServiceHandlers(
       await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
 
       sendLog('\n══════ Starting service ══════\n')
-      await container.startService(servicePath, devcontainerConfigPath, service.command, resolvedEnv, sendLog)
+      await container.startService(servicePath, devcontainerConfigPath, service.command, finalEnv, sendLog)
     }
   }
 
