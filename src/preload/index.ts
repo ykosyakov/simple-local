@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride } from '../shared/types'
 
 const api = {
   // Registry
@@ -48,7 +48,7 @@ const api = {
   // Discovery (runs AI analysis)
   analyzeProject: (projectPath: string): Promise<ProjectConfig> =>
     ipcRenderer.invoke('discovery:analyze', projectPath),
-  reanalyzeServiceEnv: (projectId: string, serviceId: string) =>
+  reanalyzeServiceEnv: (projectId: string, serviceId: string): Promise<ContainerEnvOverride[]> =>
     ipcRenderer.invoke('service:reanalyze-env', projectId, serviceId),
   onDiscoveryProgress: (callback: (progress: DiscoveryProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: DiscoveryProgress) => callback(progress)

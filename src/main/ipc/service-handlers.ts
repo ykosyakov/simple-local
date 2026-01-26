@@ -3,7 +3,7 @@ import { ContainerService, applyContainerEnvOverrides } from '../services/contai
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
-import type { DiscoveryProgress, Service } from '../../shared/types'
+import type { ContainerEnvOverride, DiscoveryProgress, Service } from '../../shared/types'
 
 const MAX_LOG_LINES = 1000
 
@@ -282,7 +282,7 @@ export function setupServiceHandlers(
     console.log('[IPC] Env analysis prompt generated:', envPrompt.substring(0, 100) + '...')
     sendProgress({ projectPath: project.path, step: 'ai-analysis', message: 'Analyzing environment variables...' })
 
-    return [] as any[]
+    return [] as ContainerEnvOverride[]
   })
 
   const getLogBuffer = (projectId: string, serviceId: string): string[] => {
