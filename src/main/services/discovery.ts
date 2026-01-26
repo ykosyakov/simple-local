@@ -163,7 +163,16 @@ Use the Write tool to create the file with this JSON:
       "port": 3000,
       "debugPort": 9229,
       "env": {},
-      "dependsOn": []
+      "dependsOn": [],
+      "containerEnvOverrides": [
+        {
+          "key": "DATABASE_URL",
+          "originalPattern": "localhost:54322",
+          "containerValue": "host.docker.internal:54322",
+          "reason": "Supabase local database",
+          "enabled": true
+        }
+      ]
     }
   ],
   "connections": []
@@ -176,13 +185,21 @@ Steps:
 2. Determine ports from scripts or config files
 3. Look for debug ports (commonly 9229 for Node.js --inspect)
 4. Identify service dependencies
-5. Write the JSON result to ${resultFilePath}
+5. **IMPORTANT: Analyze .env files for localhost/127.0.0.1 URLs**
+   - Read all .env files in each service directory
+   - For each env var containing localhost or 127.0.0.1:
+     - Determine what service it connects to (Postgres, Redis, Supabase, etc.)
+     - Add a containerEnvOverride entry with the rewrite to host.docker.internal
+     - Set enabled: true by default
+   - Skip cloud URLs (they don't need rewriting)
+6. Write the JSON result to ${resultFilePath}
 
 Field notes:
 - "command": Primary dev/run command (required)
 - "debugCommand": Debug command with inspector enabled (optional, omit if not found)
 - "port": Application port
 - "debugPort": Node inspector port if debug command exists (typically 9229)
+- "containerEnvOverrides": Array of env vars that need rewriting for container mode
 
 Only include services with runnable commands. Exclude shared libraries without run scripts.`
   }
@@ -315,6 +332,7 @@ Only include services with runnable commands. Exclude shared libraries without r
       devcontainer: `.simple-local/devcontainers/${s.id}/devcontainer.json`,
       active: true,
       mode: getDefaultMode(s.framework || s.type),
+      containerEnvOverrides: s.containerEnvOverrides || [],
     }))
 
     // Apply connections as env var references
