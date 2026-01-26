@@ -3,8 +3,9 @@ import { ServiceCard } from './ServiceCard'
 import { LogViewer } from './LogViewer'
 import { HiddenServices } from './project/HiddenServices'
 import { ConfigEditorModal } from './ConfigEditorModal'
+import { EnvOverridesPanel } from './EnvOverridesPanel'
 import { Server, Code2, RefreshCw } from 'lucide-react'
-import type { Project, ProjectConfig, ServiceStatus } from '../../../shared/types'
+import type { Project, ProjectConfig, ServiceStatus, ContainerEnvOverride } from '../../../shared/types'
 
 interface ProjectViewProps {
   project: Project
@@ -18,6 +19,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isConfigEditorOpen, setIsConfigEditorOpen] = useState(false)
+  const [reanalyzingService, setReanalyzingService] = useState<string | null>(null)
 
   const loadConfig = useCallback(async () => {
     try {
@@ -163,6 +165,30 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     } catch (err) {
       console.error('[ProjectView] Failed to save config:', err)
       setActionError(`Failed to save config: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }
+
+  const handleUpdateOverrides = async (serviceId: string, overrides: ContainerEnvOverride[]) => {
+    if (!config) return
+
+    const updatedServices = config.services.map((s) =>
+      s.id === serviceId ? { ...s, containerEnvOverrides: overrides } : s
+    )
+    const updatedConfig = { ...config, services: updatedServices }
+
+    await window.api.saveProjectConfig(project.path, updatedConfig)
+    setConfig(updatedConfig)
+  }
+
+  const handleReanalyzeEnv = async (serviceId: string) => {
+    setReanalyzingService(serviceId)
+    try {
+      const overrides = await window.api.reanalyzeServiceEnv(project.id, serviceId)
+      if (overrides && overrides.length > 0) {
+        await handleUpdateOverrides(serviceId, overrides)
+      }
+    } finally {
+      setReanalyzingService(null)
     }
   }
 
@@ -316,6 +342,16 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
           />
         ))}
       </div>
+
+      {/* Container Environment Overrides */}
+      {selectedService && selectedService.mode === 'container' && (
+        <EnvOverridesPanel
+          service={selectedService}
+          onUpdate={(overrides) => handleUpdateOverrides(selectedService.id, overrides)}
+          onReanalyze={() => handleReanalyzeEnv(selectedService.id)}
+          isReanalyzing={reanalyzingService === selectedService.id}
+        />
+      )}
 
       {/* Log Viewer */}
       {selectedService && (
