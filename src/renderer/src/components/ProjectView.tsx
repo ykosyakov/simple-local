@@ -171,22 +171,36 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const handleUpdateOverrides = async (serviceId: string, overrides: ContainerEnvOverride[]) => {
     if (!config) return
 
-    const updatedServices = config.services.map((s) =>
-      s.id === serviceId ? { ...s, containerEnvOverrides: overrides } : s
-    )
-    const updatedConfig = { ...config, services: updatedServices }
+    try {
+      setActionError(null)
+      const updatedServices = config.services.map((s) =>
+        s.id === serviceId ? { ...s, containerEnvOverrides: overrides } : s
+      )
+      const updatedConfig = { ...config, services: updatedServices }
 
-    await window.api.saveProjectConfig(project.path, updatedConfig)
-    setConfig(updatedConfig)
+      await window.api.saveProjectConfig(project.path, updatedConfig)
+      setConfig(updatedConfig)
+    } catch (err) {
+      console.error('[ProjectView] Failed to update overrides:', err)
+      setActionError(
+        `Failed to update environment overrides: ${err instanceof Error ? err.message : 'Unknown error'}`
+      )
+    }
   }
 
   const handleReanalyzeEnv = async (serviceId: string) => {
     setReanalyzingService(serviceId)
     try {
+      setActionError(null)
       const overrides = await window.api.reanalyzeServiceEnv(project.id, serviceId)
       if (overrides && overrides.length > 0) {
         await handleUpdateOverrides(serviceId, overrides)
       }
+    } catch (err) {
+      console.error('[ProjectView] Failed to reanalyze env:', err)
+      setActionError(
+        `Failed to reanalyze environment: ${err instanceof Error ? err.message : 'Unknown error'}`
+      )
     } finally {
       setReanalyzingService(null)
     }
