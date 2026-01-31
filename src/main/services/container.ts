@@ -3,6 +3,7 @@ import { spawn, execSync } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
 import type { ContainerEnvOverride, ServiceStatus } from '../../shared/types'
+import { validatePort } from './validation'
 
 export function applyContainerEnvOverrides(
   env: Record<string, string>,
@@ -227,6 +228,8 @@ export class ContainerService extends EventEmitter {
   }
 
   killProcessOnPort(port: number): boolean {
+    validatePort(port)
+
     try {
       const result = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf-8' }).trim()
       if (result) {

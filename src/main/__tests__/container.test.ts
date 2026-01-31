@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ContainerService } from '../services/container'
 
 // Mock child_process
 vi.mock('child_process', () => ({
   spawn: vi.fn(),
-  exec: vi.fn(),
+  execSync: vi.fn(),
 }))
 
 // Mock dockerode
@@ -27,6 +27,10 @@ describe('ContainerService', () => {
   beforeEach(() => {
     containerService = new ContainerService()
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   describe('getContainerName', () => {
@@ -96,6 +100,226 @@ describe('ContainerService', () => {
         })
       )
       expect(onStatusChange).toHaveBeenCalledWith('starting')
+    })
+
+    it('splits command by spaces', async () => {
+      const { spawn } = await import('child_process')
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        pid: 12345,
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev',
+        '/path',
+        {},
+        vi.fn(),
+        vi.fn()
+      )
+
+      expect(spawn).toHaveBeenCalledWith('npm', ['run', 'dev'], expect.any(Object))
+    })
+
+    it('handles commands with multiple arguments', async () => {
+      const { spawn } = await import('child_process')
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        pid: 12345,
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev --port 3000',
+        '/path',
+        {},
+        vi.fn(),
+        vi.fn()
+      )
+
+      expect(spawn).toHaveBeenCalledWith(
+        'npm',
+        ['run', 'dev', '--port', '3000'],
+        expect.any(Object)
+      )
+    })
+
+    it('calls onStatusChange with starting immediately', async () => {
+      const { spawn } = await import('child_process')
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        pid: 12345,
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const onStatusChange = vi.fn()
+
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev',
+        '/path',
+        {},
+        vi.fn(),
+        onStatusChange
+      )
+
+      expect(onStatusChange).toHaveBeenCalledWith('starting')
+    })
+
+    it('calls onStatusChange with running on spawn event', async () => {
+      const { spawn } = await import('child_process')
+      let spawnCallback: () => void = () => {}
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => {
+          if (event === 'spawn') spawnCallback = cb
+        }),
+        pid: 12345,
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const onStatusChange = vi.fn()
+
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev',
+        '/path',
+        {},
+        vi.fn(),
+        onStatusChange
+      )
+
+      spawnCallback()
+
+      expect(onStatusChange).toHaveBeenCalledWith('running')
+    })
+
+    it('forwards stdout data to onLog', async () => {
+      const { spawn } = await import('child_process')
+      let stdoutCallback: (data: Buffer) => void = () => {}
+      const mockProcess = {
+        stdout: {
+          on: vi.fn((event, cb) => {
+            if (event === 'data') stdoutCallback = cb
+          }),
+        },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        pid: 12345,
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const onLog = vi.fn()
+
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev',
+        '/path',
+        {},
+        onLog,
+        vi.fn()
+      )
+
+      stdoutCallback(Buffer.from('Hello world'))
+
+      expect(onLog).toHaveBeenCalledWith('Hello world')
+    })
+  })
+
+  describe('killProcessOnPort - current behavior', () => {
+    it('returns true when process is killed', async () => {
+      const { execSync } = await import('child_process')
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('lsof')) return '12345' as any
+        return '' as any
+      })
+
+      const result = containerService.killProcessOnPort(3000)
+
+      expect(result).toBe(true)
+      expect(execSync).toHaveBeenCalledWith('lsof -ti tcp:3000', { encoding: 'utf-8' })
+      expect(execSync).toHaveBeenCalledWith('kill -9 12345')
+    })
+
+    it('returns false when no process on port', async () => {
+      const { execSync } = await import('child_process')
+      vi.mocked(execSync).mockImplementation(() => {
+        throw new Error('no process')
+      })
+
+      const result = containerService.killProcessOnPort(3000)
+
+      expect(result).toBe(false)
+    })
+
+    it('handles multiple PIDs on same port', async () => {
+      const { execSync } = await import('child_process')
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('lsof')) return '12345\n67890' as any
+        return '' as any
+      })
+
+      const result = containerService.killProcessOnPort(3000)
+
+      expect(result).toBe(true)
+      expect(execSync).toHaveBeenCalledWith('kill -9 12345')
+      expect(execSync).toHaveBeenCalledWith('kill -9 67890')
+    })
+
+    it('continues killing remaining PIDs if one kill fails', async () => {
+      const { execSync } = await import('child_process')
+      let killCount = 0
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes('lsof')) return '12345\n67890' as any
+        if (cmd.includes('kill')) {
+          killCount++
+          if (killCount === 1) throw new Error('process already exited')
+        }
+        return '' as any
+      })
+
+      const result = containerService.killProcessOnPort(3000)
+
+      expect(result).toBe(true)
+      expect(execSync).toHaveBeenCalledWith('kill -9 12345')
+      expect(execSync).toHaveBeenCalledWith('kill -9 67890')
+    })
+  })
+
+  describe('killProcessOnPort - security', () => {
+    it('rejects non-numeric port values', async () => {
+      expect(() => containerService.killProcessOnPort('5000; rm -rf /' as any)).toThrow(
+        'Port must be an integer'
+      )
+    })
+
+    it('rejects port values outside valid range - negative', async () => {
+      expect(() => containerService.killProcessOnPort(-1)).toThrow(
+        'Port must be between 1 and 65535'
+      )
+    })
+
+    it('rejects port values outside valid range - too high', async () => {
+      expect(() => containerService.killProcessOnPort(70000)).toThrow(
+        'Port must be between 1 and 65535'
+      )
+    })
+
+    it('rejects non-integer port values', async () => {
+      expect(() => containerService.killProcessOnPort(3000.5)).toThrow('Port must be an integer')
+    })
+
+    it('rejects NaN port values', async () => {
+      expect(() => containerService.killProcessOnPort(NaN)).toThrow('Port must be an integer')
     })
   })
 

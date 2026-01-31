@@ -1,7 +1,14 @@
 import { ipcMain } from 'electron'
 import { RegistryService } from '../services/registry'
 
-export function setupRegistryHandlers(registry: RegistryService): void {
+export interface RegistryHandlersOptions {
+  onProjectRemoved?: (projectId: string) => void
+}
+
+export function setupRegistryHandlers(
+  registry: RegistryService,
+  options?: RegistryHandlersOptions
+): void {
   ipcMain.handle('registry:get', () => {
     const reg = registry.getRegistry()
     console.log('[IPC] registry:get returning', reg.projects.length, 'projects')
@@ -17,6 +24,7 @@ export function setupRegistryHandlers(registry: RegistryService): void {
 
   ipcMain.handle('registry:removeProject', (_event, id: string) => {
     console.log('[IPC] registry:removeProject called:', id)
+    options?.onProjectRemoved?.(id)
     registry.removeProject(id)
   })
 

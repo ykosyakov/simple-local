@@ -4,14 +4,23 @@ import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
 import { getServiceContext } from '../services/service-lookup'
+import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
 import type { DiscoveryProgress } from '../../shared/types'
 
 const MAX_LOG_LINES = 1000
+
+function buildDevcontainerPath(projectPath: string, serviceId: string): string {
+  const safeServiceId = sanitizeServiceId(serviceId)
+  const devcontainerPath = `${projectPath}/.simple-local/devcontainers/${safeServiceId}/devcontainer.json`
+  validatePathWithinProject(projectPath, devcontainerPath)
+  return devcontainerPath
+}
 
 export interface ServiceHandlersResult {
   getLogBuffer: (projectId: string, serviceId: string) => string[]
   startService: (projectId: string, serviceId: string, mode?: 'native' | 'container') => Promise<void>
   stopService: (projectId: string, serviceId: string) => Promise<void>
+  cleanupProjectLogs: (projectId: string) => void
 }
 
 export function setupServiceHandlers(
@@ -73,7 +82,7 @@ export function setupServiceHandlers(
         throw err
       }
     } else {
-      const devcontainerConfigPath = `${project.path}/.simple-local/devcontainers/${service.id}/devcontainer.json`
+      const devcontainerConfigPath = buildDevcontainerPath(project.path, service.id)
 
       sendStatus('building')
       sendLog('══════ Building container ══════\n')
@@ -290,7 +299,7 @@ export function setupServiceHandlers(
         sendStatus
       )
     } else {
-      const devcontainerConfigPath = `${project.path}/.simple-local/devcontainers/${service.id}/devcontainer.json`
+      const devcontainerConfigPath = buildDevcontainerPath(project.path, service.id)
 
       sendLog('══════ Building container ══════\n')
       await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
@@ -311,5 +320,15 @@ export function setupServiceHandlers(
     }
   }
 
-  return { getLogBuffer, startService, stopService }
+  const cleanupProjectLogs = (projectId: string): void => {
+    for (const key of logBuffers.keys()) {
+      if (key.startsWith(`${projectId}:`)) {
+        logBuffers.delete(key)
+        logCleanupFns.get(key)?.()
+        logCleanupFns.delete(key)
+      }
+    }
+  }
+
+  return { getLogBuffer, startService, stopService, cleanupProjectLogs }
 }

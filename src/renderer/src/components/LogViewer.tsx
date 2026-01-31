@@ -15,13 +15,19 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
 
   useEffect(() => {
     let mounted = true
+    let streamStarted = false
 
     const init = async () => {
       const storedLogs = await window.api.getLogs(projectId, serviceId)
+      if (!mounted) return
+
+      setLogs(storedLogs)
+      await window.api.startLogStream(projectId, serviceId)
       if (mounted) {
-        setLogs(storedLogs)
+        streamStarted = true
+      } else {
+        window.api.stopLogStream(projectId, serviceId)
       }
-      window.api.startLogStream(projectId, serviceId)
     }
 
     init()
@@ -35,7 +41,9 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
     return () => {
       mounted = false
       unsubscribe()
-      window.api.stopLogStream(projectId, serviceId)
+      if (streamStarted) {
+        window.api.stopLogStream(projectId, serviceId)
+      }
     }
   }, [projectId, serviceId])
 

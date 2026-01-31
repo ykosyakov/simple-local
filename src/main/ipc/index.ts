@@ -32,8 +32,15 @@ export function setupIpcHandlers(): {
   const prerequisites = new PrerequisitesService()
   const agentTerminal = new AgentTerminal()
 
-  setupRegistryHandlers(registry)
-  const { getLogBuffer, startService, stopService } = setupServiceHandlers(container, config, discovery, registry)
+  const { getLogBuffer, startService, stopService, cleanupProjectLogs } = setupServiceHandlers(
+    container,
+    config,
+    discovery,
+    registry
+  )
+  setupRegistryHandlers(registry, {
+    onProjectRemoved: cleanupProjectLogs,
+  })
   setupPrerequisitesHandlers(prerequisites, settings, container)
   setupAgentTerminalHandlers(agentTerminal)
 
