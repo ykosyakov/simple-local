@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { ServiceCard } from './ServiceCard'
 import { LogViewer } from './LogViewer'
 import { HiddenServices } from './project/HiddenServices'
@@ -10,6 +10,48 @@ import type { Project, ProjectConfig, ServiceStatus, ContainerEnvOverride } from
 interface ProjectViewProps {
   project: Project
   onRerunDiscovery?: () => void
+}
+
+/**
+ * Hook that provides a factory for creating service action handlers with standardized error handling.
+ * This reduces duplication across start/stop/restart/hide/mode change handlers.
+ *
+ * Uses refs to avoid recreating handlers when services change, while still accessing
+ * the latest services list for error messages.
+ */
+function useServiceActionFactory(
+  services: ProjectConfig['services'] | undefined,
+  setActionError: (error: string | null) => void,
+  onComplete: () => void
+) {
+  // Store services in a ref to avoid recreating handlers when services change
+  const servicesRef = useRef(services)
+  servicesRef.current = services
+
+  // Store onComplete in a ref to keep handler references stable
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
+
+  // The factory function itself is stable - it doesn't change
+  return useMemo(
+    () => (actionName: string, action: (serviceId: string) => Promise<void>) => {
+      return async (serviceId: string) => {
+        try {
+          setActionError(null)
+          await action(serviceId)
+        } catch (err) {
+          console.error(`[ProjectView] Failed to ${actionName} service:`, err)
+          const serviceName = servicesRef.current?.find((s) => s.id === serviceId)?.name || serviceId
+          setActionError(
+            `Failed to ${actionName} ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`
+          )
+        } finally {
+          onCompleteRef.current()
+        }
+      }
+    },
+    [setActionError]
+  )
 }
 
 export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
@@ -70,96 +112,76 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     }
   }, [loadConfig, refreshStatuses, project.id])
 
-  const handleStart = useCallback(async (serviceId: string) => {
-    try {
-      setActionError(null)
-      await window.api.startService(project.id, serviceId)
-    } catch (err) {
-      console.error('[ProjectView] Failed to start service:', err)
-      const serviceName = config?.services.find((s) => s.id === serviceId)?.name || serviceId
-      setActionError(`Failed to start ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    } finally {
-      refreshStatuses()
-    }
-  }, [project.id, config?.services, refreshStatuses])
+  // Factory for service actions that refresh statuses after completion
+  const createServiceAction = useServiceActionFactory(config?.services, setActionError, refreshStatuses)
 
-  const handleStop = useCallback(async (serviceId: string) => {
-    try {
-      setActionError(null)
-      await window.api.stopService(project.id, serviceId)
-    } catch (err) {
-      console.error('[ProjectView] Failed to stop service:', err)
-      const serviceName = config?.services.find((s) => s.id === serviceId)?.name || serviceId
-      setActionError(`Failed to stop ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    } finally {
-      refreshStatuses()
-    }
-  }, [project.id, config?.services, refreshStatuses])
+  // Factory for config actions that reload config after completion
+  const createConfigAction = useServiceActionFactory(config?.services, setActionError, loadConfig)
 
-  const handleRestart = useCallback(async (serviceId: string) => {
-    try {
-      setActionError(null)
+  // Store config in a ref for use in handlers without causing recreation
+  const configRef = useRef(config)
+  configRef.current = config
+
+  const handleStart = useMemo(
+    () => createServiceAction('start', (serviceId) => window.api.startService(project.id, serviceId)),
+    [createServiceAction, project.id]
+  )
+
+  const handleStop = useMemo(
+    () => createServiceAction('stop', (serviceId) => window.api.stopService(project.id, serviceId)),
+    [createServiceAction, project.id]
+  )
+
+  const handleRestart = useMemo(
+    () => createServiceAction('restart', async (serviceId) => {
       await window.api.stopService(project.id, serviceId)
       await window.api.startService(project.id, serviceId)
-    } catch (err) {
-      console.error('[ProjectView] Failed to restart service:', err)
-      const serviceName = config?.services.find((s) => s.id === serviceId)?.name || serviceId
-      setActionError(`Failed to restart ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    } finally {
-      refreshStatuses()
-    }
-  }, [project.id, config?.services, refreshStatuses])
+    }),
+    [createServiceAction, project.id]
+  )
 
-  const handleActivateService = async (serviceId: string) => {
-    if (!config) return
-    try {
-      setActionError(null)
-      const updatedServices = config.services.map((s) =>
+  const handleActivateService = useMemo(
+    () => createConfigAction('activate', async (serviceId) => {
+      const currentConfig = configRef.current
+      if (!currentConfig) return
+      const updatedServices = currentConfig.services.map((s) =>
         s.id === serviceId ? { ...s, active: true } : s
       )
-      const updatedConfig = { ...config, services: updatedServices }
+      const updatedConfig = { ...currentConfig, services: updatedServices }
       await window.api.saveProjectConfig(project.path, updatedConfig)
-      loadConfig()
-    } catch (err) {
-      console.error('[ProjectView] Failed to activate service:', err)
-      const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
-      setActionError(`Failed to activate ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    }
-  }
+    }),
+    [createConfigAction, project.path]
+  )
 
-  const handleHideService = useCallback(async (serviceId: string) => {
-    if (!config) return
-    try {
-      setActionError(null)
-      const updatedServices = config.services.map((s) =>
+  const handleHideService = useMemo(
+    () => createConfigAction('hide', async (serviceId) => {
+      const currentConfig = configRef.current
+      if (!currentConfig) return
+      const updatedServices = currentConfig.services.map((s) =>
         s.id === serviceId ? { ...s, active: false } : s
       )
-      const updatedConfig = { ...config, services: updatedServices }
+      const updatedConfig = { ...currentConfig, services: updatedServices }
       await window.api.saveProjectConfig(project.path, updatedConfig)
-      loadConfig()
-    } catch (err) {
-      console.error('[ProjectView] Failed to hide service:', err)
-      const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
-      setActionError(`Failed to hide ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    }
-  }, [config, project.path, loadConfig])
+    }),
+    [createConfigAction, project.path]
+  )
 
-  const handleModeChange = useCallback(async (serviceId: string, mode: 'native' | 'container') => {
-    if (!config) return
-    try {
-      setActionError(null)
-      const updatedServices = config.services.map((s) =>
-        s.id === serviceId ? { ...s, mode } : s
-      )
-      const updatedConfig = { ...config, services: updatedServices }
-      await window.api.saveProjectConfig(project.path, updatedConfig)
-      loadConfig()
-    } catch (err) {
-      console.error('[ProjectView] Failed to change mode:', err)
-      const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
-      setActionError(`Failed to change mode for ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    }
-  }, [config, project.path, loadConfig])
+  const handleModeChange = useCallback(
+    (serviceId: string, mode: 'native' | 'container') => {
+      const currentConfig = configRef.current
+      if (!currentConfig) return
+      return createConfigAction('change mode for', async (sid) => {
+        const latestConfig = configRef.current
+        if (!latestConfig) return
+        const updatedServices = latestConfig.services.map((s) =>
+          s.id === sid ? { ...s, mode } : s
+        )
+        const updatedConfig = { ...latestConfig, services: updatedServices }
+        await window.api.saveProjectConfig(project.path, updatedConfig)
+      })(serviceId)
+    },
+    [createConfigAction, project.path]
+  )
 
   const handleSaveConfig = async (updatedConfig: ProjectConfig) => {
     try {
