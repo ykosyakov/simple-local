@@ -7,6 +7,11 @@ import type { ProjectConfig, Service, DiscoveryProgress, ContainerEnvOverride } 
 import { AgentTerminal } from '@agent-flow/agent-terminal'
 import type { AiAgentId } from '@agent-flow/agent-terminal'
 import { createLogger } from '../../shared/logger'
+import {
+  buildDiscoveryPrompt as buildDiscoveryPromptFromTemplate,
+  buildEnvAnalysisPrompt as buildEnvAnalysisPromptFromTemplate,
+  type ScanResult,
+} from './discovery-prompts'
 
 const execAsync = promisify(exec)
 const log = createLogger('Discovery')
@@ -27,13 +32,8 @@ async function isCommandAvailable(command: string): Promise<boolean> {
   }
 }
 
-interface ScanResult {
-  packageJsonPaths: string[]
-  dockerComposePaths: string[]
-  envFiles: string[]
-  makefilePaths: string[]
-  toolConfigPaths: string[]
-}
+// Re-export ScanResult for backwards compatibility
+export type { ScanResult }
 
 interface PackageInfo {
   name: string
@@ -175,42 +175,11 @@ export class DiscoveryService {
   }
 
   buildEnvAnalysisPrompt(projectPath: string, service: Service, resultFilePath: string): string {
-    const servicePath = path.join(projectPath, service.path)
-
-    return `Analyze environment files for localhost URLs that need rewriting for container mode.
-
-Service: ${service.name}
-Directory: ${servicePath}
-
-Steps:
-1. Find all .env files in the directory: .env, .env.local, .env.development, .env.example
-2. Read each file and identify variables containing localhost or 127.0.0.1 URLs
-3. For each localhost URL found:
-   - Identify what service it connects to (Postgres, Redis, Supabase, API, etc.)
-   - Extract the port number
-   - Create an override entry
-
-IMPORTANT: Write your result to this exact file: ${resultFilePath}
-
-Use the Write tool to create the file with this JSON format:
-{
-  "overrides": [
-    {
-      "key": "DATABASE_URL",
-      "originalPattern": "localhost:54322",
-      "containerValue": "host.docker.internal:54322",
-      "reason": "Supabase local Postgres database",
-      "enabled": true
-    }
-  ]
-}
-
-Rules:
-- Only include variables with localhost or 127.0.0.1
-- Skip cloud URLs (*.supabase.co, *.amazonaws.com, etc.)
-- The "reason" should identify the service type (Redis, Postgres, Supabase, etc.)
-- Always set enabled: true
-- If no localhost URLs found, write: {"overrides": []}`
+    return buildEnvAnalysisPromptFromTemplate({
+      projectPath,
+      service,
+      resultFilePath,
+    })
   }
 
   async runEnvAnalysis(
@@ -312,103 +281,10 @@ Rules:
   }
 
   buildDiscoveryPrompt(scanResult: ScanResult, resultFilePath: string): string {
-    const packageFiles = scanResult.packageJsonPaths.map(p => `- ${p}`).join('\n')
-    const dockerFiles = scanResult.dockerComposePaths.length
-      ? scanResult.dockerComposePaths.map(p => `- ${p}`).join('\n')
-      : '(none)'
-    const envFiles = scanResult.envFiles.length
-      ? scanResult.envFiles.map(p => `- ${p}`).join('\n')
-      : '(none)'
-    const makefiles = scanResult.makefilePaths.length
-      ? scanResult.makefilePaths.map(p => `- ${p}`).join('\n')
-      : '(none)'
-    const toolConfigs = scanResult.toolConfigPaths.length
-      ? scanResult.toolConfigPaths.map(p => `- ${p}`).join('\n')
-      : '(none)'
-
-    return `Analyze this project to discover runnable services AND 3rd party dev tools.
-
-Found files:
-Package.json files:
-${packageFiles}
-
-Docker Compose files:
-${dockerFiles}
-
-Environment files:
-${envFiles}
-
-Makefile locations:
-${makefiles}
-
-Tool config files (Inngest, Temporal, Trigger.dev, etc.):
-${toolConfigs}
-
-IMPORTANT: Write your result to this exact file: ${resultFilePath}
-
-Use the Write tool to create the file with this JSON:
-{
-  "services": [
-    {
-      "id": "lowercase-no-spaces",
-      "name": "Display Name",
-      "type": "service",
-      "path": "relative/path",
-      "command": "npm run dev",
-      "debugCommand": "npm run debug",
-      "port": 3000,
-      "debugPort": 9229,
-      "env": {},
-      "dependsOn": [],
-      "containerEnvOverrides": []
-    },
-    {
-      "id": "inngest",
-      "name": "Inngest Dev Server",
-      "type": "tool",
-      "path": ".",
-      "command": "npx inngest-cli@latest dev",
-      "port": 8288,
-      "env": {},
-      "dependsOn": ["backend"]
-    }
-  ],
-  "connections": []
-}
-
-## Step 1: Discover Services
-Read each package.json to find:
-- Run commands: "dev", "start", "serve" scripts
-- Debug commands: "debug", "dev:debug", or scripts with --inspect
-- Ports from scripts or config
-- Service dependencies
-
-## Step 2: Discover 3rd Party Tools
-Look for long-running dev tools that need to run alongside services:
-
-| File/Pattern | Tool | Example Command | Default Port |
-|-------------|------|-----------------|--------------|
-| inngest.json, inngest.ts, inngest/ | Inngest | npx inngest-cli@latest dev | 8288 |
-| temporal.yaml, temporal/ | Temporal | temporal server start-dev | 7233 |
-| trigger.config.ts | Trigger.dev | npx trigger.dev@latest dev | 3030 |
-| docker-compose.yml (redis) | Redis | docker compose up redis | 6379 |
-| docker-compose.yml (postgres) | PostgreSQL | docker compose up postgres | 5432 |
-| docker-compose.yml (localstack) | LocalStack | docker compose up localstack | 4566 |
-| .stripe/, stripe webhook config | Stripe CLI | stripe listen --forward-to localhost:3000/webhook | - |
-| Makefile (dev/watch/serve targets) | Make | make dev | - |
-
-Only include tools that:
-- Are long-running (stay running during dev)
-- Are actually used by this project (config files exist)
-- Don't duplicate already-discovered services
-
-## Field notes:
-- "type": "service" for your code, "tool" for 3rd party tools
-- "command": Primary run command (required)
-- "port": Application port (optional for tools that don't expose ports)
-- "dependsOn": Tools can depend on services (e.g., inngest depends on backend)
-
-Only include services/tools with runnable commands.`
+    return buildDiscoveryPromptFromTemplate({
+      scanResult,
+      resultFilePath,
+    })
   }
 
   async runAIDiscovery(
