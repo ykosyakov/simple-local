@@ -6,6 +6,9 @@ import { ConfigEditorModal } from './ConfigEditorModal'
 import { EnvOverridesPanel } from './EnvOverridesPanel'
 import { Server, Code2, RefreshCw } from 'lucide-react'
 import type { Project, ProjectConfig, ServiceStatus, ContainerEnvOverride } from '../../../shared/types'
+import { createLogger } from '../../../shared/logger'
+
+const log = createLogger('ProjectView')
 
 interface ProjectViewProps {
   project: Project
@@ -40,7 +43,7 @@ function useServiceActionFactory(
           setActionError(null)
           await action(serviceId)
         } catch (err) {
-          console.error(`[ProjectView] Failed to ${actionName} service:`, err)
+          log.error(`Failed to ${actionName} service:`, err)
           const serviceName = servicesRef.current?.find((s) => s.id === serviceId)?.name || serviceId
           setActionError(
             `Failed to ${actionName} ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`
@@ -75,7 +78,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         return current
       })
     } catch (err) {
-      console.error('[ProjectView] Failed to load config:', err)
+      log.error('Failed to load config:', err)
       setConfigError(err instanceof Error ? err.message : 'Failed to load project configuration')
     }
   }, [project.path])
@@ -189,7 +192,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       await window.api.saveProjectConfig(project.path, updatedConfig)
       loadConfig()
     } catch (err) {
-      console.error('[ProjectView] Failed to save config:', err)
+      log.error('Failed to save config:', err)
       setActionError(`Failed to save config: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
   }
@@ -207,7 +210,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       await window.api.saveProjectConfig(project.path, updatedConfig)
       setConfig(updatedConfig)
     } catch (err) {
-      console.error('[ProjectView] Failed to update overrides:', err)
+      log.error('Failed to update overrides:', err)
       setActionError(
         `Failed to update environment overrides: ${err instanceof Error ? err.message : 'Unknown error'}`
       )
@@ -223,7 +226,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         await handleUpdateOverrides(serviceId, overrides)
       }
     } catch (err) {
-      console.error('[ProjectView] Failed to reanalyze env:', err)
+      log.error('Failed to reanalyze env:', err)
       setActionError(
         `Failed to reanalyze environment: ${err instanceof Error ? err.message : 'Unknown error'}`
       )

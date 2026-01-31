@@ -1,4 +1,7 @@
 import { useCallback } from 'react'
+import { createLogger } from '../../../shared/logger'
+
+const log = createLogger('ProjectView')
 
 interface ServiceConfig {
   id: string
@@ -37,7 +40,7 @@ export function useServiceAction(options: UseServiceActionOptions) {
           onError('') // Clear previous error
           await action(serviceId, ...args)
         } catch (err) {
-          console.error(`[ProjectView] Failed to ${actionName} service:`, err)
+          log.error(`Failed to ${actionName} service:`, err)
           const serviceName = services?.find((s) => s.id === serviceId)?.name || serviceId
           const errorMessage = err instanceof Error ? err.message : 'Unknown error'
           onError(`Failed to ${actionName} ${serviceName}: ${errorMessage}`)

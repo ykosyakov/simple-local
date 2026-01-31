@@ -12,7 +12,7 @@ export default defineConfig({
         name: 'main',
         test: {
           environment: 'node',
-          include: ['src/main/**/*.test.ts'],
+          include: ['src/main/**/*.test.ts', 'src/shared/**/*.test.ts'],
           setupFiles: ['src/main/__tests__/setup.ts'],
         },
       },

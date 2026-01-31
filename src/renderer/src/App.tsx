@@ -14,6 +14,9 @@ import type {
   PrerequisitesResult,
   AppSettings,
 } from "../../shared/types";
+import { createLogger } from "../../shared/logger";
+
+const log = createLogger("Renderer");
 
 type AppState = "checking" | "setup" | "ready";
 
@@ -63,7 +66,7 @@ function App() {
 
         setAppState("setup");
       } catch (error) {
-        console.error("Failed to check prerequisites:", error);
+        log.error("Failed to check prerequisites:", error);
         setAppState("setup");
       }
     };
@@ -76,9 +79,9 @@ function App() {
   );
 
   const handleAddProject = async () => {
-    console.log("[Renderer] Add project clicked");
+    log.info("Add project clicked");
     const folderPath = await window.api.selectFolder();
-    console.log("[Renderer] Selected folder:", folderPath);
+    log.info("Selected folder:", folderPath);
     if (!folderPath) return;
 
     setAddError(null);
@@ -103,13 +106,13 @@ function App() {
   };
 
   const handleDiscoveryComplete = async (services: Service[]) => {
-    console.log(
-      "[Renderer] handleDiscoveryComplete called with",
+    log.info(
+      "handleDiscoveryComplete called with",
       services.length,
       "services",
     );
     if (!loadingProjectPath) {
-      console.log("[Renderer] No loadingProjectPath, returning early");
+      log.info("No loadingProjectPath, returning early");
       return;
     }
 
@@ -119,9 +122,9 @@ function App() {
         services,
       };
 
-      console.log("[Renderer] Saving project config to:", loadingProjectPath);
+      log.info("Saving project config to:", loadingProjectPath);
       await window.api.saveProjectConfig(loadingProjectPath, config);
-      console.log("[Renderer] Config saved successfully");
+      log.info("Config saved successfully");
 
       // Check if this is a re-discovery for an existing project
       const existingProject = registry?.projects.find(
@@ -130,31 +133,31 @@ function App() {
 
       let projectId: string;
       if (existingProject) {
-        console.log(
-          "[Renderer] Re-discovery for existing project:",
+        log.info(
+          "Re-discovery for existing project:",
           existingProject.id,
         );
         projectId = existingProject.id;
       } else {
-        console.log("[Renderer] Adding project to registry");
+        log.info("Adding project to registry");
         const project = await window.api.addProject(
           loadingProjectPath,
           config.name,
         );
-        console.log("[Renderer] Project added:", project.id);
+        log.info("Project added:", project.id);
         projectId = project.id;
       }
 
-      console.log("[Renderer] Fetching updated registry");
+      log.info("Fetching updated registry");
       const updatedRegistry = await window.api.getRegistry();
-      console.log("[Renderer] Registry fetched, setting state");
+      log.info("Registry fetched, setting state");
 
       setRegistry(updatedRegistry);
       setSelectedProjectId(projectId);
       setLoadingProjectPath(null);
-      console.log("[Renderer] State updated, discovery complete");
+      log.info("State updated, discovery complete");
     } catch (err) {
-      console.error("[Renderer] Error in handleDiscoveryComplete:", err);
+      log.error("Error in handleDiscoveryComplete:", err);
       setAddError(err instanceof Error ? err.message : "Failed to add project");
       handleDiscoveryCancel();
     }
@@ -225,7 +228,7 @@ function App() {
       const prereqs = await window.api.checkPrerequisites();
       setPrerequisites(prereqs);
     } catch (error) {
-      console.error("Failed to recheck prerequisites:", error);
+      log.error("Failed to recheck prerequisites:", error);
     } finally {
       setIsRechecking(false);
     }

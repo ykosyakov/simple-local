@@ -6,6 +6,9 @@ import { ServiceSelection } from './ServiceSelection'
 import { ManualServiceForm } from './ManualServiceForm'
 import type { Service, DiscoveryStep } from '../../../../shared/types'
 import type { ServiceFormData } from '../../../../shared/schemas'
+import { createLogger } from '../../../../shared/logger'
+
+const log = createLogger('Discovery')
 
 type ScreenState = 'discovering' | 'review' | 'selecting' | 'error' | 'manual'
 
@@ -41,7 +44,7 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
         setScreenState('error')
       }
     } catch (err) {
-      console.error('Discovery failed:', err)
+      log.error('Discovery failed:', err)
       setScreenState('error')
     }
   }, [projectPath])

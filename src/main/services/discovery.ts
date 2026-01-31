@@ -6,8 +6,10 @@ import { firstValueFrom, timeout } from 'rxjs'
 import type { ProjectConfig, Service, DiscoveryProgress, ContainerEnvOverride } from '../../shared/types'
 import { AgentTerminal } from '@agent-flow/agent-terminal'
 import type { AiAgentId } from '@agent-flow/agent-terminal'
+import { createLogger } from '../../shared/logger'
 
 const execAsync = promisify(exec)
+const log = createLogger('Discovery')
 const AI_DISCOVERY_TIMEOUT = 120000 // 2 minutes for AI analysis
 
 // Strip ANSI escape codes for clean log output
@@ -217,12 +219,12 @@ Rules:
     cliTool: AiAgentId = 'claude',
     onProgress?: (progress: DiscoveryProgress) => void
   ): Promise<ContainerEnvOverride[]> {
-    console.log('[Discovery] Starting env analysis for service:', service.id)
+    log.info('Starting env analysis for service:', service.id)
 
     // Check if the CLI tool is available
     const isAvailable = await isCommandAvailable(cliTool)
     if (!isAvailable) {
-      console.error(`[Discovery] ${cliTool} CLI not found in PATH`)
+      log.error(`${cliTool} CLI not found in PATH`)
       onProgress?.({ projectPath, step: 'error', message: `${cliTool} CLI not found. Install it first.` })
       return []
     }
@@ -247,7 +249,7 @@ Rules:
     const subscriptions: { unsubscribe: () => void }[] = []
 
     try {
-      console.log(`[Discovery] Spawning ${cliTool} for env analysis`)
+      log.info(`Spawning ${cliTool} for env analysis`)
       onProgress?.({ projectPath, step: 'ai-analysis', message: `Running ${cliTool} analysis...` })
 
       const session = terminal.spawn({
@@ -257,7 +259,7 @@ Rules:
         allowedTools: ['Read', 'Glob', 'Write'],
       })
 
-      console.log(`[Discovery] Env analysis session ID: ${session.id}`)
+      log.info(`Env analysis session ID: ${session.id}`)
 
       // Subscribe to raw output for logging
       subscriptions.push(
@@ -277,30 +279,30 @@ Rules:
           timeout(AI_DISCOVERY_TIMEOUT)
         )
       ).catch(() => {
-        console.log('[Discovery] Env analysis session timed out')
+        log.info('Env analysis session timed out')
         session.kill()
         throw new Error('Environment analysis timed out')
       })
 
-      console.log('[Discovery] Env analysis session completed')
+      log.info('Env analysis session completed')
       onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
 
       // Read result from file
       try {
         const resultContent = await fs.readFile(resultFile, 'utf-8')
         const parsed = JSON.parse(resultContent)
-        console.log('[Discovery] Env analysis result:', JSON.stringify(parsed, null, 2))
+        log.info('Env analysis result:', JSON.stringify(parsed, null, 2))
 
         onProgress?.({ projectPath, step: 'complete', message: 'Environment analysis complete' })
         return parsed.overrides || []
       } catch (readErr) {
-        console.error('[Discovery] Failed to read env analysis result:', readErr)
+        log.error('Failed to read env analysis result:', readErr)
         onProgress?.({ projectPath, step: 'error', message: 'Agent did not produce valid result' })
         return []
       }
 
     } catch (err) {
-      console.error('[Discovery] Env analysis failed:', err)
+      log.error('Env analysis failed:', err)
       onProgress?.({ projectPath, step: 'error', message: `Analysis failed: ${err}` })
       return []
     } finally {
@@ -414,22 +416,22 @@ Only include services/tools with runnable commands.`
     cliTool: AiAgentId = 'claude',
     onProgress?: (progress: DiscoveryProgress) => void
   ): Promise<ProjectConfig | null> {
-    console.log('[Discovery] Starting AI discovery for:', projectPath)
+    log.info('Starting AI discovery for:', projectPath)
 
     // Check if the CLI tool is available
     const isAvailable = await isCommandAvailable(cliTool)
     if (!isAvailable) {
-      console.error(`[Discovery] ${cliTool} CLI not found in PATH`)
+      log.error(`${cliTool} CLI not found in PATH`)
       onProgress?.({ projectPath, step: 'error', message: `${cliTool} CLI not found. Install it first.` })
       return null
     }
-    console.log(`[Discovery] ${cliTool} CLI found`)
+    log.info(`${cliTool} CLI found`)
 
-    console.log('[Discovery] Scanning project structure...')
+    log.info('Scanning project structure...')
     onProgress?.({ projectPath, step: 'scanning', message: 'Scanning file structure...' })
 
     const scanResult = await this.scanProjectStructure(projectPath)
-    console.log('[Discovery] Scan result:', JSON.stringify(scanResult, null, 2))
+    log.info('Scan result:', JSON.stringify(scanResult, null, 2))
 
     onProgress?.({ projectPath, step: 'scanning', message: `Found ${scanResult.packageJsonPaths.length} package.json files` })
 
@@ -450,7 +452,7 @@ Only include services/tools with runnable commands.`
     const subscriptions: { unsubscribe: () => void }[] = []
 
     try {
-      console.log(`[Discovery] Spawning ${cliTool} via AgentTerminal`)
+      log.info(`Spawning ${cliTool} via AgentTerminal`)
       onProgress?.({ projectPath, step: 'ai-analysis', message: `Running ${cliTool} analysis...` })
 
       const session = terminal.spawn({
@@ -461,7 +463,7 @@ Only include services/tools with runnable commands.`
         allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
       })
 
-      console.log(`[Discovery] Session ID: ${session.id}`)
+      log.info(`Session ID: ${session.id}`)
 
       // Subscribe to raw output for logging (captures all terminal output)
       subscriptions.push(
@@ -492,30 +494,30 @@ Only include services/tools with runnable commands.`
           timeout(AI_DISCOVERY_TIMEOUT)
         )
       ).catch(() => {
-        console.log('[Discovery] Session timed out or errored')
+        log.info('Session timed out or errored')
         session.kill()
         throw new Error('AI analysis timed out')
       })
 
-      console.log('[Discovery] Session completed')
+      log.info('Session completed')
       onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
 
       // Read result from file (more reliable than parsing TUI output)
       try {
         const resultContent = await fs.readFile(resultFile, 'utf-8')
         const parsed = JSON.parse(resultContent)
-        console.log('[Discovery] Parsed result:', JSON.stringify(parsed, null, 2))
+        log.info('Parsed result:', JSON.stringify(parsed, null, 2))
 
         onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
         return this.convertToProjectConfig(parsed, projectPath)
       } catch (readErr) {
-        console.error('[Discovery] Failed to read result file:', readErr)
+        log.error('Failed to read result file:', readErr)
         onProgress?.({ projectPath, step: 'error', message: 'Agent did not produce valid result file' })
         return null
       }
 
     } catch (err) {
-      console.error('[Discovery] AI discovery failed:', err)
+      log.error('AI discovery failed:', err)
       onProgress?.({ projectPath, step: 'error', message: `AI analysis failed: ${err}` })
       return null
     } finally {
@@ -569,10 +571,10 @@ Only include services/tools with runnable commands.`
 
   // Fallback: Basic discovery without AI
   async basicDiscovery(projectPath: string): Promise<ProjectConfig> {
-    console.log('[Discovery] Starting basic discovery for:', projectPath)
+    log.info('Starting basic discovery for:', projectPath)
 
     const scanResult = await this.scanProjectStructure(projectPath)
-    console.log('[Discovery] Basic scan found:', scanResult.packageJsonPaths.length, 'package.json files')
+    log.info('Basic scan found:', scanResult.packageJsonPaths.length, 'package.json files')
 
     const services: Service[] = []
     let portOffset = 0
@@ -580,7 +582,7 @@ Only include services/tools with runnable commands.`
     for (const pkgPath of scanResult.packageJsonPaths) {
       try {
         const info = await this.parsePackageJson(pkgPath)
-        console.log('[Discovery] Parsed package.json:', info.name, 'devScript:', info.devScript)
+        log.info('Parsed package.json:', info.name, 'devScript:', info.devScript)
 
         const relativePath = path.relative(projectPath, path.dirname(pkgPath))
 
@@ -600,7 +602,7 @@ Only include services/tools with runnable commands.`
           portOffset++
         }
       } catch (err) {
-        console.error('[Discovery] Failed to parse:', pkgPath, err)
+        log.error('Failed to parse:', pkgPath, err)
       }
     }
 
@@ -609,7 +611,7 @@ Only include services/tools with runnable commands.`
       services,
     }
 
-    console.log('[Discovery] Basic discovery result:', JSON.stringify(config, null, 2))
+    log.info('Basic discovery result:', JSON.stringify(config, null, 2))
     return config
   }
 }

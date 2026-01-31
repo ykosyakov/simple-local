@@ -10,6 +10,9 @@ import {
   tryGetServiceContext,
   type ServiceLookupError
 } from './service-lookup'
+import { createLogger } from '../../shared/logger'
+
+const log = createLogger('API')
 
 // ============================================================================
 // Response Helpers
@@ -422,7 +425,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
 
       sendError(res, 404, 'Not found', 'NOT_FOUND')
     } catch (err) {
-      console.error('[API] Request handler error:', err)
+      log.error('Request handler error:', err)
       sendError(res, 500, 'Internal server error', 'INTERNAL_ERROR')
     }
   })

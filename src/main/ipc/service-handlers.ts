@@ -9,8 +9,10 @@ import { sanitizeServiceId, validatePathWithinProject } from '../services/valida
 import { createLogKey, matchesProject } from '../services/log-key'
 import type { DiscoveryProgress } from '../../shared/types'
 import { LOG_CONSTANTS } from '../../shared/constants'
+import { createLogger } from '../../shared/logger'
 
 const { MAX_LOG_LINES } = LOG_CONSTANTS
+const log = createLogger('IPC')
 
 /**
  * Check if an error is an expected lookup error (project/config/service not found).
@@ -153,7 +155,7 @@ export function setupServiceHandlers(
       // Return empty array if project or config not found (matches previous behavior)
       // Log unexpected errors that aren't lookup-related
       if (err instanceof Error && !isLookupError(err)) {
-        console.error('[IPC] service:status unexpected error:', err)
+        log.error('service:status unexpected error:', err)
       }
       return []
     }
@@ -181,7 +183,7 @@ export function setupServiceHandlers(
       // Silently return if project or config not found (matches previous behavior)
       // Log unexpected errors that aren't lookup-related
       if (err instanceof Error && !isLookupError(err)) {
-        console.error('[IPC] service:logs:start unexpected error:', err)
+        log.error('service:logs:start unexpected error:', err)
       }
       return
     }
@@ -204,7 +206,7 @@ export function setupServiceHandlers(
   })
 
   ipcMain.handle('discovery:analyze', async (event, projectPath: string) => {
-    console.log('[IPC] discovery:analyze called for:', projectPath)
+    log.info('discovery:analyze called for:', projectPath)
 
     const win = BrowserWindow.fromWebContents(event.sender)
     const sendProgress = (progress: DiscoveryProgress) => {
@@ -212,25 +214,25 @@ export function setupServiceHandlers(
     }
 
     // Try AI discovery first, fall back to basic
-    console.log('[IPC] Attempting AI discovery...')
+    log.info('Attempting AI discovery...')
     let result = await discovery.runAIDiscovery(projectPath, 'claude', sendProgress)
 
     if (!result) {
-      console.log('[IPC] AI discovery failed or timed out, falling back to basic discovery')
+      log.info('AI discovery failed or timed out, falling back to basic discovery')
       sendProgress({ projectPath, step: 'ai-analysis', message: 'AI discovery failed, using basic detection...' })
       result = await discovery.basicDiscovery(projectPath)
     } else {
-      console.log('[IPC] AI discovery succeeded')
+      log.info('AI discovery succeeded')
     }
 
     sendProgress({ projectPath, step: 'complete', message: 'Discovery complete' })
-    console.log('[IPC] Discovery complete, returning config with', result.services.length, 'services')
+    log.info('Discovery complete, returning config with', result.services.length, 'services')
     return result
   })
 
   // Load saved config (no discovery, just read the file)
   ipcMain.handle('config:load', async (_event, projectPath: string) => {
-    console.log('[IPC] config:load called for:', projectPath)
+    log.info('config:load called for:', projectPath)
     const projectConfig = await config.loadConfig(projectPath)
     if (!projectConfig) {
       throw new Error('No config found for project')
@@ -239,24 +241,24 @@ export function setupServiceHandlers(
   })
 
   ipcMain.handle('discovery:save', async (_event, projectPath: string, projectConfig) => {
-    console.log('[IPC] discovery:save called for:', projectPath)
-    console.log('[IPC] Saving config with', projectConfig.services.length, 'services')
+    log.info('discovery:save called for:', projectPath)
+    log.info('Saving config with', projectConfig.services.length, 'services')
 
     await config.saveConfig(projectPath, projectConfig)
-    console.log('[IPC] Config saved')
+    log.info('Config saved')
 
     // Generate devcontainer files
     for (const service of projectConfig.services) {
-      console.log('[IPC] Generating devcontainer for:', service.id)
+      log.info('Generating devcontainer for:', service.id)
       const devcontainerConfig = await config.generateDevcontainerConfig(service, projectConfig.name)
       await config.saveDevcontainer(projectPath, service, devcontainerConfig)
     }
 
-    console.log('[IPC] All devcontainer files saved')
+    log.info('All devcontainer files saved')
   })
 
   ipcMain.handle('service:reanalyze-env', async (event, projectId: string, serviceId: string) => {
-    console.log('[IPC] service:reanalyze-env called for:', projectId, serviceId)
+    log.info('service:reanalyze-env called for:', projectId, serviceId)
 
     const { project, service } = await getServiceContext(registry, config, projectId, serviceId)
 

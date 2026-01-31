@@ -4,7 +4,10 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc'
 import { setupTray } from './tray'
 import { createApiServer, ApiServer } from './services/api-server'
+import { createLogger } from '../shared/logger'
 import './electron-types'
+
+const log = createLogger('Main')
 
 let apiServer: ApiServer | null = null
 
@@ -65,9 +68,9 @@ app.whenReady().then(async () => {
       onServiceStart: startService,
       onServiceStop: stopService,
     })
-    console.log(`API server listening on http://127.0.0.1:${apiServer.port}`)
+    log.info(`API server listening on http://127.0.0.1:${apiServer.port}`)
   } catch (err) {
-    console.error('Failed to start API server:', err)
+    log.error('Failed to start API server:', err)
   }
 
   app.on('activate', function () {

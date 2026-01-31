@@ -1,8 +1,10 @@
 import { execSync, exec as execCallback } from 'child_process'
 import { promisify } from 'util'
 import { validatePort } from './validation'
+import { createLogger } from '../../shared/logger'
 
 const exec = promisify(execCallback)
+const log = createLogger('PortManager')
 
 /**
  * Check if an error is expected during process kill operations.
@@ -40,7 +42,7 @@ export class PortManager {
           } catch (err) {
             // Process may have already exited - only log unexpected errors
             if (!isExpectedKillError(err)) {
-              console.error(`[PortManager] Unexpected error killing PID ${pid}:`, err)
+              log.error(`Unexpected error killing PID ${pid}:`, err)
             }
           }
         }
@@ -68,7 +70,7 @@ export class PortManager {
           pids.map((pid) => exec(`kill -9 ${pid}`).catch((err) => {
             // Process may have already exited - only log unexpected errors
             if (!isExpectedKillError(err)) {
-              console.error(`[PortManager] Unexpected error killing PID ${pid}:`, err)
+              log.error(`Unexpected error killing PID ${pid}:`, err)
             }
           }))
         )
