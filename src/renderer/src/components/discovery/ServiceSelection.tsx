@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, Wrench } from 'lucide-react'
 import type { Service } from '../../../../shared/types'
 
 interface ServiceSelectionProps {
@@ -61,13 +61,28 @@ export function ServiceSelection({ services, onConfirm, onCancel }: ServiceSelec
 
                 <div className="flex-1">
                   <div
-                    className="font-medium"
+                    className="flex items-center gap-2 font-medium"
                     style={{
                       fontFamily: 'var(--font-display)',
                       color: 'var(--text-primary)',
                     }}
                   >
+                    {service.type === 'tool' && (
+                      <Wrench className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />
+                    )}
                     {service.name}
+                    {service.type === 'tool' && (
+                      <span
+                        className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase"
+                        style={{
+                          background: 'var(--bg-deep)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        Tool
+                      </span>
+                    )}
                   </div>
                   <div
                     className="mt-1 text-xs"
@@ -76,7 +91,7 @@ export function ServiceSelection({ services, onConfirm, onCancel }: ServiceSelec
                       color: 'var(--text-muted)',
                     }}
                   >
-                    port {service.port} · {service.path || '.'}
+                    {service.port ? `port ${service.port} · ` : ''}{service.path || '.'}
                   </div>
                 </div>
               </div>
