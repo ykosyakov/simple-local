@@ -3,6 +3,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { LogViewer } from '../src/components/LogViewer'
 import { mockApi } from './setup'
+import { LOG_CONSTANTS } from '../../shared/constants'
+
+const { MAX_LOG_LINES } = LOG_CONSTANTS
 
 describe('LogViewer - batching', () => {
   let logDataCallback: ((data: { projectId: string; serviceId: string; data: string }) => void) | null = null
@@ -109,7 +112,7 @@ describe('LogViewer - batching', () => {
     // We verify the component doesn't crash and processes logs
   })
 
-  it('respects max log limit of 1000 lines', async () => {
+  it(`respects max log limit of ${MAX_LOG_LINES} lines`, async () => {
     const { container } = render(
       <LogViewer
         projectId="p1"
@@ -122,16 +125,17 @@ describe('LogViewer - batching', () => {
       await vi.advanceTimersByTimeAsync(0)
     })
 
-    // Simulate 1100 log events
+    // Simulate more log events than the max
+    const excessLogs = MAX_LOG_LINES + 100
     await act(async () => {
-      for (let i = 0; i < 1100; i++) {
+      for (let i = 0; i < excessLogs; i++) {
         logDataCallback?.({ projectId: 'p1', serviceId: 's1', data: `Line ${i}` })
       }
       await vi.advanceTimersByTimeAsync(100)
     })
 
     const lines = container.querySelectorAll('.terminal-line')
-    expect(lines.length).toBeLessThanOrEqual(1000)
+    expect(lines.length).toBeLessThanOrEqual(MAX_LOG_LINES)
   })
 })
 

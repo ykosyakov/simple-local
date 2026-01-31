@@ -7,8 +7,9 @@ import { getServiceContext, getProjectContext } from '../services/service-lookup
 import { getServiceStatus } from '../services/service-status'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
 import type { DiscoveryProgress } from '../../shared/types'
+import { LOG_CONSTANTS } from '../../shared/constants'
 
-const MAX_LOG_LINES = 1000
+const { MAX_LOG_LINES } = LOG_CONSTANTS
 
 /**
  * Check if an error is an expected lookup error (project/config/service not found).

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Terminal, Download, Trash2, ChevronDown } from 'lucide-react'
+import { LOG_CONSTANTS, UI_CONSTANTS } from '../../../shared/constants'
 
 interface LogViewerProps {
   projectId: string
@@ -8,7 +9,8 @@ interface LogViewerProps {
   serviceName: string
 }
 
-const ROW_HEIGHT = 20
+const { MAX_LOG_LINES, BUFFER_FLUSH_INTERVAL_MS } = LOG_CONSTANTS
+const { LOG_ROW_HEIGHT } = UI_CONSTANTS
 
 export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps) {
   const [logs, setLogs] = useState<string[]>([])
@@ -21,7 +23,7 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   const virtualizer = useVirtualizer({
     count: logs.length,
     getScrollElement: () => containerRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => LOG_ROW_HEIGHT,
     overscan: 10,
   })
 
@@ -31,7 +33,7 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
     logBufferRef.current = []
     setLogs((prev) => {
       const combined = [...prev, ...newLogs]
-      return combined.length > 1000 ? combined.slice(-1000) : combined
+      return combined.length > MAX_LOG_LINES ? combined.slice(-MAX_LOG_LINES) : combined
     })
   }, [])
 
@@ -61,7 +63,7 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
           flushTimeoutRef.current = setTimeout(() => {
             flushTimeoutRef.current = null
             flushLogs()
-          }, 16)
+          }, BUFFER_FLUSH_INTERVAL_MS)
         }
       }
     })
