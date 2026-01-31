@@ -455,16 +455,33 @@ describe('ContainerService', () => {
   })
 
   describe('stopNativeService', () => {
-    it('kills the native process', () => {
+    it('stops a running native service', async () => {
+      const { spawn } = await import('child_process')
+      const mockKill = vi.fn().mockReturnValue(true)
       const mockProcess = {
-        kill: vi.fn().mockReturnValue(true),
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        kill: mockKill,
+        pid: 12345,
       }
-      containerService['nativeProcesses'].set('test-service', mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
 
+      // Start a service first
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev',
+        '/path',
+        {},
+        vi.fn(),
+        vi.fn()
+      )
+
+      // Now stop it
       const result = containerService.stopNativeService('test-service')
 
       expect(result).toBe(true)
-      expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM')
+      expect(mockKill).toHaveBeenCalledWith('SIGTERM')
     })
 
     it('returns false if no process found', () => {

@@ -1,12 +1,10 @@
 import Docker from 'dockerode'
-import { spawn, execSync, exec as execCallback } from 'child_process'
-import { promisify } from 'util'
+import { spawn } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
 import type { ContainerEnvOverride, ServiceStatus } from '../../shared/types'
-import { validatePort } from './validation'
-
-const exec = promisify(execCallback)
+import { NativeProcessManager } from './native-process-manager'
+import { PortManager } from './port-manager'
 
 export function applyContainerEnvOverrides(
   env: Record<string, string>,
@@ -28,13 +26,19 @@ export function applyContainerEnvOverrides(
 
 export class ContainerService extends EventEmitter {
   private docker: Docker
-  private nativeProcesses = new Map<string, import('child_process').ChildProcess>()
   private statusCache: { containers: Docker.ContainerInfo[]; timestamp: number } | null = null
   private readonly CACHE_TTL_MS = 2000
+
+  /** Delegate for native process management */
+  private readonly nativeProcessManager: NativeProcessManager
+  /** Delegate for port operations */
+  private readonly portManager: PortManager
 
   constructor(socketPath?: string) {
     super()
     this.docker = new Docker(socketPath ? { socketPath } : undefined)
+    this.nativeProcessManager = new NativeProcessManager()
+    this.portManager = new PortManager()
   }
 
   updateSocketPath(socketPath: string): void {
@@ -198,6 +202,10 @@ export class ContainerService extends EventEmitter {
     }
   }
 
+  /**
+   * Start a native service process.
+   * Delegates to NativeProcessManager.
+   */
   startNativeService(
     serviceId: string,
     command: string,
@@ -206,88 +214,39 @@ export class ContainerService extends EventEmitter {
     onLog: (data: string) => void,
     onStatusChange: (status: ServiceStatus['status']) => void
   ): void {
-    onStatusChange('starting')
-
-    const [cmd, ...args] = command.split(' ')
-    const proc = spawn(cmd, args, {
-      cwd,
-      env: { ...process.env, ...env },
-      shell: true,
-    })
-
-    this.nativeProcesses.set(serviceId, proc)
-
-    proc.stdout?.on('data', (data) => onLog(data.toString()))
-    proc.stderr?.on('data', (data) => onLog(data.toString()))
-
-    proc.on('spawn', () => onStatusChange('running'))
-    proc.on('error', (err) => {
-      onStatusChange('error')
-      onLog(`Error: ${err.message}`)
-    })
-    proc.on('close', (code) => {
-      this.nativeProcesses.delete(serviceId)
-      if (code !== 0 && code !== null) {
-        onStatusChange('error')
-        onLog(`Process exited with code ${code}`)
-      } else {
-        onStatusChange('stopped')
-      }
-    })
+    this.nativeProcessManager.startService(serviceId, command, cwd, env, onLog, onStatusChange)
   }
 
+  /**
+   * Stop a native service process.
+   * Delegates to NativeProcessManager.
+   */
   stopNativeService(serviceId: string): boolean {
-    const proc = this.nativeProcesses.get(serviceId)
-    if (!proc) return false
-
-    proc.kill('SIGTERM')
-    this.nativeProcesses.delete(serviceId)
-    return true
+    return this.nativeProcessManager.stopService(serviceId)
   }
 
+  /**
+   * Check if a native service is running.
+   * Delegates to NativeProcessManager.
+   */
   isNativeServiceRunning(serviceId: string): boolean {
-    return this.nativeProcesses.has(serviceId)
+    return this.nativeProcessManager.isRunning(serviceId)
   }
 
+  /**
+   * Kill any process listening on a port (synchronous).
+   * Delegates to PortManager.
+   */
   killProcessOnPort(port: number): boolean {
-    validatePort(port)
-
-    try {
-      const result = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf-8' }).trim()
-      if (result) {
-        const pids = result.split('\n').filter(Boolean)
-        for (const pid of pids) {
-          try {
-            execSync(`kill -9 ${pid}`)
-          } catch {
-            // Process may have already exited
-          }
-        }
-        return true
-      }
-    } catch {
-      // No process on port or lsof failed
-    }
-    return false
+    return this.portManager.killProcessOnPort(port)
   }
 
+  /**
+   * Kill any process listening on a port (async).
+   * Delegates to PortManager.
+   */
   async killProcessOnPortAsync(port: number): Promise<boolean> {
-    validatePort(port)
-
-    try {
-      const { stdout } = await exec(`lsof -ti tcp:${port}`)
-      const result = stdout.trim()
-      if (result) {
-        const pids = result.split('\n').filter(Boolean)
-        await Promise.all(
-          pids.map((pid) => exec(`kill -9 ${pid}`).catch(() => {}))
-        )
-        return true
-      }
-    } catch {
-      // No process on port or lsof failed
-    }
-    return false
+    return this.portManager.killProcessOnPortAsync(port)
   }
 
   async streamLogs(
