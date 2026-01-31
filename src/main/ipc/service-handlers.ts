@@ -6,6 +6,7 @@ import { RegistryService } from '../services/registry'
 import { getServiceContext, getProjectContext } from '../services/service-lookup'
 import { getServiceStatus } from '../services/service-status'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
+import { createLogKey, matchesProject } from '../services/log-key'
 import type { DiscoveryProgress } from '../../shared/types'
 import { LOG_CONSTANTS } from '../../shared/constants'
 
@@ -64,7 +65,7 @@ export function setupServiceHandlers(
     const servicePath = `${project.path}/${service.path}`
 
     const sendLog = (data: string) => {
-      const key = `${projectId}:${serviceId}`
+      const key = createLogKey(projectId, serviceId)
       appendToLogBuffer(key, data)
 
       const win = BrowserWindow.fromWebContents(event.sender)
@@ -163,7 +164,7 @@ export function setupServiceHandlers(
       const { projectConfig } = await getProjectContext(registry, config, projectId)
 
       const containerName = container.getContainerName(projectConfig.name, serviceId)
-      const key = `${projectId}:${serviceId}`
+      const key = createLogKey(projectId, serviceId)
 
       // Cleanup existing subscription
       if (logCleanupFns.has(key)) {
@@ -187,18 +188,18 @@ export function setupServiceHandlers(
   })
 
   ipcMain.handle('service:logs:stop', (_event, projectId: string, serviceId: string) => {
-    const key = `${projectId}:${serviceId}`
+    const key = createLogKey(projectId, serviceId)
     logCleanupFns.get(key)?.()
     logCleanupFns.delete(key)
   })
 
   ipcMain.handle('service:logs:get', (_event, projectId: string, serviceId: string) => {
-    const key = `${projectId}:${serviceId}`
+    const key = createLogKey(projectId, serviceId)
     return logBuffers.get(key) || []
   })
 
   ipcMain.handle('service:logs:clear', (_event, projectId: string, serviceId: string) => {
-    const key = `${projectId}:${serviceId}`
+    const key = createLogKey(projectId, serviceId)
     logBuffers.delete(key)
   })
 
@@ -275,7 +276,7 @@ export function setupServiceHandlers(
   })
 
   const getLogBuffer = (projectId: string, serviceId: string): string[] => {
-    const key = `${projectId}:${serviceId}`
+    const key = createLogKey(projectId, serviceId)
     return logBuffers.get(key) || []
   }
 
@@ -290,7 +291,7 @@ export function setupServiceHandlers(
       ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
       : resolvedEnv
 
-    const key = `${projectId}:${serviceId}`
+    const key = createLogKey(projectId, serviceId)
     const sendLog = (data: string) => {
       appendToLogBuffer(key, data)
     }
@@ -336,7 +337,7 @@ export function setupServiceHandlers(
 
   const cleanupProjectLogs = (projectId: string): void => {
     for (const key of logBuffers.keys()) {
-      if (key.startsWith(`${projectId}:`)) {
+      if (matchesProject(key, projectId)) {
         logBuffers.delete(key)
         logCleanupFns.get(key)?.()
         logCleanupFns.delete(key)
