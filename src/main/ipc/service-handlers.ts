@@ -3,6 +3,7 @@ import { ContainerService, applyContainerEnvOverrides } from '../services/contai
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
+import { getServiceContext } from '../services/service-lookup'
 import type { DiscoveryProgress } from '../../shared/types'
 
 const MAX_LOG_LINES = 1000
@@ -23,14 +24,7 @@ export function setupServiceHandlers(
   const logBuffers = new Map<string, string[]>()
 
   ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
-    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
-    if (!project) throw new Error('Project not found')
-
-    const projectConfig = await config.loadConfig(project.path)
-    if (!projectConfig) throw new Error('Project config not found')
-
-    const service = projectConfig.services.find((s) => s.id === serviceId)
-    if (!service) throw new Error('Service not found')
+    const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
     const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
     // Apply container env overrides if in container mode
@@ -64,14 +58,20 @@ export function setupServiceHandlers(
           sendLog(`Killed existing process on port ${service.port}\n`)
         }
       }
-      container.startNativeService(
-        serviceId,
-        service.command,
-        servicePath,
-        finalEnv,
-        sendLog,
-        sendStatus
-      )
+      try {
+        container.startNativeService(
+          serviceId,
+          service.command,
+          servicePath,
+          finalEnv,
+          sendLog,
+          sendStatus
+        )
+      } catch (err) {
+        sendStatus('error')
+        sendLog(`Failed to start: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
+        throw err
+      }
     } else {
       const devcontainerConfigPath = `${project.path}/.simple-local/devcontainers/${service.id}/devcontainer.json`
 
@@ -95,14 +95,7 @@ export function setupServiceHandlers(
   })
 
   ipcMain.handle('service:stop', async (_event, projectId: string, serviceId: string) => {
-    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
-    if (!project) throw new Error('Project not found')
-
-    const projectConfig = await config.loadConfig(project.path)
-    if (!projectConfig) throw new Error('Project config not found')
-
-    const service = projectConfig.services.find((s) => s.id === serviceId)
-    if (!service) throw new Error('Service not found')
+    const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
     if (service.mode === 'native') {
       container.stopNativeService(serviceId)
@@ -236,14 +229,7 @@ export function setupServiceHandlers(
   ipcMain.handle('service:reanalyze-env', async (event, projectId: string, serviceId: string) => {
     console.log('[IPC] service:reanalyze-env called for:', projectId, serviceId)
 
-    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
-    if (!project) throw new Error('Project not found')
-
-    const projectConfig = await config.loadConfig(project.path)
-    if (!projectConfig) throw new Error('Project config not found')
-
-    const service = projectConfig.services.find((s) => s.id === serviceId)
-    if (!service) throw new Error('Service not found')
+    const { project, service } = await getServiceContext(registry, config, projectId, serviceId)
 
     const win = BrowserWindow.fromWebContents(event.sender)
     const sendProgress = (progress: DiscoveryProgress) => {
@@ -266,14 +252,7 @@ export function setupServiceHandlers(
   }
 
   const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
-    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
-    if (!project) throw new Error('Project not found')
-
-    const projectConfig = await config.loadConfig(project.path)
-    if (!projectConfig) throw new Error('Project config not found')
-
-    const service = projectConfig.services.find((s) => s.id === serviceId)
-    if (!service) throw new Error('Service not found')
+    const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
     const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
     const servicePath = `${project.path}/${service.path}`
@@ -322,14 +301,7 @@ export function setupServiceHandlers(
   }
 
   const stopService = async (projectId: string, serviceId: string): Promise<void> => {
-    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
-    if (!project) throw new Error('Project not found')
-
-    const projectConfig = await config.loadConfig(project.path)
-    if (!projectConfig) throw new Error('Project config not found')
-
-    const service = projectConfig.services.find((s) => s.id === serviceId)
-    if (!service) throw new Error('Service not found')
+    const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
     if (service.mode === 'native') {
       container.stopNativeService(serviceId)

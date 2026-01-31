@@ -4,49 +4,41 @@ import { RegistryService } from '../services/registry'
 import { ContainerService } from '../services/container'
 import { ProjectConfigService } from '../services/project-config'
 
-// Mock electron-store for RegistryService
+// Mock electron-store for RegistryService (required - no real store in tests)
 vi.mock('electron-store', () => ({
-  default: class MockStore {
-    private data: Record<string, unknown> = {
-      projects: [],
-      settings: {
-        dockerSocket: 'auto',
-        defaultPortStart: 3000,
-        portRangeSize: 100,
-        minimizeToTray: true,
-      },
-    }
+  default: class {
+    private data: Record<string, unknown> = { projects: [], settings: { dockerSocket: 'auto', defaultPortStart: 3000, portRangeSize: 100, minimizeToTray: true } }
     get(key: string) { return this.data[key] }
     set(key: string, value: unknown) { this.data[key] = value }
   },
 }))
 
-// Mock ProjectConfigService to return test services
-class MockProjectConfigService {
-  async loadConfig(path: string) {
-    if (path === '/path/to/app') {
-      return {
-        name: 'my-app',
-        services: [
-          { id: 'api', name: 'API Server', port: 3001, mode: 'native' as const, command: 'npm run dev', path: '.', env: {}, active: true },
-          { id: 'web', name: 'Web App', port: 3000, mode: 'native' as const, command: 'npm start', path: '.', env: {}, active: true },
-        ]
-      }
-    }
-    return null
-  }
-}
+// Test fixtures
+const testServices = [
+  { id: 'api', name: 'API Server', port: 3001, mode: 'native' as const, command: 'npm run dev', path: '.', env: {}, active: true },
+  { id: 'web', name: 'Web App', port: 3000, mode: 'native' as const, command: 'npm start', path: '.', env: {}, active: true },
+]
 
 describe('ApiServer', () => {
   let server: ApiServer
   let registry: RegistryService
+  let config: ProjectConfigService
 
   beforeEach(async () => {
     registry = new RegistryService()
     const container = new ContainerService()
-    const config = new MockProjectConfigService() as unknown as ProjectConfigService
+    config = new ProjectConfigService()
+
+    // Use vi.spyOn instead of mock class - cleaner and type-safe
+    vi.spyOn(config, 'loadConfig').mockImplementation(async (path: string) => {
+      if (path === '/path/to/app') {
+        return { name: 'my-app', services: testServices }
+      }
+      return null
+    })
+
     server = await createApiServer({
-      port: 0, // Random available port
+      port: 0,
       registry,
       container,
       config,
@@ -55,6 +47,7 @@ describe('ApiServer', () => {
 
   afterEach(async () => {
     await server.close()
+    vi.restoreAllMocks()
   })
 
   it('starts and listens on a port', () => {
@@ -264,6 +257,83 @@ describe('ApiServer', () => {
 
       expect(res.status).toBe(200)
       expect(data.result.tools).toHaveLength(8)
+    })
+
+    it('returns parse error for invalid JSON', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'not valid json',
+      })
+      const data = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(data.error.code).toBe(-32700)
+      expect(data.error.message).toBe('Parse error')
+    })
+  })
+
+  describe('POST /projects/:projectId/services/:serviceId/stop edge cases', () => {
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/nonexistent/services/api/stop`, {
+        method: 'POST',
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 when project config is missing', async () => {
+      const project = registry.addProject('/path/to/unknown', 'Unknown App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/api/stop`, {
+        method: 'POST',
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 for non-existent service', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/nonexistent/stop`, {
+        method: 'POST',
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('POST /projects/:projectId/services/:serviceId/restart edge cases', () => {
+    it('returns 404 for non-existent project', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/nonexistent/services/api/restart`, {
+        method: 'POST',
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 when project config is missing', async () => {
+      const project = registry.addProject('/path/to/unknown', 'Unknown App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/api/restart`, {
+        method: 'POST',
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 for non-existent service', async () => {
+      const project = registry.addProject('/path/to/app', 'My App')
+
+      const res = await fetch(`http://127.0.0.1:${server.port}/projects/${project.id}/services/nonexistent/restart`, {
+        method: 'POST',
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('Error handling', () => {
+    it('returns 404 for unknown routes', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/unknown/route`)
+      const data = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(data.code).toBe('NOT_FOUND')
     })
   })
 })

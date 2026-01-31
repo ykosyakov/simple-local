@@ -2,7 +2,11 @@
   "name": "simple-local",
   "version": "1.0.0",
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "esbuild", "node-pty"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "node-pty"
+    ]
   },
   "description": "Desktop app for managing local dev infrastructure with devcontainer-based service isolation",
   "main": "./out/main/index.js",
@@ -44,6 +48,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
+    "@eslint/js": "^9.39.2",
     "@tailwindcss/vite": "^4.1.18",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",
@@ -51,16 +56,23 @@
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.2",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
     "@vitejs/plugin-react": "^5.1.2",
     "electron": "^39.3.0",
     "electron-builder": "^26.4.0",
     "electron-vite": "^5.0.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^17.2.0",
     "jsdom": "^26.0.0",
     "prettier": "^3.4.2",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.7.2",
+    "typescript-eslint": "^8.54.0",
     "vite": "^7.3.1",
     "vitest": "^4.0.18"
   }

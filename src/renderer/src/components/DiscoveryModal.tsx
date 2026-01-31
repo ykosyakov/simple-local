@@ -34,6 +34,7 @@ export function DiscoveryModal({ isOpen, projectPath, onClose, onConfirm }: Disc
     if (isOpen) {
       startAnalysis()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, projectPath])
 
   if (!isOpen) return null

@@ -105,7 +105,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
   })
 
   const server = createServer(async (req, res) => {
-    const url = new URL(req.url || '/', `http://${req.headers.host}`)
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
 
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Content-Type', 'application/json')
@@ -324,7 +324,12 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
         }
 
         const projectConfig = await config.loadConfig(project.path)
-        const service = projectConfig?.services.find(s => s.id === serviceId)
+        if (!projectConfig) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
+          return
+        }
+        const service = projectConfig.services.find(s => s.id === serviceId)
         if (!service) {
           res.writeHead(404)
           res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
@@ -356,7 +361,12 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
         }
 
         const projectConfig = await config.loadConfig(project.path)
-        const service = projectConfig?.services.find(s => s.id === serviceId)
+        if (!projectConfig) {
+          res.writeHead(404)
+          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
+          return
+        }
+        const service = projectConfig.services.find(s => s.id === serviceId)
         if (!service) {
           res.writeHead(404)
           res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
@@ -385,7 +395,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
             const response = await mcpHandler.handle(request)
             res.writeHead(200)
             res.end(JSON.stringify(response))
-          } catch (err) {
+          } catch (_err) {
             res.writeHead(400)
             res.end(JSON.stringify({
               jsonrpc: '2.0',
@@ -399,6 +409,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       res.writeHead(404)
       res.end(JSON.stringify({ error: 'Not found', code: 'NOT_FOUND' }))
     } catch (err) {
+      console.error('[API] Request handler error:', err)
       res.writeHead(500)
       res.end(JSON.stringify({ error: 'Internal server error', code: 'INTERNAL_ERROR' }))
     }

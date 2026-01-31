@@ -65,11 +65,14 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
   }, [projectPath])
 
   // Start discovery - separate effect with guard
+  // Note: runDiscovery intentionally omitted from deps to prevent double-execution
+  // The ref guard ensures discovery runs exactly once per projectPath
   useEffect(() => {
     if (discoveryStartedForRef.current === projectPath) return
     discoveryStartedForRef.current = projectPath
     runDiscovery()
-  }, [projectPath, runDiscovery])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPath])
 
   const handleSelectionConfirm = (selectedIds: string[]) => {
     const services = discoveredServices.map((s) => ({

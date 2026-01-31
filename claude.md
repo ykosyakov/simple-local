@@ -142,3 +142,15 @@ import './electron-types'
 ```
 
 **Do NOT use** `declare module 'electron'` - it causes "Duplicate identifier 'App'" errors.
+
+## Testing Guidelines
+
+Tests use **Vitest**. Prefer lightweight mocking patterns:
+
+- **Use `vi.spyOn()`** for partial mocks - override specific methods while keeping real implementations
+- **Use `vi.mock()` with factory** only when full module replacement is needed (e.g., `electron-store`, `fs/promises`)
+- **Extract test fixtures** to the top of test files for reuse
+- **Use factory functions** like `createMockRegistry()` to create fresh mocks per test
+- **Call `vi.restoreAllMocks()`** in `afterEach` to ensure clean state
+
+Avoid creating full mock classes when `vi.spyOn()` on a real instance suffices.

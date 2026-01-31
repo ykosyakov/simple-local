@@ -41,6 +41,27 @@ interface PackageInfo {
   dependencies: string[]
 }
 
+interface AIServiceOutput {
+  id?: string
+  name?: string
+  type?: 'service' | 'tool'
+  path: string
+  command: string
+  debugCommand?: string
+  port?: number
+  debugPort?: number
+  env?: Record<string, string>
+  dependsOn?: string[]
+  framework?: string
+  containerEnvOverrides?: { key: string; originalPattern: string; containerValue: string; reason: string; enabled: boolean }[]
+}
+
+interface AIConnectionOutput {
+  from: string
+  to: string
+  envVar?: string
+}
+
 const FRAMEWORK_PATTERNS: Record<string, RegExp> = {
   next: /next/i,
   react: /react-scripts|vite.*react/i,
@@ -223,6 +244,8 @@ Rules:
     const prompt = this.buildEnvAnalysisPrompt(projectPath, service, resultFile)
     const terminal = new AgentTerminal()
 
+    const subscriptions: { unsubscribe: () => void }[] = []
+
     try {
       console.log(`[Discovery] Spawning ${cliTool} for env analysis`)
       onProgress?.({ projectPath, step: 'ai-analysis', message: `Running ${cliTool} analysis...` })
@@ -237,14 +260,16 @@ Rules:
       console.log(`[Discovery] Env analysis session ID: ${session.id}`)
 
       // Subscribe to raw output for logging
-      session.raw$.subscribe({
-        next: (text) => {
-          const cleanText = stripAnsi(text)
-          if (cleanText.trim()) {
-            onProgress?.({ projectPath, step: 'ai-analysis', message: 'Analyzing environment files...', log: cleanText })
-          }
-        },
-      })
+      subscriptions.push(
+        session.raw$.subscribe({
+          next: (text) => {
+            const cleanText = stripAnsi(text)
+            if (cleanText.trim()) {
+              onProgress?.({ projectPath, step: 'ai-analysis', message: 'Analyzing environment files...', log: cleanText })
+            }
+          },
+        })
+      )
 
       // Wait for session to complete with timeout
       await firstValueFrom(
@@ -279,6 +304,7 @@ Rules:
       onProgress?.({ projectPath, step: 'error', message: `Analysis failed: ${err}` })
       return []
     } finally {
+      subscriptions.forEach(s => s.unsubscribe())
       terminal.dispose()
     }
   }
@@ -421,6 +447,7 @@ Only include services/tools with runnable commands.`
 
     const prompt = this.buildDiscoveryPrompt(scanResult, resultFile)
     const terminal = new AgentTerminal()
+    const subscriptions: { unsubscribe: () => void }[] = []
 
     try {
       console.log(`[Discovery] Spawning ${cliTool} via AgentTerminal`)
@@ -437,23 +464,27 @@ Only include services/tools with runnable commands.`
       console.log(`[Discovery] Session ID: ${session.id}`)
 
       // Subscribe to raw output for logging (captures all terminal output)
-      session.raw$.subscribe({
-        next: (text) => {
-          const cleanText = stripAnsi(text)
-          if (cleanText.trim()) {
-            onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: cleanText })
-          }
-        },
-      })
+      subscriptions.push(
+        session.raw$.subscribe({
+          next: (text) => {
+            const cleanText = stripAnsi(text)
+            if (cleanText.trim()) {
+              onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: cleanText })
+            }
+          },
+        })
+      )
 
       // Subscribe to parsed events for status updates
-      session.events$.subscribe({
-        next: (event) => {
-          if (event.type === 'tool-start') {
-            onProgress?.({ projectPath, step: 'ai-analysis', message: `Using ${event.tool}...` })
-          }
-        },
-      })
+      subscriptions.push(
+        session.events$.subscribe({
+          next: (event) => {
+            if (event.type === 'tool-start') {
+              onProgress?.({ projectPath, step: 'ai-analysis', message: `Using ${event.tool}...` })
+            }
+          },
+        })
+      )
 
       // Wait for session to complete with timeout
       await firstValueFrom(
@@ -488,21 +519,23 @@ Only include services/tools with runnable commands.`
       onProgress?.({ projectPath, step: 'error', message: `AI analysis failed: ${err}` })
       return null
     } finally {
+      subscriptions.forEach(s => s.unsubscribe())
       terminal.dispose()
     }
   }
 
   private convertToProjectConfig(
-    aiOutput: { services: any[]; connections?: any[] },
+    aiOutput: { services: AIServiceOutput[]; connections?: AIConnectionOutput[] },
     projectPath: string
   ): ProjectConfig {
     const projectName = path.basename(projectPath)
 
     const services: Service[] = aiOutput.services.map((s, index) => {
       const isService = s.type !== 'tool'
+      const serviceId = s.id || `service-${index}`
       return {
-        id: s.id || `service-${index}`,
-        name: s.name || s.id,
+        id: serviceId,
+        name: s.name || s.id || serviceId,
         type: s.type || 'service',
         path: s.path,
         command: s.command,
@@ -511,7 +544,7 @@ Only include services/tools with runnable commands.`
         debugPort: s.debugPort,
         env: s.env || {},
         dependsOn: s.dependsOn,
-        devcontainer: isService ? `.simple-local/devcontainers/${s.id}/devcontainer.json` : undefined,
+        devcontainer: isService ? `.simple-local/devcontainers/${serviceId}/devcontainer.json` : undefined,
         active: true,
         mode: isService ? getDefaultMode(s.framework || s.type) : 'native',
         containerEnvOverrides: s.containerEnvOverrides || [],

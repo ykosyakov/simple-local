@@ -42,7 +42,10 @@
       "Bash(pnpm link:*)",
       "Bash(git checkout:*)",
       "Bash(node_modules/.bin/electron:*)",
-      "Bash(node install.js:*)"
+      "Bash(node install.js:*)",
+      "Bash(git merge:*)",
+      "Bash(git stash:*)",
+      "Bash(ls:*)"
     ]
   }
 }
