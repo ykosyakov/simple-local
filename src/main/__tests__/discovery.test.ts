@@ -69,6 +69,8 @@ describe('DiscoveryService', () => {
           packageJsonPaths: ['/project/frontend/package.json'],
           dockerComposePaths: [],
           envFiles: ['/project/frontend/.env'],
+          makefilePaths: [],
+          toolConfigPaths: [],
         },
         '/project/.simple-local/discovery-result.json'
       )
