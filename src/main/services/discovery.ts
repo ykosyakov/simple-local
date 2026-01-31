@@ -498,21 +498,25 @@ Only include services/tools with runnable commands.`
   ): ProjectConfig {
     const projectName = path.basename(projectPath)
 
-    const services: Service[] = aiOutput.services.map((s, index) => ({
-      id: s.id || `service-${index}`,
-      name: s.name || s.id,
-      path: s.path,
-      command: s.command,
-      debugCommand: s.debugCommand,
-      port: s.port || 3000 + index,
-      debugPort: s.debugPort,
-      env: s.env || {},
-      dependsOn: s.dependsOn,
-      devcontainer: `.simple-local/devcontainers/${s.id}/devcontainer.json`,
-      active: true,
-      mode: getDefaultMode(s.framework || s.type),
-      containerEnvOverrides: s.containerEnvOverrides || [],
-    }))
+    const services: Service[] = aiOutput.services.map((s, index) => {
+      const isService = s.type !== 'tool'
+      return {
+        id: s.id || `service-${index}`,
+        name: s.name || s.id,
+        type: s.type || 'service',
+        path: s.path,
+        command: s.command,
+        debugCommand: s.debugCommand,
+        port: s.port || (isService ? 3000 + index : undefined),
+        debugPort: s.debugPort,
+        env: s.env || {},
+        dependsOn: s.dependsOn,
+        devcontainer: isService ? `.simple-local/devcontainers/${s.id}/devcontainer.json` : undefined,
+        active: true,
+        mode: isService ? getDefaultMode(s.framework || s.type) : 'native',
+        containerEnvOverrides: s.containerEnvOverrides || [],
+      }
+    })
 
     // Apply connections as env var references
     for (const conn of aiOutput.connections || []) {
