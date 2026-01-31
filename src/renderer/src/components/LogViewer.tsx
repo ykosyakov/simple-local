@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Terminal, Download, Trash2, ChevronDown } from 'lucide-react'
 
 interface LogViewerProps {
@@ -7,6 +8,8 @@ interface LogViewerProps {
   serviceName: string
 }
 
+const ROW_HEIGHT = 20
+
 export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps) {
   const [logs, setLogs] = useState<string[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
@@ -14,6 +17,13 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const logBufferRef = useRef<string[]>([])
   const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const virtualizer = useVirtualizer({
+    count: logs.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  })
 
   const flushLogs = useCallback(() => {
     if (logBufferRef.current.length === 0) return
@@ -70,10 +80,10 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   }, [projectId, serviceId, flushLogs])
 
   useEffect(() => {
-    if (autoScrollRef.current && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    if (autoScrollRef.current && logs.length > 0) {
+      virtualizer.scrollToIndex(logs.length - 1, { align: 'end' })
     }
-  }, [logs])
+  }, [logs.length, virtualizer])
 
   const handleScroll = () => {
     if (!containerRef.current) return
@@ -84,8 +94,8 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   }
 
   const scrollToBottom = () => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    if (logs.length > 0) {
+      virtualizer.scrollToIndex(logs.length - 1, { align: 'end' })
       autoScrollRef.current = true
       setShowScrollButton(false)
     }
@@ -177,16 +187,30 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
             </span>
           </div>
         ) : (
-          <div className="py-2">
-            {logs.map((line, i) => (
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => (
               <div
-                key={i}
+                key={virtualRow.key}
                 className="terminal-line whitespace-pre-wrap py-0.5"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
               >
                 <span style={{ color: 'var(--text-muted)', marginRight: '1rem' }}>
-                  {String(i + 1).padStart(4, ' ')}
+                  {String(virtualRow.index + 1).padStart(4, ' ')}
                 </span>
-                {line}
+                {logs[virtualRow.index]}
               </div>
             ))}
           </div>

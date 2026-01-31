@@ -4,6 +4,7 @@ import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
 import { getServiceContext } from '../services/service-lookup'
+import { getServiceStatus } from '../services/service-status'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
 import type { DiscoveryProgress } from '../../shared/types'
 
@@ -123,20 +124,13 @@ export function setupServiceHandlers(
 
     const statuses = await Promise.all(
       projectConfig.services.map(async (service) => {
-        if (service.mode === 'native') {
-          const isRunning = container.isNativeServiceRunning(service.id)
-          return {
-            serviceId: service.id,
-            status: isRunning ? 'running' : 'stopped',
-          }
-        } else {
-          const containerName = container.getContainerName(projectConfig.name, service.id)
-          const status = await container.getContainerStatus(containerName)
-          return {
-            serviceId: service.id,
-            status,
-            containerId: containerName,
-          }
+        const status = await getServiceStatus(container, service, projectConfig.name)
+        return {
+          serviceId: service.id,
+          status,
+          containerId: service.mode === 'container'
+            ? container.getContainerName(projectConfig.name, service.id)
+            : undefined,
         }
       })
     )

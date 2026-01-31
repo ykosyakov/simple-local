@@ -55,8 +55,6 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     loadConfig()
     refreshStatuses()
 
-    const interval = setInterval(refreshStatuses, 3000)
-
     const unsubscribeStatus = window.api.onStatusChange?.((data) => {
       if (data.projectId === project.id) {
         setStatuses((prev) => {
@@ -68,7 +66,6 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     })
 
     return () => {
-      clearInterval(interval)
       unsubscribeStatus?.()
     }
   }, [loadConfig, refreshStatuses, project.id])

@@ -3,6 +3,7 @@ import type { RegistryService } from './registry'
 import type { ContainerService } from './container'
 import type { ProjectConfigService } from './project-config'
 import { McpHandler } from './mcp-handler'
+import { getServiceStatus } from './service-status'
 
 export interface ApiServerOptions {
   port: number
@@ -40,12 +41,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const projectConfig = await config.loadConfig(project.path)
       if (!projectConfig) return []
       return Promise.all(projectConfig.services.map(async (s) => {
-        let status: string
-        if (s.mode === 'native') {
-          status = container.isNativeServiceRunning(s.id) ? 'running' : 'stopped'
-        } else {
-          status = await container.getContainerStatus(container.getContainerName(projectConfig.name, s.id))
-        }
+        const status = await getServiceStatus(container, s, projectConfig.name)
         return { id: s.id, name: s.name, port: s.port, mode: s.mode, status }
       }))
     },
@@ -57,12 +53,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       if (!projectConfig) return null
       const service = projectConfig.services.find(s => s.id === serviceId)
       if (!service) return null
-      let status: string
-      if (service.mode === 'native') {
-        status = container.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
-      } else {
-        status = await container.getContainerStatus(container.getContainerName(projectConfig.name, service.id))
-      }
+      const status = await getServiceStatus(container, service, projectConfig.name)
       return { id: service.id, name: service.name, port: service.port, status }
     },
     getLogs: async (projectId, serviceId) => options.getLogBuffer?.(projectId, serviceId) ?? [],
@@ -80,13 +71,8 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const currentMode = service.mode
       const targetMode = mode || currentMode
 
-      let isRunning = false
-      if (currentMode === 'native') {
-        isRunning = container.isNativeServiceRunning(serviceId)
-      } else {
-        const status = await container.getContainerStatus(container.getContainerName(projectConfig.name, serviceId))
-        isRunning = status === 'running'
-      }
+      const currentStatus = await getServiceStatus(container, service, projectConfig.name)
+      const isRunning = currentStatus === 'running'
 
       const needsRestart = isRunning && !!mode && mode !== currentMode
 
@@ -174,13 +160,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
 
         const services = await Promise.all(
           projectConfig.services.map(async (service) => {
-            let status: string
-            if (service.mode === 'native') {
-              status = container.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
-            } else {
-              const containerName = container.getContainerName(projectConfig.name, service.id)
-              status = await container.getContainerStatus(containerName)
-            }
+            const status = await getServiceStatus(container, service, projectConfig.name)
             return {
               id: service.id,
               name: service.name,
@@ -223,13 +203,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
           return
         }
 
-        let status: string
-        if (service.mode === 'native') {
-          status = container.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
-        } else {
-          const containerName = container.getContainerName(projectConfig.name, service.id)
-          status = await container.getContainerStatus(containerName)
-        }
+        const status = await getServiceStatus(container, service, projectConfig.name)
 
         res.writeHead(200)
         res.end(JSON.stringify({

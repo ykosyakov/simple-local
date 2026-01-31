@@ -182,17 +182,21 @@ function App() {
   const handleStartAll = async () => {
     if (!selectedProject) return;
     const config = await window.api.loadProjectConfig(selectedProject.path);
-    for (const service of config.services) {
-      await window.api.startService(selectedProject.id, service.id);
-    }
+    await Promise.allSettled(
+      config.services.map((service) =>
+        window.api.startService(selectedProject.id, service.id)
+      )
+    );
   };
 
   const handleStopAll = async () => {
     if (!selectedProject) return;
     const config = await window.api.loadProjectConfig(selectedProject.path);
-    for (const service of config.services) {
-      await window.api.stopService(selectedProject.id, service.id);
-    }
+    await Promise.allSettled(
+      config.services.map((service) =>
+        window.api.stopService(selectedProject.id, service.id)
+      )
+    );
   };
 
   const handleDeleteProject = async () => {
