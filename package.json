@@ -23,6 +23,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@agent-flow/agent-terminal": "file:../agent-flow/packages/agent-terminal",
     "@devcontainers/cli": "^0.81.1",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",

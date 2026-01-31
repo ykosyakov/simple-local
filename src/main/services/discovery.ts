@@ -3,8 +3,9 @@ import * as path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import { firstValueFrom, timeout } from 'rxjs'
-import type { ProjectConfig, Service, DiscoveryProgress, AiAgentId, ContainerEnvOverride } from '../../shared/types'
-import { AgentTerminal } from './agent-terminal'
+import type { ProjectConfig, Service, DiscoveryProgress, ContainerEnvOverride } from '../../shared/types'
+import { AgentTerminal } from '@agent-flow/agent-terminal'
+import type { AiAgentId } from '@agent-flow/agent-terminal'
 
 const execAsync = promisify(exec)
 const AI_DISCOVERY_TIMEOUT = 120000 // 2 minutes for AI analysis
