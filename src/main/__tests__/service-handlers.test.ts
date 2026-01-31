@@ -71,7 +71,7 @@ describe('setupServiceHandlers', () => {
     mockConfig = {
       loadConfig: vi.fn(),
       saveConfig: vi.fn(),
-      interpolateEnv: vi.fn().mockReturnValue({}),
+      interpolateEnv: vi.fn().mockReturnValue({ env: {}, errors: [] }),
       generateDevcontainerConfig: vi.fn(),
       saveDevcontainer: vi.fn(),
     }

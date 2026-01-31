@@ -2,6 +2,16 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import type { ProjectConfig, Service } from '../../shared/types'
 
+/**
+ * Result of environment variable interpolation
+ */
+export interface InterpolateEnvResult {
+  /** Interpolated environment variables */
+  env: Record<string, string>
+  /** Any errors encountered during interpolation */
+  errors: string[]
+}
+
 const CONFIG_DIR = '.simple-local'
 const CONFIG_FILE = 'config.json'
 
@@ -30,18 +40,44 @@ export class ProjectConfigService {
     await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8')
   }
 
-  interpolateEnv(env: Record<string, string>, services: Service[]): Record<string, string> {
+  /**
+   * Interpolates service references in environment variables.
+   *
+   * Supports pattern: ${services.SERVICEID.PROPERTY}
+   * Example: ${services.backend.port} resolves to the backend service's port
+   *
+   * Available properties: id, name, path, command, port, debugPort, mode
+   *
+   * @returns Object containing interpolated env vars and any errors
+   */
+  interpolateEnv(env: Record<string, string>, services: Service[]): InterpolateEnvResult {
     const result: Record<string, string> = {}
+    const errors: string[] = []
+    const serviceIdPattern = /\$\{services\.(\w+)\.(\w+)\}/g
 
     for (const [key, value] of Object.entries(env)) {
-      result[key] = value.replace(/\$\{services\.(\w+)\.(\w+)\}/g, (_, serviceId, prop) => {
+      result[key] = value.replace(serviceIdPattern, (match, serviceId: string, prop: string) => {
         const service = services.find((s) => s.id === serviceId)
-        if (!service) return ''
-        return String(service[prop as keyof Service] ?? '')
+
+        if (!service) {
+          const error = `Unknown service '${serviceId}' in env var '${key}'. Available services: ${services.map(s => s.id).join(', ') || 'none'}`
+          errors.push(error)
+          return match // Keep original pattern to make error visible
+        }
+
+        const propValue = service[prop as keyof Service]
+
+        if (propValue === undefined || propValue === null) {
+          const error = `Property '${prop}' is undefined on service '${serviceId}' in env var '${key}'`
+          errors.push(error)
+          return match // Keep original pattern to make error visible
+        }
+
+        return String(propValue)
       })
     }
 
-    return result
+    return { env: result, errors }
   }
 
   async generateDevcontainerConfig(service: Service, projectName: string): Promise<object> {

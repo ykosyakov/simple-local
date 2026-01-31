@@ -45,7 +45,7 @@ export function setupServiceHandlers(
   ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
     const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
-    const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
+    const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
     // Apply container env overrides if in container mode
     const finalEnv = service.mode === 'container' && service.containerEnvOverrides
       ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
@@ -57,6 +57,11 @@ export function setupServiceHandlers(
 
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.webContents.send('service:logs:data', { projectId, serviceId, data })
+    }
+
+    // Warn about interpolation errors in service logs
+    if (interpolationErrors.length > 0) {
+      sendLog(`Warning: Environment variable interpolation issues:\n${interpolationErrors.map(e => `  - ${e}`).join('\n')}\n`)
     }
 
     const sendStatus = (status: string) => {
@@ -260,7 +265,7 @@ export function setupServiceHandlers(
   const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
     const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
-    const resolvedEnv = config.interpolateEnv(service.env, projectConfig.services)
+    const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
     const servicePath = `${project.path}/${service.path}`
     const effectiveMode = modeOverride || service.mode
     // Apply container env overrides if in container mode
@@ -270,6 +275,11 @@ export function setupServiceHandlers(
 
     const sendLog = (data: string) => {
       logManager.appendLog(projectId, serviceId, data)
+    }
+
+    // Warn about interpolation errors in service logs
+    if (interpolationErrors.length > 0) {
+      sendLog(`Warning: Environment variable interpolation issues:\n${interpolationErrors.map(e => `  - ${e}`).join('\n')}\n`)
     }
 
     const sendStatus = (_status: string) => {}

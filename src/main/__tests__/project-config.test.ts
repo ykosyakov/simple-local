@@ -66,7 +66,80 @@ describe('ProjectConfigService', () => {
       const env = { API_URL: 'http://localhost:${services.backend.port}' }
       const result = configService.interpolateEnv(env, services)
 
-      expect(result.API_URL).toBe('http://localhost:3001')
+      expect(result.env.API_URL).toBe('http://localhost:3001')
+      expect(result.errors).toEqual([])
+    })
+
+    it('resolves multiple service references in a single value', () => {
+      const services = [
+        { id: 'backend', port: 3001, name: 'Backend API' },
+        { id: 'frontend', port: 3000 },
+      ] as any[]
+
+      const env = { SERVICES: '${services.backend.name}:${services.backend.port}' }
+      const result = configService.interpolateEnv(env, services)
+
+      expect(result.env.SERVICES).toBe('Backend API:3001')
+      expect(result.errors).toEqual([])
+    })
+
+    it('returns error when service does not exist', () => {
+      const services = [{ id: 'backend', port: 3001 }] as any[]
+
+      const env = { API_URL: 'http://localhost:${services.unknown.port}' }
+      const result = configService.interpolateEnv(env, services)
+
+      expect(result.env.API_URL).toBe('http://localhost:${services.unknown.port}')
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toContain('unknown')
+    })
+
+    it('returns error when property does not exist on service', () => {
+      const services = [{ id: 'backend', port: 3001 }] as any[]
+
+      const env = { API_URL: 'http://localhost:${services.backend.missingProp}' }
+      const result = configService.interpolateEnv(env, services)
+
+      expect(result.env.API_URL).toBe('http://localhost:${services.backend.missingProp}')
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toContain('missingProp')
+    })
+
+    it('collects multiple errors from different env vars', () => {
+      const services = [{ id: 'backend', port: 3001 }] as any[]
+
+      const env = {
+        API_URL: 'http://localhost:${services.unknown.port}',
+        DB_HOST: '${services.backend.missingProp}',
+        VALID: '${services.backend.port}',
+      }
+      const result = configService.interpolateEnv(env, services)
+
+      expect(result.env.VALID).toBe('3001')
+      expect(result.errors).toHaveLength(2)
+    })
+
+    it('passes through values without interpolation patterns', () => {
+      const services = [{ id: 'backend', port: 3001 }] as any[]
+
+      const env = { STATIC_VAR: 'some-value', PORT: '8080' }
+      const result = configService.interpolateEnv(env, services)
+
+      expect(result.env.STATIC_VAR).toBe('some-value')
+      expect(result.env.PORT).toBe('8080')
+      expect(result.errors).toEqual([])
+    })
+
+    it('handles undefined property values gracefully', () => {
+      const services = [{ id: 'backend', port: undefined }] as any[]
+
+      const env = { API_URL: 'http://localhost:${services.backend.port}' }
+      const result = configService.interpolateEnv(env, services)
+
+      // Property exists but is undefined - should report as error
+      expect(result.env.API_URL).toBe('http://localhost:${services.backend.port}')
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors[0]).toContain('undefined')
     })
   })
 })
