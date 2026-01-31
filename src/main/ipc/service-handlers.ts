@@ -33,6 +33,16 @@ export function setupServiceHandlers(
   const logCleanupFns = new Map<string, () => void>()
   const logBuffers = new Map<string, string[]>()
 
+  /** Append log data to buffer, trimming to MAX_LOG_LINES if exceeded */
+  const appendToLogBuffer = (key: string, data: string): void => {
+    const buffer = logBuffers.get(key) || []
+    buffer.push(data)
+    if (buffer.length > MAX_LOG_LINES) {
+      buffer.splice(0, buffer.length - MAX_LOG_LINES)
+    }
+    logBuffers.set(key, buffer)
+  }
+
   ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
     const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
@@ -45,12 +55,7 @@ export function setupServiceHandlers(
 
     const sendLog = (data: string) => {
       const key = `${projectId}:${serviceId}`
-      const buffer = logBuffers.get(key) || []
-      buffer.push(data)
-      if (buffer.length > MAX_LOG_LINES) {
-        buffer.splice(0, buffer.length - MAX_LOG_LINES)
-      }
-      logBuffers.set(key, buffer)
+      appendToLogBuffer(key, data)
 
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.webContents.send('service:logs:data', { projectId, serviceId, data })
@@ -267,12 +272,7 @@ export function setupServiceHandlers(
 
     const key = `${projectId}:${serviceId}`
     const sendLog = (data: string) => {
-      const buffer = logBuffers.get(key) || []
-      buffer.push(data)
-      if (buffer.length > MAX_LOG_LINES) {
-        buffer.splice(0, buffer.length - MAX_LOG_LINES)
-      }
-      logBuffers.set(key, buffer)
+      appendToLogBuffer(key, data)
     }
 
     const sendStatus = (_status: string) => {}

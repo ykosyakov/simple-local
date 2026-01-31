@@ -78,7 +78,7 @@ describe('LogViewer - batching', () => {
 
   it('stores all log lines after batching', async () => {
     // Test that logs are stored correctly (virtualization may not render all in JSDOM)
-    let logState: string[] = []
+    const logState: string[] = []
 
     mockApi.getLogs.mockImplementation(async () => {
       return logState

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { getServiceContext, getProjectContext, findProject } from '../services/service-lookup'
+import {
+  getServiceContext,
+  getProjectContext,
+  findProject,
+  tryGetProjectContext,
+  tryGetServiceContext
+} from '../services/service-lookup'
 
 // Create mock objects with vi.fn() - lightweight and type-safe
 const createMockRegistry = () => ({
@@ -119,6 +125,93 @@ describe('Service Lookup Helper', () => {
       const result = findProject(mockRegistry as any, 'proj1')
 
       expect(result).toEqual(project)
+    })
+  })
+
+  describe('tryGetProjectContext', () => {
+    it('returns PROJECT_NOT_FOUND error when project does not exist', async () => {
+      mockRegistry.getRegistry.mockReturnValue({ projects: [] })
+
+      const result = await tryGetProjectContext(mockRegistry as any, mockConfig as any, 'nonexistent')
+
+      expect(result).toEqual({ success: false, error: 'PROJECT_NOT_FOUND' })
+    })
+
+    it('returns CONFIG_NOT_FOUND error when config is null', async () => {
+      mockRegistry.getRegistry.mockReturnValue({
+        projects: [{ id: 'proj1', name: 'Project 1', path: '/path/to/project' }]
+      })
+      mockConfig.loadConfig.mockResolvedValue(null)
+
+      const result = await tryGetProjectContext(mockRegistry as any, mockConfig as any, 'proj1')
+
+      expect(result).toEqual({ success: false, error: 'CONFIG_NOT_FOUND' })
+    })
+
+    it('returns success with data when project and config exist', async () => {
+      const project = { id: 'proj1', name: 'Project 1', path: '/path/to/project' }
+      const projectConfig = { name: 'Project 1', services: [] }
+
+      mockRegistry.getRegistry.mockReturnValue({ projects: [project] })
+      mockConfig.loadConfig.mockResolvedValue(projectConfig)
+
+      const result = await tryGetProjectContext(mockRegistry as any, mockConfig as any, 'proj1')
+
+      expect(result).toEqual({
+        success: true,
+        data: { project, projectConfig }
+      })
+    })
+  })
+
+  describe('tryGetServiceContext', () => {
+    it('returns PROJECT_NOT_FOUND error when project does not exist', async () => {
+      mockRegistry.getRegistry.mockReturnValue({ projects: [] })
+
+      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'nonexistent', 'service1')
+
+      expect(result).toEqual({ success: false, error: 'PROJECT_NOT_FOUND' })
+    })
+
+    it('returns CONFIG_NOT_FOUND error when config is null', async () => {
+      mockRegistry.getRegistry.mockReturnValue({
+        projects: [{ id: 'proj1', name: 'Project 1', path: '/path/to/project' }]
+      })
+      mockConfig.loadConfig.mockResolvedValue(null)
+
+      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'service1')
+
+      expect(result).toEqual({ success: false, error: 'CONFIG_NOT_FOUND' })
+    })
+
+    it('returns SERVICE_NOT_FOUND error when service does not exist', async () => {
+      mockRegistry.getRegistry.mockReturnValue({
+        projects: [{ id: 'proj1', name: 'Project 1', path: '/path/to/project' }]
+      })
+      mockConfig.loadConfig.mockResolvedValue({
+        name: 'Project 1',
+        services: [{ id: 'other-service', name: 'Other Service' }]
+      })
+
+      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'nonexistent')
+
+      expect(result).toEqual({ success: false, error: 'SERVICE_NOT_FOUND' })
+    })
+
+    it('returns success with data when all exist', async () => {
+      const project = { id: 'proj1', name: 'Project 1', path: '/path/to/project' }
+      const service = { id: 'service1', name: 'Service 1', port: 3000, mode: 'native' as const }
+      const projectConfig = { name: 'Project 1', services: [service] }
+
+      mockRegistry.getRegistry.mockReturnValue({ projects: [project] })
+      mockConfig.loadConfig.mockResolvedValue(projectConfig)
+
+      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'service1')
+
+      expect(result).toEqual({
+        success: true,
+        data: { project, projectConfig, service }
+      })
     })
   })
 })

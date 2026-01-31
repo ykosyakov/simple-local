@@ -45,7 +45,11 @@
       "Bash(node install.js:*)",
       "Bash(git merge:*)",
       "Bash(git stash:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npx vitest:*)",
+      "Bash(git status:*)",
+      "Bash(git push)",
+      "Bash(wc:*)"
     ]
   }
 }

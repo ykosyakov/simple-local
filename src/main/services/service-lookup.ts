@@ -65,3 +65,46 @@ export async function getServiceContext(
     service
   }
 }
+
+// Non-throwing variants for API use (return null on failure)
+
+export type ProjectLookupError = 'PROJECT_NOT_FOUND' | 'CONFIG_NOT_FOUND'
+export type ServiceLookupError = ProjectLookupError | 'SERVICE_NOT_FOUND'
+
+export type TryProjectResult =
+  | { success: true; data: ProjectLookupResult }
+  | { success: false; error: ProjectLookupError }
+
+export type TryServiceResult =
+  | { success: true; data: ServiceLookupResult }
+  | { success: false; error: ServiceLookupError }
+
+export async function tryGetProjectContext(
+  registry: RegistryService,
+  config: ProjectConfigService,
+  projectId: string
+): Promise<TryProjectResult> {
+  const project = findProject(registry, projectId)
+  if (!project) return { success: false, error: 'PROJECT_NOT_FOUND' }
+
+  const projectConfig = await config.loadConfig(project.path)
+  if (!projectConfig) return { success: false, error: 'CONFIG_NOT_FOUND' }
+
+  return { success: true, data: { project, projectConfig } }
+}
+
+export async function tryGetServiceContext(
+  registry: RegistryService,
+  config: ProjectConfigService,
+  projectId: string,
+  serviceId: string
+): Promise<TryServiceResult> {
+  const projectResult = await tryGetProjectContext(registry, config, projectId)
+  if (!projectResult.success) return projectResult
+
+  const { project, projectConfig } = projectResult.data
+  const service = projectConfig.services.find((s) => s.id === serviceId)
+  if (!service) return { success: false, error: 'SERVICE_NOT_FOUND' }
+
+  return { success: true, data: { project, projectConfig, service } }
+}
