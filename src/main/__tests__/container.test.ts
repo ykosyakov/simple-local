@@ -5,6 +5,7 @@ import { ContainerService } from '../services/container'
 vi.mock('child_process', () => ({
   spawn: vi.fn(),
   execSync: vi.fn(),
+  exec: vi.fn(),
 }))
 
 // Mock dockerode
@@ -49,6 +50,67 @@ describe('ContainerService', () => {
     it('returns stopped when container not found', async () => {
       const status = await containerService.getContainerStatus('nonexistent')
       expect(status).toBe('stopped')
+    })
+  })
+
+  describe('getContainerStatus - caching', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('returns cached result within TTL (2s)', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/test-container'], State: 'running' } as any,
+      ])
+
+      await containerService.getContainerStatus('test-container')
+      await containerService.getContainerStatus('test-container')
+
+      expect(mockDocker.listContainers).toHaveBeenCalledTimes(1)
+    })
+
+    it('refreshes after TTL expires', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/test-container'], State: 'running' } as any,
+      ])
+
+      await containerService.getContainerStatus('test-container')
+      vi.advanceTimersByTime(2100)
+      await containerService.getContainerStatus('test-container')
+
+      expect(mockDocker.listContainers).toHaveBeenCalledTimes(2)
+    })
+
+    it('shares cache across different containers', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/container-1'], State: 'running' } as any,
+        { Names: ['/container-2'], State: 'stopped' } as any,
+      ])
+
+      await containerService.getContainerStatus('container-1')
+      await containerService.getContainerStatus('container-2')
+
+      expect(mockDocker.listContainers).toHaveBeenCalledTimes(1)
+    })
+
+    it('invalidates cache manually', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/test-container'], State: 'running' } as any,
+      ])
+
+      await containerService.getContainerStatus('test-container')
+      containerService.invalidateStatusCache()
+      await containerService.getContainerStatus('test-container')
+
+      expect(mockDocker.listContainers).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -320,6 +382,75 @@ describe('ContainerService', () => {
 
     it('rejects NaN port values', async () => {
       expect(() => containerService.killProcessOnPort(NaN)).toThrow('Port must be an integer')
+    })
+  })
+
+  describe('killProcessOnPortAsync', () => {
+    it('returns promise resolving to true when process killed', async () => {
+      const { exec } = await import('child_process')
+      vi.mocked(exec).mockImplementation(((cmd: string, callback: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+        if (cmd.includes('lsof')) {
+          callback(null, { stdout: '12345\n', stderr: '' })
+        } else {
+          callback(null, { stdout: '', stderr: '' })
+        }
+        return {} as any
+      }) as any)
+
+      const result = await containerService.killProcessOnPortAsync(3000)
+
+      expect(result).toBe(true)
+      expect(exec).toHaveBeenCalledWith('lsof -ti tcp:3000', expect.any(Function))
+    })
+
+    it('returns false when no process on port', async () => {
+      const { exec } = await import('child_process')
+      vi.mocked(exec).mockImplementation(((_cmd: string, callback: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+        callback(new Error('no process'), { stdout: '', stderr: '' })
+        return {} as any
+      }) as any)
+
+      const result = await containerService.killProcessOnPortAsync(3000)
+
+      expect(result).toBe(false)
+    })
+
+    it('does not block main thread (uses async exec)', async () => {
+      const { exec, execSync } = await import('child_process')
+      vi.mocked(exec).mockImplementation(((_cmd: string, callback: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+        callback(new Error('no process'), { stdout: '', stderr: '' })
+        return {} as any
+      }) as any)
+
+      await containerService.killProcessOnPortAsync(3000)
+
+      expect(execSync).not.toHaveBeenCalled()
+    })
+
+    it('handles multiple PIDs on same port', async () => {
+      const { exec } = await import('child_process')
+      const calls: string[] = []
+      vi.mocked(exec).mockImplementation(((cmd: string, callback: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+        calls.push(cmd)
+        if (cmd.includes('lsof')) {
+          callback(null, { stdout: '12345\n67890\n', stderr: '' })
+        } else {
+          callback(null, { stdout: '', stderr: '' })
+        }
+        return {} as any
+      }) as any)
+
+      const result = await containerService.killProcessOnPortAsync(3000)
+
+      expect(result).toBe(true)
+      expect(calls).toContain('kill -9 12345')
+      expect(calls).toContain('kill -9 67890')
+    })
+
+    it('validates port parameter', async () => {
+      await expect(containerService.killProcessOnPortAsync(-1)).rejects.toThrow(
+        'Port must be between 1 and 65535'
+      )
     })
   })
 

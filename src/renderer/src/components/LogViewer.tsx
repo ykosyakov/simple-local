@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal, Download, Trash2, ChevronDown } from 'lucide-react'
 
 interface LogViewerProps {
@@ -12,6 +12,18 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
   const containerRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const logBufferRef = useRef<string[]>([])
+  const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const flushLogs = useCallback(() => {
+    if (logBufferRef.current.length === 0) return
+    const newLogs = logBufferRef.current
+    logBufferRef.current = []
+    setLogs((prev) => {
+      const combined = [...prev, ...newLogs]
+      return combined.length > 1000 ? combined.slice(-1000) : combined
+    })
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -34,18 +46,28 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
 
     const unsubscribe = window.api.onLogData((data) => {
       if (data.projectId === projectId && data.serviceId === serviceId) {
-        setLogs((prev) => [...prev.slice(-1000), data.data])
+        logBufferRef.current.push(data.data)
+        if (!flushTimeoutRef.current) {
+          flushTimeoutRef.current = setTimeout(() => {
+            flushTimeoutRef.current = null
+            flushLogs()
+          }, 16)
+        }
       }
     })
 
     return () => {
       mounted = false
       unsubscribe()
+      if (flushTimeoutRef.current) {
+        clearTimeout(flushTimeoutRef.current)
+        flushTimeoutRef.current = null
+      }
       if (streamStarted) {
         window.api.stopLogStream(projectId, serviceId)
       }
     }
-  }, [projectId, serviceId])
+  }, [projectId, serviceId, flushLogs])
 
   useEffect(() => {
     if (autoScrollRef.current && containerRef.current) {

@@ -1,9 +1,12 @@
 import Docker from 'dockerode'
-import { spawn, execSync } from 'child_process'
+import { spawn, execSync, exec as execCallback } from 'child_process'
+import { promisify } from 'util'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
 import type { ContainerEnvOverride, ServiceStatus } from '../../shared/types'
 import { validatePort } from './validation'
+
+const exec = promisify(execCallback)
 
 export function applyContainerEnvOverrides(
   env: Record<string, string>,
@@ -26,6 +29,8 @@ export function applyContainerEnvOverrides(
 export class ContainerService extends EventEmitter {
   private docker: Docker
   private nativeProcesses = new Map<string, import('child_process').ChildProcess>()
+  private statusCache: { containers: Docker.ContainerInfo[]; timestamp: number } | null = null
+  private readonly CACHE_TTL_MS = 2000
 
   constructor(socketPath?: string) {
     super()
@@ -42,9 +47,23 @@ export class ContainerService extends EventEmitter {
     return `simple-local-${sanitized(projectName)}-${sanitized(serviceId)}`
   }
 
+  private async getCachedContainers(): Promise<Docker.ContainerInfo[]> {
+    const now = Date.now()
+    if (this.statusCache && now - this.statusCache.timestamp < this.CACHE_TTL_MS) {
+      return this.statusCache.containers
+    }
+    const containers = await this.docker.listContainers({ all: true })
+    this.statusCache = { containers, timestamp: now }
+    return containers
+  }
+
+  invalidateStatusCache(): void {
+    this.statusCache = null
+  }
+
   async getContainerStatus(containerName: string): Promise<ServiceStatus['status']> {
     try {
-      const containers = await this.docker.listContainers({ all: true })
+      const containers = await this.getCachedContainers()
       const container = containers.find((c) =>
         c.Names.some((n) => n === `/${containerName}` || n === containerName)
       )
@@ -159,6 +178,7 @@ export class ContainerService extends EventEmitter {
         })
 
         // Don't wait for exec to finish - it's a long-running dev server
+        this.invalidateStatusCache()
         resolve()
       })
     })
@@ -173,6 +193,8 @@ export class ContainerService extends EventEmitter {
       if (!(error instanceof Error) || !error.message.includes('not running')) {
         throw error
       }
+    } finally {
+      this.invalidateStatusCache()
     }
   }
 
@@ -241,6 +263,25 @@ export class ContainerService extends EventEmitter {
             // Process may have already exited
           }
         }
+        return true
+      }
+    } catch {
+      // No process on port or lsof failed
+    }
+    return false
+  }
+
+  async killProcessOnPortAsync(port: number): Promise<boolean> {
+    validatePort(port)
+
+    try {
+      const { stdout } = await exec(`lsof -ti tcp:${port}`)
+      const result = stdout.trim()
+      if (result) {
+        const pids = result.split('\n').filter(Boolean)
+        await Promise.all(
+          pids.map((pid) => exec(`kill -9 ${pid}`).catch(() => {}))
+        )
         return true
       }
     } catch {

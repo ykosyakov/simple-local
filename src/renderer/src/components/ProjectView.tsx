@@ -26,14 +26,21 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       setConfigError(null)
       const result = await window.api.loadProjectConfig(project.path)
       setConfig(result)
-      if (result.services.length > 0 && !selectedServiceId) {
-        setSelectedServiceId(result.services[0].id)
-      }
+      setSelectedServiceId((current) => {
+        if (result.services.length > 0 && !current) {
+          return result.services[0].id
+        }
+        return current
+      })
     } catch (err) {
       console.error('[ProjectView] Failed to load config:', err)
       setConfigError(err instanceof Error ? err.message : 'Failed to load project configuration')
     }
-  }, [project.path, selectedServiceId])
+  }, [project.path])
+
+  const handleSelectService = useCallback((serviceId: string) => {
+    setSelectedServiceId(serviceId)
+  }, [])
 
   const refreshStatuses = useCallback(async () => {
     const statusList = await window.api.getServiceStatus(project.id)
@@ -66,7 +73,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     }
   }, [loadConfig, refreshStatuses, project.id])
 
-  const handleStart = async (serviceId: string) => {
+  const handleStart = useCallback(async (serviceId: string) => {
     try {
       setActionError(null)
       await window.api.startService(project.id, serviceId)
@@ -77,9 +84,9 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     } finally {
       refreshStatuses()
     }
-  }
+  }, [project.id, config?.services, refreshStatuses])
 
-  const handleStop = async (serviceId: string) => {
+  const handleStop = useCallback(async (serviceId: string) => {
     try {
       setActionError(null)
       await window.api.stopService(project.id, serviceId)
@@ -90,9 +97,9 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     } finally {
       refreshStatuses()
     }
-  }
+  }, [project.id, config?.services, refreshStatuses])
 
-  const handleRestart = async (serviceId: string) => {
+  const handleRestart = useCallback(async (serviceId: string) => {
     try {
       setActionError(null)
       await window.api.stopService(project.id, serviceId)
@@ -104,7 +111,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     } finally {
       refreshStatuses()
     }
-  }
+  }, [project.id, config?.services, refreshStatuses])
 
   const handleActivateService = async (serviceId: string) => {
     if (!config) return
@@ -123,7 +130,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     }
   }
 
-  const handleHideService = async (serviceId: string) => {
+  const handleHideService = useCallback(async (serviceId: string) => {
     if (!config) return
     try {
       setActionError(null)
@@ -138,9 +145,9 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
       setActionError(`Failed to hide ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
-  }
+  }, [config, project.path, loadConfig])
 
-  const handleModeChange = async (serviceId: string, mode: 'native' | 'container') => {
+  const handleModeChange = useCallback(async (serviceId: string, mode: 'native' | 'container') => {
     if (!config) return
     try {
       setActionError(null)
@@ -155,7 +162,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       const serviceName = config.services.find((s) => s.id === serviceId)?.name || serviceId
       setActionError(`Failed to change mode for ${serviceName}: ${err instanceof Error ? err.message : 'Unknown error'}`)
     }
-  }
+  }, [config, project.path, loadConfig])
 
   const handleSaveConfig = async (updatedConfig: ProjectConfig) => {
     try {
@@ -346,12 +353,12 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
             service={service}
             status={statuses.get(service.id) || 'stopped'}
             isSelected={selectedServiceId === service.id}
-            onSelect={() => setSelectedServiceId(service.id)}
-            onStart={() => handleStart(service.id)}
-            onStop={() => handleStop(service.id)}
-            onRestart={() => handleRestart(service.id)}
-            onHide={() => handleHideService(service.id)}
-            onModeChange={(mode) => handleModeChange(service.id, mode)}
+            onSelect={handleSelectService}
+            onStart={handleStart}
+            onStop={handleStop}
+            onRestart={handleRestart}
+            onHide={handleHideService}
+            onModeChange={handleModeChange}
             index={index}
           />
         ))}

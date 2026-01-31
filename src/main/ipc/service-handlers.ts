@@ -62,7 +62,7 @@ export function setupServiceHandlers(
 
     if (service.mode === 'native') {
       if (service.port) {
-        const killed = container.killProcessOnPort(service.port)
+        const killed = await container.killProcessOnPortAsync(service.port)
         if (killed) {
           sendLog(`Killed existing process on port ${service.port}\n`)
         }
@@ -285,7 +285,7 @@ export function setupServiceHandlers(
 
     if (effectiveMode === 'native') {
       if (service.port) {
-        const killed = container.killProcessOnPort(service.port)
+        const killed = await container.killProcessOnPortAsync(service.port)
         if (killed) {
           sendLog(`Killed existing process on port ${service.port}\n`)
         }

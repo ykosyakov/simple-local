@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Play, Square, RotateCcw, EyeOff, Wrench } from 'lucide-react'
 import type { Service, ServiceStatus } from '../../../shared/types'
 
@@ -5,12 +6,12 @@ interface ServiceCardProps {
   service: Service
   status: ServiceStatus['status']
   isSelected: boolean
-  onSelect: () => void
-  onStart: () => void
-  onStop: () => void
-  onRestart: () => void
-  onHide?: () => void
-  onModeChange?: (mode: 'native' | 'container') => void
+  onSelect: (serviceId: string) => void
+  onStart: (serviceId: string) => void
+  onStop: (serviceId: string) => void
+  onRestart: (serviceId: string) => void
+  onHide?: (serviceId: string) => void
+  onModeChange?: (serviceId: string, mode: 'native' | 'container') => void
   index?: number
 }
 
@@ -42,7 +43,7 @@ const STATUS_CONFIG = {
   },
 }
 
-export function ServiceCard({
+export const ServiceCard = memo(function ServiceCard({
   service,
   status,
   isSelected,
@@ -63,7 +64,7 @@ export function ServiceCard({
 
   return (
     <div
-      onClick={onSelect}
+      onClick={() => onSelect(service.id)}
       className="animate-fade-up cursor-pointer rounded-xl p-4 transition-all"
       style={{
         background: isSelected ? 'var(--bg-elevated)' : 'var(--bg-surface)',
@@ -111,7 +112,7 @@ export function ServiceCard({
           {onModeChange && !isTool && (
             <select
               value={service.mode}
-              onChange={(e) => onModeChange(e.target.value as 'native' | 'container')}
+              onChange={(e) => onModeChange(service.id, e.target.value as 'native' | 'container')}
               onClick={(e) => e.stopPropagation()}
               disabled={isBusy}
               className="rounded px-1.5 py-0.5 text-[10px]"
@@ -167,7 +168,7 @@ export function ServiceCard({
           <button
             onClick={(e) => {
               e.stopPropagation()
-              onStart()
+              onStart(service.id)
             }}
             className="btn btn-primary flex-1"
             style={{ padding: '0.5rem' }}
@@ -182,7 +183,7 @@ export function ServiceCard({
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                onStop()
+                onStop(service.id)
               }}
               className="btn btn-danger flex-1"
               style={{ padding: '0.5rem' }}
@@ -193,7 +194,7 @@ export function ServiceCard({
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                onRestart()
+                onRestart(service.id)
               }}
               className="btn btn-ghost"
               style={{ padding: '0.5rem' }}
@@ -208,7 +209,7 @@ export function ServiceCard({
           <button
             onClick={(e) => {
               e.stopPropagation()
-              onHide()
+              onHide(service.id)
             }}
             className="btn-icon opacity-0 transition-opacity group-hover:opacity-100"
             title="Hide service"
@@ -219,4 +220,4 @@ export function ServiceCard({
       </div>
     </div>
   )
-}
+})
