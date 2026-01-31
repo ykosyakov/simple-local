@@ -22,7 +22,27 @@
       "Bash(gh issue view:*)",
       "Bash(npx tsx:*)",
       "Bash(npx devcontainer:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "mcp__simple-local__list_projects",
+      "mcp__simple-local__get_project",
+      "mcp__simple-local__list_services",
+      "mcp__simple-local__start_service",
+      "mcp__simple-local__get_service_status",
+      "mcp__simple-local__get_logs",
+      "Bash(docker rm:*)",
+      "mcp__simple-local__restart_service",
+      "mcp__simple-local__stop_service",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npx eslint:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm link:*)",
+      "Bash(git checkout:*)",
+      "Bash(node_modules/.bin/electron:*)",
+      "Bash(node install.js:*)"
     ]
   }
 }

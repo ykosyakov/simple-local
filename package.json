@@ -1,6 +1,9 @@
 {
   "name": "simple-local",
   "version": "1.0.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "esbuild", "node-pty"]
+  },
   "description": "Desktop app for managing local dev infrastructure with devcontainer-based service isolation",
   "main": "./out/main/index.js",
   "author": "",
