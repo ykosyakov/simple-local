@@ -49,7 +49,9 @@
       "Bash(npx vitest:*)",
       "Bash(git status:*)",
       "Bash(git push)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git -C /Users/yury/projects/simple-local status)",
+      "Bash(git -C /Users/yury/projects/simple-local diff:*)"
     ]
   }
 }

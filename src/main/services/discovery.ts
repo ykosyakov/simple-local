@@ -32,6 +32,57 @@ async function isCommandAvailable(command: string): Promise<boolean> {
   }
 }
 
+/**
+ * File system operations interface for dependency injection.
+ * Allows substituting file operations in tests without mocking the fs module.
+ */
+export interface FileSystemOperations {
+  readFile(path: string, encoding: 'utf-8'): Promise<string>
+  readdir(path: string, options: { withFileTypes: true }): Promise<{ name: string; isFile(): boolean; isDirectory(): boolean }[]>
+  mkdir(path: string, options: { recursive: true }): Promise<void>
+  unlink(path: string): Promise<void>
+}
+
+/**
+ * Agent terminal factory interface for dependency injection.
+ * Allows substituting agent terminal creation in tests.
+ */
+export interface AgentTerminalFactory {
+  create(): AgentTerminal
+}
+
+/**
+ * Command availability checker interface for dependency injection.
+ */
+export interface CommandChecker {
+  isAvailable(command: string): Promise<boolean>
+}
+
+// Default implementations using real dependencies
+const defaultFileSystem: FileSystemOperations = {
+  readFile: (p, encoding) => fs.readFile(p, encoding),
+  readdir: (p, options) => fs.readdir(p, options) as Promise<{ name: string; isFile(): boolean; isDirectory(): boolean }[]>,
+  mkdir: (p, options) => fs.mkdir(p, options).then(() => undefined),
+  unlink: (p) => fs.unlink(p),
+}
+
+const defaultAgentTerminalFactory: AgentTerminalFactory = {
+  create: () => new AgentTerminal(),
+}
+
+const defaultCommandChecker: CommandChecker = {
+  isAvailable: isCommandAvailable,
+}
+
+/**
+ * Dependencies for DiscoveryService, all optional with sensible defaults.
+ */
+export interface DiscoveryServiceDeps {
+  fileSystem?: FileSystemOperations
+  agentTerminalFactory?: AgentTerminalFactory
+  commandChecker?: CommandChecker
+}
+
 // Re-export ScanResult for backwards compatibility
 export type { ScanResult }
 
@@ -85,6 +136,16 @@ function getDefaultMode(framework?: string): 'native' | 'container' {
 }
 
 export class DiscoveryService {
+  private readonly fs: FileSystemOperations
+  private readonly agentTerminalFactory: AgentTerminalFactory
+  private readonly commandChecker: CommandChecker
+
+  constructor(deps: DiscoveryServiceDeps = {}) {
+    this.fs = deps.fileSystem ?? defaultFileSystem
+    this.agentTerminalFactory = deps.agentTerminalFactory ?? defaultAgentTerminalFactory
+    this.commandChecker = deps.commandChecker ?? defaultCommandChecker
+  }
+
   async scanProjectStructure(projectPath: string, depth = 2): Promise<ScanResult> {
     const result: ScanResult = {
       packageJsonPaths: [],
@@ -105,7 +166,7 @@ export class DiscoveryService {
       if (currentDepth > depth) return
 
       try {
-        const entries = await fs.readdir(dir, { withFileTypes: true })
+        const entries = await this.fs.readdir(dir, { withFileTypes: true })
 
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name)
@@ -143,7 +204,7 @@ export class DiscoveryService {
   }
 
   async parsePackageJson(packageJsonPath: string): Promise<PackageInfo> {
-    const content = await fs.readFile(packageJsonPath, 'utf-8')
+    const content = await this.fs.readFile(packageJsonPath, 'utf-8')
     const pkg = JSON.parse(content)
 
     const devScript = pkg.scripts?.dev || pkg.scripts?.start
@@ -191,7 +252,7 @@ export class DiscoveryService {
     log.info('Starting env analysis for service:', service.id)
 
     // Check if the CLI tool is available
-    const isAvailable = await isCommandAvailable(cliTool)
+    const isAvailable = await this.commandChecker.isAvailable(cliTool)
     if (!isAvailable) {
       log.error(`${cliTool} CLI not found in PATH`)
       onProgress?.({ projectPath, step: 'error', message: `${cliTool} CLI not found. Install it first.` })
@@ -203,17 +264,17 @@ export class DiscoveryService {
     // Result file for this specific service
     const resultDir = path.join(projectPath, '.simple-local')
     const resultFile = path.join(resultDir, `env-analysis-${service.id}.json`)
-    await fs.mkdir(resultDir, { recursive: true })
+    await this.fs.mkdir(resultDir, { recursive: true })
 
     // Clean up any previous result
     try {
-      await fs.unlink(resultFile)
+      await this.fs.unlink(resultFile)
     } catch {
       // File doesn't exist, that's fine
     }
 
     const prompt = this.buildEnvAnalysisPrompt(projectPath, service, resultFile)
-    const terminal = new AgentTerminal()
+    const terminal = this.agentTerminalFactory.create()
 
     const subscriptions: { unsubscribe: () => void }[] = []
 
@@ -258,7 +319,7 @@ export class DiscoveryService {
 
       // Read result from file
       try {
-        const resultContent = await fs.readFile(resultFile, 'utf-8')
+        const resultContent = await this.fs.readFile(resultFile, 'utf-8')
         const parsed = JSON.parse(resultContent)
         log.info('Env analysis result:', JSON.stringify(parsed, null, 2))
 
@@ -295,7 +356,7 @@ export class DiscoveryService {
     log.info('Starting AI discovery for:', projectPath)
 
     // Check if the CLI tool is available
-    const isAvailable = await isCommandAvailable(cliTool)
+    const isAvailable = await this.commandChecker.isAvailable(cliTool)
     if (!isAvailable) {
       log.error(`${cliTool} CLI not found in PATH`)
       onProgress?.({ projectPath, step: 'error', message: `${cliTool} CLI not found. Install it first.` })
@@ -314,17 +375,17 @@ export class DiscoveryService {
     // Result file for reliable JSON output (more reliable than parsing TUI)
     const resultDir = path.join(projectPath, '.simple-local')
     const resultFile = path.join(resultDir, 'discovery-result.json')
-    await fs.mkdir(resultDir, { recursive: true })
+    await this.fs.mkdir(resultDir, { recursive: true })
 
     // Clean up any previous result
     try {
-      await fs.unlink(resultFile)
+      await this.fs.unlink(resultFile)
     } catch {
       // File doesn't exist, that's fine
     }
 
     const prompt = this.buildDiscoveryPrompt(scanResult, resultFile)
-    const terminal = new AgentTerminal()
+    const terminal = this.agentTerminalFactory.create()
     const subscriptions: { unsubscribe: () => void }[] = []
 
     try {
@@ -380,7 +441,7 @@ export class DiscoveryService {
 
       // Read result from file (more reliable than parsing TUI output)
       try {
-        const resultContent = await fs.readFile(resultFile, 'utf-8')
+        const resultContent = await this.fs.readFile(resultFile, 'utf-8')
         const parsed = JSON.parse(resultContent)
         log.info('Parsed result:', JSON.stringify(parsed, null, 2))
 
