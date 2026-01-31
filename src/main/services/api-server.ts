@@ -1,9 +1,27 @@
-import { createServer } from 'http'
+import { createServer, ServerResponse } from 'http'
 import type { RegistryService } from './registry'
 import type { ContainerService } from './container'
 import type { ProjectConfigService } from './project-config'
 import { McpHandler } from './mcp-handler'
 import { getServiceStatus } from './service-status'
+import {
+  findProject,
+  tryGetProjectContext,
+  tryGetServiceContext,
+  type ServiceLookupError
+} from './service-lookup'
+
+/** Map lookup errors to HTTP error response */
+function sendLookupError(res: ServerResponse, error: ServiceLookupError): void {
+  const errorMap: Record<ServiceLookupError, { message: string; code: string }> = {
+    PROJECT_NOT_FOUND: { message: 'Project not found', code: 'NOT_FOUND' },
+    CONFIG_NOT_FOUND: { message: 'Project config not found', code: 'NOT_FOUND' },
+    SERVICE_NOT_FOUND: { message: 'Service not found', code: 'NOT_FOUND' },
+  }
+  const { message, code } = errorMap[error]
+  res.writeHead(404)
+  res.end(JSON.stringify({ error: message, code }))
+}
 
 export interface ApiServerOptions {
   port: number
@@ -30,44 +48,38 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       return projects.map(p => ({ id: p.id, name: p.name, path: p.path, status: p.status }))
     },
     getProject: async (projectId) => {
-      const { projects } = registry.getRegistry()
-      const project = projects.find(p => p.id === projectId)
-      return project ? { id: project.id, name: project.name, path: project.path, status: project.status } : null
+      const project = findProject(registry, projectId)
+      return project ? { id: project.id, name: project.name, path: project.path, status: 'ready' as const } : null
     },
     listServices: async (projectId) => {
-      const { projects } = registry.getRegistry()
-      const project = projects.find(p => p.id === projectId)
-      if (!project) return []
-      const projectConfig = await config.loadConfig(project.path)
-      if (!projectConfig) return []
+      const result = await tryGetProjectContext(registry, config, projectId)
+      if (!result.success) return []
+      const { projectConfig } = result.data
       return Promise.all(projectConfig.services.map(async (s) => {
         const status = await getServiceStatus(container, s, projectConfig.name)
         return { id: s.id, name: s.name, port: s.port, mode: s.mode, status }
       }))
     },
     getServiceStatus: async (projectId, serviceId) => {
-      const { projects } = registry.getRegistry()
-      const project = projects.find(p => p.id === projectId)
-      if (!project) return null
-      const projectConfig = await config.loadConfig(project.path)
-      if (!projectConfig) return null
-      const service = projectConfig.services.find(s => s.id === serviceId)
-      if (!service) return null
+      const result = await tryGetServiceContext(registry, config, projectId, serviceId)
+      if (!result.success) return null
+      const { projectConfig, service } = result.data
       const status = await getServiceStatus(container, service, projectConfig.name)
       return { id: service.id, name: service.name, port: service.port, status }
     },
     getLogs: async (projectId, serviceId) => options.getLogBuffer?.(projectId, serviceId) ?? [],
     startService: async (projectId, serviceId, mode) => {
-      const { projects } = registry.getRegistry()
-      const project = projects.find(p => p.id === projectId)
-      if (!project) throw new Error('Project not found')
+      const result = await tryGetServiceContext(registry, config, projectId, serviceId)
+      if (!result.success) {
+        const errorMessages: Record<typeof result.error, string> = {
+          PROJECT_NOT_FOUND: 'Project not found',
+          CONFIG_NOT_FOUND: 'Project config not found',
+          SERVICE_NOT_FOUND: 'Service not found',
+        }
+        throw new Error(errorMessages[result.error])
+      }
 
-      const projectConfig = await config.loadConfig(project.path)
-      if (!projectConfig) throw new Error('Project config not found')
-
-      const service = projectConfig.services.find(s => s.id === serviceId)
-      if (!service) throw new Error('Service not found')
-
+      const { projectConfig, service } = result.data
       const currentMode = service.mode
       const targetMode = mode || currentMode
 
@@ -115,12 +127,13 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const projectMatch = url.pathname.match(/^\/projects\/([^/]+)$/)
       if (req.method === 'GET' && projectMatch) {
         const projectId = projectMatch[1]
+        // Note: Using raw registry lookup here since we need portRange/debugPortRange
+        // which are not included in the Project type from service-lookup
         const { projects } = registry.getRegistry()
         const project = projects.find(p => p.id === projectId)
 
         if (!project) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          sendLookupError(res, 'PROJECT_NOT_FOUND')
           return
         }
 
@@ -142,22 +155,20 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const servicesMatch = url.pathname.match(/^\/projects\/([^/]+)\/services$/)
       if (req.method === 'GET' && servicesMatch) {
         const projectId = servicesMatch[1]
-        const { projects } = registry.getRegistry()
-        const project = projects.find(p => p.id === projectId)
+        const result = await tryGetProjectContext(registry, config, projectId)
 
-        if (!project) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
-          return
-        }
-
-        const projectConfig = await config.loadConfig(project.path)
-        if (!projectConfig) {
+        if (!result.success) {
+          if (result.error === 'PROJECT_NOT_FOUND') {
+            sendLookupError(res, result.error)
+            return
+          }
+          // CONFIG_NOT_FOUND: return empty services array (matches previous behavior)
           res.writeHead(200)
           res.end(JSON.stringify({ services: [] }))
           return
         }
 
+        const { projectConfig } = result.data
         const services = await Promise.all(
           projectConfig.services.map(async (service) => {
             const status = await getServiceStatus(container, service, projectConfig.name)
@@ -180,29 +191,14 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const serviceMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)$/)
       if (req.method === 'GET' && serviceMatch) {
         const [, projectId, serviceId] = serviceMatch
-        const { projects } = registry.getRegistry()
-        const project = projects.find(p => p.id === projectId)
+        const result = await tryGetServiceContext(registry, config, projectId, serviceId)
 
-        if (!project) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+        if (!result.success) {
+          sendLookupError(res, result.error)
           return
         }
 
-        const projectConfig = await config.loadConfig(project.path)
-        if (!projectConfig) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
-          return
-        }
-
-        const service = projectConfig.services.find(s => s.id === serviceId)
-        if (!service) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
-          return
-        }
-
+        const { projectConfig, service } = result.data
         const status = await getServiceStatus(container, service, projectConfig.name)
 
         res.writeHead(200)
@@ -225,12 +221,10 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const logsMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/logs$/)
       if (req.method === 'GET' && logsMatch) {
         const [, projectId, serviceId] = logsMatch
-        const { projects } = registry.getRegistry()
-        const project = projects.find(p => p.id === projectId)
+        const project = findProject(registry, projectId)
 
         if (!project) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
+          sendLookupError(res, 'PROJECT_NOT_FOUND')
           return
         }
 
@@ -250,26 +244,10 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const startMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/start$/)
       if (req.method === 'POST' && startMatch) {
         const [, projectId, serviceId] = startMatch
-        const { projects } = registry.getRegistry()
-        const project = projects.find(p => p.id === projectId)
+        const result = await tryGetServiceContext(registry, config, projectId, serviceId)
 
-        if (!project) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
-          return
-        }
-
-        const projectConfig = await config.loadConfig(project.path)
-        if (!projectConfig) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
-          return
-        }
-
-        const service = projectConfig.services.find(s => s.id === serviceId)
-        if (!service) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
+        if (!result.success) {
+          sendLookupError(res, result.error)
           return
         }
 
@@ -288,25 +266,10 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const stopMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/stop$/)
       if (req.method === 'POST' && stopMatch) {
         const [, projectId, serviceId] = stopMatch
-        const { projects } = registry.getRegistry()
-        const project = projects.find(p => p.id === projectId)
+        const result = await tryGetServiceContext(registry, config, projectId, serviceId)
 
-        if (!project) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
-          return
-        }
-
-        const projectConfig = await config.loadConfig(project.path)
-        if (!projectConfig) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
-          return
-        }
-        const service = projectConfig.services.find(s => s.id === serviceId)
-        if (!service) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
+        if (!result.success) {
+          sendLookupError(res, result.error)
           return
         }
 
@@ -325,25 +288,10 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const restartMatch = url.pathname.match(/^\/projects\/([^/]+)\/services\/([^/]+)\/restart$/)
       if (req.method === 'POST' && restartMatch) {
         const [, projectId, serviceId] = restartMatch
-        const { projects } = registry.getRegistry()
-        const project = projects.find(p => p.id === projectId)
+        const result = await tryGetServiceContext(registry, config, projectId, serviceId)
 
-        if (!project) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project not found', code: 'NOT_FOUND' }))
-          return
-        }
-
-        const projectConfig = await config.loadConfig(project.path)
-        if (!projectConfig) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Project config not found', code: 'NOT_FOUND' }))
-          return
-        }
-        const service = projectConfig.services.find(s => s.id === serviceId)
-        if (!service) {
-          res.writeHead(404)
-          res.end(JSON.stringify({ error: 'Service not found', code: 'NOT_FOUND' }))
+        if (!result.success) {
+          sendLookupError(res, result.error)
           return
         }
 

@@ -3,7 +3,7 @@ import { ContainerService, applyContainerEnvOverrides } from '../services/contai
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
-import { getServiceContext } from '../services/service-lookup'
+import { getServiceContext, getProjectContext } from '../services/service-lookup'
 import { getServiceStatus } from '../services/service-status'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
 import type { DiscoveryProgress } from '../../shared/types'
@@ -121,49 +121,51 @@ export function setupServiceHandlers(
   })
 
   ipcMain.handle('service:status', async (_event, projectId: string) => {
-    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
-    if (!project) return []
+    try {
+      const { projectConfig } = await getProjectContext(registry, config, projectId)
 
-    const projectConfig = await config.loadConfig(project.path)
-    if (!projectConfig) return []
+      const statuses = await Promise.all(
+        projectConfig.services.map(async (service) => {
+          const status = await getServiceStatus(container, service, projectConfig.name)
+          return {
+            serviceId: service.id,
+            status,
+            containerId: service.mode === 'container'
+              ? container.getContainerName(projectConfig.name, service.id)
+              : undefined,
+          }
+        })
+      )
 
-    const statuses = await Promise.all(
-      projectConfig.services.map(async (service) => {
-        const status = await getServiceStatus(container, service, projectConfig.name)
-        return {
-          serviceId: service.id,
-          status,
-          containerId: service.mode === 'container'
-            ? container.getContainerName(projectConfig.name, service.id)
-            : undefined,
-        }
-      })
-    )
-
-    return statuses
+      return statuses
+    } catch {
+      // Return empty array if project or config not found (matches previous behavior)
+      return []
+    }
   })
 
   ipcMain.handle('service:logs:start', async (event, projectId: string, serviceId: string) => {
-    const project = registry.getRegistry().projects.find((p) => p.id === projectId)
-    if (!project) return
+    try {
+      const { projectConfig } = await getProjectContext(registry, config, projectId)
 
-    const projectConfig = await config.loadConfig(project.path)
-    if (!projectConfig) return
+      const containerName = container.getContainerName(projectConfig.name, serviceId)
+      const key = `${projectId}:${serviceId}`
 
-    const containerName = container.getContainerName(projectConfig.name, serviceId)
-    const key = `${projectId}:${serviceId}`
+      // Cleanup existing subscription
+      if (logCleanupFns.has(key)) {
+        logCleanupFns.get(key)?.()
+      }
 
-    // Cleanup existing subscription
-    if (logCleanupFns.has(key)) {
-      logCleanupFns.get(key)?.()
+      const cleanup = await container.streamLogs(containerName, (data) => {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        win?.webContents.send('service:logs:data', { projectId, serviceId, data })
+      })
+
+      logCleanupFns.set(key, cleanup)
+    } catch {
+      // Silently return if project or config not found (matches previous behavior)
+      return
     }
-
-    const cleanup = await container.streamLogs(containerName, (data) => {
-      const win = BrowserWindow.fromWebContents(event.sender)
-      win?.webContents.send('service:logs:data', { projectId, serviceId, data })
-    })
-
-    logCleanupFns.set(key, cleanup)
   })
 
   ipcMain.handle('service:logs:stop', (_event, projectId: string, serviceId: string) => {
