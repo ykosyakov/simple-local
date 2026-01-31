@@ -3,14 +3,12 @@ import { ContainerService, applyContainerEnvOverrides } from '../services/contai
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
+import { LogManager } from '../services/log-manager'
 import { getServiceContext, getProjectContext } from '../services/service-lookup'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
-import { createLogKey, matchesProject } from '../services/log-key'
 import type { DiscoveryProgress } from '../../shared/types'
-import { LOG_CONSTANTS } from '../../shared/constants'
 import { createLogger } from '../../shared/logger'
 
-const { MAX_LOG_LINES } = LOG_CONSTANTS
 const log = createLogger('IPC')
 
 /**
@@ -40,20 +38,9 @@ export function setupServiceHandlers(
   container: ContainerService,
   config: ProjectConfigService,
   discovery: DiscoveryService,
-  registry: RegistryService
+  registry: RegistryService,
+  logManager: LogManager = new LogManager()
 ): ServiceHandlersResult {
-  const logCleanupFns = new Map<string, () => void>()
-  const logBuffers = new Map<string, string[]>()
-
-  /** Append log data to buffer, trimming to MAX_LOG_LINES if exceeded */
-  const appendToLogBuffer = (key: string, data: string): void => {
-    const buffer = logBuffers.get(key) || []
-    buffer.push(data)
-    if (buffer.length > MAX_LOG_LINES) {
-      buffer.splice(0, buffer.length - MAX_LOG_LINES)
-    }
-    logBuffers.set(key, buffer)
-  }
 
   ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
     const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
@@ -66,8 +53,7 @@ export function setupServiceHandlers(
     const servicePath = `${project.path}/${service.path}`
 
     const sendLog = (data: string) => {
-      const key = createLogKey(projectId, serviceId)
-      appendToLogBuffer(key, data)
+      logManager.appendLog(projectId, serviceId, data)
 
       const win = BrowserWindow.fromWebContents(event.sender)
       win?.webContents.send('service:logs:data', { projectId, serviceId, data })
@@ -165,19 +151,14 @@ export function setupServiceHandlers(
       const { projectConfig } = await getProjectContext(registry, config, projectId)
 
       const containerName = container.getContainerName(projectConfig.name, serviceId)
-      const key = createLogKey(projectId, serviceId)
-
-      // Cleanup existing subscription
-      if (logCleanupFns.has(key)) {
-        logCleanupFns.get(key)?.()
-      }
 
       const cleanup = await container.streamLogs(containerName, (data) => {
         const win = BrowserWindow.fromWebContents(event.sender)
         win?.webContents.send('service:logs:data', { projectId, serviceId, data })
       })
 
-      logCleanupFns.set(key, cleanup)
+      // registerCleanup will call existing cleanup if present
+      logManager.registerCleanup(projectId, serviceId, cleanup)
     } catch (err) {
       // Silently return if project or config not found (matches previous behavior)
       // Log unexpected errors that aren't lookup-related
@@ -189,19 +170,15 @@ export function setupServiceHandlers(
   })
 
   ipcMain.handle('service:logs:stop', (_event, projectId: string, serviceId: string) => {
-    const key = createLogKey(projectId, serviceId)
-    logCleanupFns.get(key)?.()
-    logCleanupFns.delete(key)
+    logManager.runCleanup(projectId, serviceId)
   })
 
   ipcMain.handle('service:logs:get', (_event, projectId: string, serviceId: string) => {
-    const key = createLogKey(projectId, serviceId)
-    return logBuffers.get(key) || []
+    return logManager.getBuffer(projectId, serviceId)
   })
 
   ipcMain.handle('service:logs:clear', (_event, projectId: string, serviceId: string) => {
-    const key = createLogKey(projectId, serviceId)
-    logBuffers.delete(key)
+    logManager.clearBuffer(projectId, serviceId)
   })
 
   ipcMain.handle('discovery:analyze', async (event, projectPath: string) => {
@@ -277,8 +254,7 @@ export function setupServiceHandlers(
   })
 
   const getLogBuffer = (projectId: string, serviceId: string): string[] => {
-    const key = createLogKey(projectId, serviceId)
-    return logBuffers.get(key) || []
+    return logManager.getBuffer(projectId, serviceId)
   }
 
   const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
@@ -292,9 +268,8 @@ export function setupServiceHandlers(
       ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
       : resolvedEnv
 
-    const key = createLogKey(projectId, serviceId)
     const sendLog = (data: string) => {
-      appendToLogBuffer(key, data)
+      logManager.appendLog(projectId, serviceId, data)
     }
 
     const sendStatus = (_status: string) => {}
@@ -337,13 +312,7 @@ export function setupServiceHandlers(
   }
 
   const cleanupProjectLogs = (projectId: string): void => {
-    for (const key of logBuffers.keys()) {
-      if (matchesProject(key, projectId)) {
-        logBuffers.delete(key)
-        logCleanupFns.get(key)?.()
-        logCleanupFns.delete(key)
-      }
-    }
+    logManager.cleanupProject(projectId)
   }
 
   return { getLogBuffer, startService, stopService, cleanupProjectLogs }
