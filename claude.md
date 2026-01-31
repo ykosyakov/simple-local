@@ -45,12 +45,13 @@ declare global {
     }
   }
 }
-export {}
+export {};
 ```
 
 Then import it in files that use the property:
+
 ```typescript
-import './electron-types'
+import "./electron-types";
 ```
 
 **Do NOT use** `declare module 'electron'` - it causes "Duplicate identifier 'App'" errors.
@@ -67,6 +68,6 @@ Tests use **Vitest**. Prefer lightweight mocking patterns:
 
 Avoid creating full mock classes when `vi.spyOn()` on a real instance suffices.
 
-## Additional Documentation
+## Additional Documentation (READ ONLY IF IMPLEMENT RELEVANT TASK)
 
 - [Design System](docs/design-system.md) - Colors, typography, CSS classes, and component patterns
