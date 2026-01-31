@@ -10,6 +10,15 @@ import type { DiscoveryProgress } from '../../shared/types'
 
 const MAX_LOG_LINES = 1000
 
+/**
+ * Check if an error is an expected lookup error (project/config/service not found).
+ * These are expected when data doesn't exist and we return graceful fallbacks.
+ */
+function isLookupError(error: Error): boolean {
+  const message = error.message.toLowerCase()
+  return message.includes('not found')
+}
+
 function buildDevcontainerPath(projectPath: string, serviceId: string): string {
   const safeServiceId = sanitizeServiceId(serviceId)
   const devcontainerPath = `${projectPath}/.simple-local/devcontainers/${safeServiceId}/devcontainer.json`
@@ -138,8 +147,12 @@ export function setupServiceHandlers(
       )
 
       return statuses
-    } catch {
+    } catch (err) {
       // Return empty array if project or config not found (matches previous behavior)
+      // Log unexpected errors that aren't lookup-related
+      if (err instanceof Error && !isLookupError(err)) {
+        console.error('[IPC] service:status unexpected error:', err)
+      }
       return []
     }
   })
@@ -162,8 +175,12 @@ export function setupServiceHandlers(
       })
 
       logCleanupFns.set(key, cleanup)
-    } catch {
+    } catch (err) {
       // Silently return if project or config not found (matches previous behavior)
+      // Log unexpected errors that aren't lookup-related
+      if (err instanceof Error && !isLookupError(err)) {
+        console.error('[IPC] service:logs:start unexpected error:', err)
+      }
       return
     }
   })

@@ -5,6 +5,20 @@ import { validatePort } from './validation'
 const exec = promisify(execCallback)
 
 /**
+ * Check if an error is expected during process kill operations.
+ * Expected errors include:
+ * - ESRCH: No such process (already exited)
+ * - Process not found patterns
+ */
+function isExpectedKillError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const message = error.message.toLowerCase()
+  return message.includes('esrch') ||
+    message.includes('no such process') ||
+    message.includes('not found')
+}
+
+/**
  * Manages port operations including checking for and killing processes on ports.
  * Extracted from ContainerService to follow Single Responsibility Principle.
  */
@@ -23,8 +37,11 @@ export class PortManager {
         for (const pid of pids) {
           try {
             execSync(`kill -9 ${pid}`)
-          } catch {
-            // Process may have already exited
+          } catch (err) {
+            // Process may have already exited - only log unexpected errors
+            if (!isExpectedKillError(err)) {
+              console.error(`[PortManager] Unexpected error killing PID ${pid}:`, err)
+            }
           }
         }
         return true
@@ -48,7 +65,12 @@ export class PortManager {
       if (result) {
         const pids = result.split('\n').filter(Boolean)
         await Promise.all(
-          pids.map((pid) => exec(`kill -9 ${pid}`).catch(() => {}))
+          pids.map((pid) => exec(`kill -9 ${pid}`).catch((err) => {
+            // Process may have already exited - only log unexpected errors
+            if (!isExpectedKillError(err)) {
+              console.error(`[PortManager] Unexpected error killing PID ${pid}:`, err)
+            }
+          }))
         )
         return true
       }

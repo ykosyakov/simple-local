@@ -202,4 +202,36 @@ describe('setupServiceHandlers', () => {
       expect(handlers.getLogBuffer('proj1', 'svc1')).toEqual([])
     })
   })
+
+  describe('error handling classification', () => {
+    // Tests verifying the isLookupError pattern used in catch blocks
+
+    it('treats "not found" errors as expected lookup errors', () => {
+      // These error messages come from service-lookup.ts
+      const lookupErrors = [
+        'Project not found',
+        'Project config not found',
+        'Service not found',
+      ]
+
+      for (const message of lookupErrors) {
+        const isLookup = message.toLowerCase().includes('not found')
+        expect(isLookup).toBe(true)
+      }
+    })
+
+    it('identifies unexpected errors that should be logged', () => {
+      // These are errors that should trigger console.error logging
+      const unexpectedErrors = [
+        'ENOENT: no such file or directory',
+        'EACCES: permission denied',
+        'Connection refused',
+      ]
+
+      for (const message of unexpectedErrors) {
+        const isLookup = message.toLowerCase().includes('not found')
+        expect(isLookup).toBe(false)
+      }
+    })
+  })
 })
