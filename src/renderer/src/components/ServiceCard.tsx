@@ -1,4 +1,4 @@
-import { Play, Square, RotateCcw, EyeOff } from 'lucide-react'
+import { Play, Square, RotateCcw, EyeOff, Wrench } from 'lucide-react'
 import type { Service, ServiceStatus } from '../../../shared/types'
 
 interface ServiceCardProps {
@@ -59,6 +59,7 @@ export function ServiceCard({
   const isBuilding = status === 'building'
   const isBusy = isRunning || isStarting || isBuilding
   const config = STATUS_CONFIG[status]
+  const isTool = service.type === 'tool'
 
   return (
     <div
@@ -94,8 +95,20 @@ export function ServiceCard({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="port-display">:{service.port}</span>
-          {onModeChange && (
+          {isTool && (
+            <span
+              className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+              style={{
+                background: 'var(--bg-deep)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-muted)',
+              }}
+            >
+              Tool
+            </span>
+          )}
+          {service.port && <span className="port-display">:{service.port}</span>}
+          {onModeChange && !isTool && (
             <select
               value={service.mode}
               onChange={(e) => onModeChange(e.target.value as 'native' | 'container')}
@@ -121,13 +134,14 @@ export function ServiceCard({
 
       {/* Service name */}
       <h3
-        className="mb-1 text-sm font-semibold leading-tight"
+        className="mb-1 flex items-center gap-2 text-sm font-semibold leading-tight"
         style={{
           fontFamily: 'var(--font-display)',
           color: 'var(--text-primary)',
         }}
         title={service.name}
       >
+        {isTool && <Wrench className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />}
         {service.name}
       </h3>
 
