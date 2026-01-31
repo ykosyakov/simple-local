@@ -26,7 +26,7 @@ export interface McpHandlerDeps {
     Array<{
       id: string;
       name: string;
-      port: number;
+      port?: number;
       mode: string;
       status: string;
     }>
@@ -37,7 +37,7 @@ export interface McpHandlerDeps {
   ) => Promise<{
     id: string;
     name: string;
-    port: number;
+    port?: number;
     status: string;
   } | null>;
   getLogs: (projectId: string, serviceId: string) => Promise<string[]>;
@@ -225,7 +225,7 @@ export class McpHandler {
                 services
                   .map(
                     (s) =>
-                      `- ${s.name} (${s.id}): ${s.status} on port ${s.port}`,
+                      `- ${s.name} (${s.id}): ${s.status}${s.port ? ` on port ${s.port}` : ''}`,
                   )
                   .join("\n");
             }
@@ -240,7 +240,7 @@ export class McpHandler {
             if (!service) {
               text = `Service '${args.serviceId}' not found.`;
             } else {
-              text = `Service: ${service.name}\nStatus: ${service.status}\nPort: ${service.port}`;
+              text = `Service: ${service.name}\nStatus: ${service.status}${service.port ? `\nPort: ${service.port}` : ''}`;
             }
             break;
           }

@@ -13,10 +13,11 @@ export interface Project {
 export interface Service {
   id: string
   name: string
+  type?: 'service' | 'tool'
   path: string
   command: string
   debugCommand?: string
-  port: number
+  port?: number
   debugPort?: number
   env: Record<string, string>
   dependsOn?: string[]

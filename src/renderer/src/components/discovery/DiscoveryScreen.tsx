@@ -202,7 +202,7 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
       {screenState === 'error' && (
         <ManualServiceForm
           existingNames={manualServices.map((s) => s.name)}
-          existingPorts={manualServices.map((s) => s.port)}
+          existingPorts={manualServices.map((s) => s.port).filter((p): p is number => p !== undefined)}
           onSubmit={handleManualSubmit}
           onCancel={onCancel}
           onRetry={runDiscovery}
