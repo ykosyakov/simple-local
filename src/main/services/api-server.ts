@@ -3,7 +3,6 @@ import type { RegistryService } from './registry'
 import type { ContainerService } from './container'
 import type { ProjectConfigService } from './project-config'
 import { McpHandler } from './mcp-handler'
-import { getServiceStatus } from './service-status'
 import {
   findProject,
   tryGetProjectContext,
@@ -139,7 +138,7 @@ async function handleListServices(ctx: RouteContext): Promise<void> {
   const { projectConfig } = result.data
   const services = await Promise.all(
     projectConfig.services.map(async (service) => {
-      const status = await getServiceStatus(container, service, projectConfig.name)
+      const status = await container.getServiceStatus(service, projectConfig.name)
       return {
         id: service.id,
         name: service.name,
@@ -166,7 +165,7 @@ async function handleGetService(ctx: RouteContext): Promise<void> {
   }
 
   const { projectConfig, service } = result.data
-  const status = await getServiceStatus(container, service, projectConfig.name)
+  const status = await container.getServiceStatus(service, projectConfig.name)
 
   sendJson(res, {
     service: {
@@ -356,7 +355,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       if (!result.success) return []
       const { projectConfig } = result.data
       return Promise.all(projectConfig.services.map(async (s) => {
-        const status = await getServiceStatus(container, s, projectConfig.name)
+        const status = await container.getServiceStatus(s, projectConfig.name)
         return { id: s.id, name: s.name, port: s.port, mode: s.mode, status }
       }))
     },
@@ -364,7 +363,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const result = await tryGetServiceContext(registry, config, projectId, serviceId)
       if (!result.success) return null
       const { projectConfig, service } = result.data
-      const status = await getServiceStatus(container, service, projectConfig.name)
+      const status = await container.getServiceStatus(service, projectConfig.name)
       return { id: service.id, name: service.name, port: service.port, status }
     },
     getLogs: async (projectId, serviceId) => options.getLogBuffer?.(projectId, serviceId) ?? [],
@@ -383,7 +382,7 @@ export async function createApiServer(options: ApiServerOptions): Promise<ApiSer
       const currentMode = service.mode
       const targetMode = mode || currentMode
 
-      const currentStatus = await getServiceStatus(container, service, projectConfig.name)
+      const currentStatus = await container.getServiceStatus(service, projectConfig.name)
       const isRunning = currentStatus === 'running'
 
       const needsRestart = isRunning && !!mode && mode !== currentMode

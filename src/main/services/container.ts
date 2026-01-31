@@ -2,7 +2,7 @@ import Docker from 'dockerode'
 import { spawn } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
-import type { ContainerEnvOverride, ServiceStatus } from '../../shared/types'
+import type { ContainerEnvOverride, Service, ServiceStatus } from '../../shared/types'
 import { NativeProcessManager } from './native-process-manager'
 import { PortManager } from './port-manager'
 
@@ -81,6 +81,17 @@ export class ContainerService extends EventEmitter {
     } catch {
       return 'stopped'
     }
+  }
+
+  /**
+   * Get the status of a service (native or container mode).
+   * This is the unified entry point for checking service status.
+   */
+  async getServiceStatus(service: Service, projectName: string): Promise<ServiceStatus['status']> {
+    if (service.mode === 'native') {
+      return this.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
+    }
+    return this.getContainerStatus(this.getContainerName(projectName, service.id))
   }
 
   buildDevcontainerCommand(

@@ -529,4 +529,118 @@ describe('ContainerService', () => {
       expect(onLog).not.toHaveBeenCalled()
     })
   })
+
+  describe('getServiceStatus', () => {
+    it('returns running for native service when process is running', async () => {
+      const { spawn } = await import('child_process')
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        pid: 12345,
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      // Start a native service first
+      containerService.startNativeService(
+        'test-service',
+        'npm run dev',
+        '/path',
+        {},
+        vi.fn(),
+        vi.fn()
+      )
+
+      const service = {
+        id: 'test-service',
+        name: 'Test Service',
+        mode: 'native' as const,
+        command: 'npm run dev',
+        path: '.',
+        port: 3000,
+        env: {},
+        active: true,
+      }
+
+      const status = await containerService.getServiceStatus(service, 'test-project')
+      expect(status).toBe('running')
+    })
+
+    it('returns stopped for native service when process is not running', async () => {
+      const service = {
+        id: 'nonexistent-service',
+        name: 'Test Service',
+        mode: 'native' as const,
+        command: 'npm run dev',
+        path: '.',
+        port: 3000,
+        env: {},
+        active: true,
+      }
+
+      const status = await containerService.getServiceStatus(service, 'test-project')
+      expect(status).toBe('stopped')
+    })
+
+    it('returns running for container service when container is running', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/simple-local-test-project-backend'], State: 'running' } as any,
+      ])
+
+      const service = {
+        id: 'backend',
+        name: 'Backend Service',
+        mode: 'container' as const,
+        command: 'npm start',
+        path: '.',
+        port: 4000,
+        env: {},
+        active: true,
+      }
+
+      const status = await containerService.getServiceStatus(service, 'test-project')
+      expect(status).toBe('running')
+    })
+
+    it('returns stopped for container service when container does not exist', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([])
+
+      const service = {
+        id: 'backend',
+        name: 'Backend Service',
+        mode: 'container' as const,
+        command: 'npm start',
+        path: '.',
+        port: 4000,
+        env: {},
+        active: true,
+      }
+
+      const status = await containerService.getServiceStatus(service, 'test-project')
+      expect(status).toBe('stopped')
+    })
+
+    it('returns starting for container service when container is starting', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/simple-local-test-project-api'], State: 'created' } as any,
+      ])
+
+      const service = {
+        id: 'api',
+        name: 'API Service',
+        mode: 'container' as const,
+        command: 'npm start',
+        path: '.',
+        port: 5000,
+        env: {},
+        active: true,
+      }
+
+      const status = await containerService.getServiceStatus(service, 'test-project')
+      expect(status).toBe('starting')
+    })
+  })
 })

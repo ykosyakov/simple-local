@@ -4,7 +4,6 @@ import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
 import { getServiceContext, getProjectContext } from '../services/service-lookup'
-import { getServiceStatus } from '../services/service-status'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
 import { createLogKey, matchesProject } from '../services/log-key'
 import type { DiscoveryProgress } from '../../shared/types'
@@ -139,7 +138,7 @@ export function setupServiceHandlers(
 
       const statuses = await Promise.all(
         projectConfig.services.map(async (service) => {
-          const status = await getServiceStatus(container, service, projectConfig.name)
+          const status = await container.getServiceStatus(service, projectConfig.name)
           return {
             serviceId: service.id,
             status,
