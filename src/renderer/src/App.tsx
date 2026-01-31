@@ -34,6 +34,7 @@ function App() {
   const [prerequisites, setPrerequisites] =
     useState<PrerequisitesResult | null>(null);
   const [isRechecking, setIsRechecking] = useState(false);
+  const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
 
   useEffect(() => {
     window.api.getRegistry().then(setRegistry);
@@ -50,6 +51,7 @@ function App() {
         setPrerequisites(prereqs);
 
         if (settings) {
+          setHasCompletedSetup(true);
           // Validate saved settings still work
           const savedRuntime = prereqs.runtimes.find(
             (r) => r.id === settings.containerRuntime.selected,
@@ -219,6 +221,11 @@ function App() {
 
   const handleSetupComplete = async (settings: AppSettings) => {
     await window.api.saveSettings(settings);
+    setHasCompletedSetup(true);
+    setAppState("ready");
+  };
+
+  const handleSettingsCancel = () => {
     setAppState("ready");
   };
 
@@ -260,6 +267,7 @@ function App() {
         onComplete={handleSetupComplete}
         onRecheck={handleRecheck}
         isRechecking={isRechecking}
+        onCancel={hasCompletedSetup ? handleSettingsCancel : undefined}
       />
     );
   }
@@ -272,7 +280,7 @@ function App() {
         onSelectProject={setSelectedProjectId}
         onAddProject={handleAddProject}
         onOpenSettings={() => {
-          /* TODO */
+          setAppState("setup");
         }}
         onDeleteProject={setProjectToDelete}
       />

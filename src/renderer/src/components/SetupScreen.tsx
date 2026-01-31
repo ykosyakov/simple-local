@@ -18,6 +18,7 @@ interface SetupScreenProps {
   onComplete: (settings: AppSettings) => void;
   onRecheck: () => void;
   isRechecking: boolean;
+  onCancel?: () => void;
 }
 
 export function SetupScreen({
@@ -25,6 +26,7 @@ export function SetupScreen({
   onComplete,
   onRecheck,
   isRechecking,
+  onCancel,
 }: SetupScreenProps) {
   const [selectedRuntime, setSelectedRuntime] =
     useState<ContainerRuntimeId | null>(() => {
@@ -84,7 +86,7 @@ export function SetupScreen({
                 color: "var(--text-primary)",
               }}
             >
-              Setup
+              {onCancel ? "Settings" : "Setup"}
             </h1>
             <p className="text-sm" style={{ color: "var(--text-muted)" }}>
               Configure your development environment
@@ -164,6 +166,11 @@ export function SetupScreen({
 
         {/* Actions */}
         <div className="flex justify-end gap-3">
+          {onCancel && (
+            <button onClick={onCancel} className="btn btn-ghost">
+              Cancel
+            </button>
+          )}
           <button
             onClick={onRecheck}
             disabled={isRechecking}
@@ -179,7 +186,7 @@ export function SetupScreen({
             disabled={!canContinue}
             className="btn btn-primary"
           >
-            Continue
+            {onCancel ? "Save" : "Continue"}
           </button>
         </div>
       </div>
