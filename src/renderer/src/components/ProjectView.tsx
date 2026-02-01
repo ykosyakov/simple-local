@@ -82,6 +82,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [isConfigEditorOpen, setIsConfigEditorOpen] = useState(false)
   const [reanalyzingService, setReanalyzingService] = useState<string | null>(null)
   const [extractingService, setExtractingService] = useState<Service | null>(null)
+  const [stoppingServices, setStoppingServices] = useState<Set<string>>(new Set())
 
   const loadConfig = useCallback(async () => {
     try {
@@ -148,7 +149,18 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   )
 
   const handleStop = useMemo(
-    () => createServiceAction('stop', (serviceId) => window.api.stopService(project.id, serviceId)),
+    () => createServiceAction('stop', async (serviceId) => {
+      setStoppingServices(prev => new Set(prev).add(serviceId))
+      try {
+        await window.api.stopService(project.id, serviceId)
+      } finally {
+        setStoppingServices(prev => {
+          const next = new Set(prev)
+          next.delete(serviceId)
+          return next
+        })
+      }
+    }),
     [createServiceAction, project.id]
   )
 
@@ -458,6 +470,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
             service={service}
             status={statuses.get(service.id) || 'stopped'}
             isSelected={selectedServiceId === service.id}
+            isStopping={stoppingServices.has(service.id)}
             onSelect={handleSelectService}
             onStart={handleStart}
             onStop={handleStop}

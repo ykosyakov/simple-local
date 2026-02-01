@@ -1,11 +1,12 @@
 import { memo } from 'react'
-import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle } from 'lucide-react'
+import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2 } from 'lucide-react'
 import type { Service, ServiceStatus } from '../../../shared/types'
 
 interface ServiceCardProps {
   service: Service
   status: ServiceStatus['status']
   isSelected: boolean
+  isStopping?: boolean
   onSelect: (serviceId: string) => void
   onStart: (serviceId: string) => void
   onStop: (serviceId: string) => void
@@ -49,6 +50,7 @@ export const ServiceCard = memo(function ServiceCard({
   service,
   status,
   isSelected,
+  isStopping = false,
   onSelect,
   onStart,
   onStop,
@@ -238,9 +240,14 @@ export const ServiceCard = memo(function ServiceCard({
               }}
               className="btn btn-danger flex-1"
               style={{ padding: '0.5rem' }}
+              disabled={isStopping}
             >
-              <Square className="h-4 w-4" />
-              Stop
+              {isStopping ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Square className="h-4 w-4" />
+              )}
+              {isStopping ? 'Stopping' : 'Stop'}
             </button>
             <button
               onClick={(e) => {
@@ -250,6 +257,7 @@ export const ServiceCard = memo(function ServiceCard({
               className="btn btn-ghost"
               style={{ padding: '0.5rem' }}
               title="Restart service"
+              disabled={isStopping}
             >
               <RotateCcw className="h-4 w-4" />
             </button>
