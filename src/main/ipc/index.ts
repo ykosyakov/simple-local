@@ -8,6 +8,7 @@ import { SettingsService } from '../services/settings'
 import { AgentTerminal } from '@agent-flow/agent-terminal'
 import { setupRegistryHandlers } from './registry-handlers'
 import { setupServiceHandlers } from './service-handlers'
+import { setupDiscoveryHandlers } from './discovery-handlers'
 import { setupPrerequisitesHandlers } from './prerequisites-handlers'
 import { setupAgentTerminalHandlers } from './agent-terminal-handlers'
 
@@ -35,9 +36,9 @@ export function setupIpcHandlers(): {
   const { getLogBuffer, startService, stopService, cleanupProjectLogs } = setupServiceHandlers(
     container,
     config,
-    discovery,
     registry
   )
+  setupDiscoveryHandlers(config, discovery, registry)
   setupRegistryHandlers(registry, {
     onProjectRemoved: cleanupProjectLogs,
   })

@@ -5,7 +5,6 @@ import {
 } from '../ipc/service-handlers'
 import { ContainerService } from '../services/container'
 import { ProjectConfigService } from '../services/project-config'
-import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
 
 // Mock electron
@@ -30,11 +29,6 @@ vi.mock('../services/project-config', () => ({
   ProjectConfigService: vi.fn(),
 }))
 
-// Mock discovery service
-vi.mock('../services/discovery', () => ({
-  DiscoveryService: vi.fn(),
-}))
-
 // Mock registry service
 vi.mock('../services/registry', () => ({
   RegistryService: vi.fn(),
@@ -48,7 +42,6 @@ vi.mock('../services/service-lookup', () => ({
 describe('setupServiceHandlers', () => {
   let mockContainer: Partial<ContainerService>
   let mockConfig: Partial<ProjectConfigService>
-  let mockDiscovery: Partial<DiscoveryService>
   let mockRegistry: Partial<RegistryService>
   let handlers: ServiceHandlersResult
 
@@ -76,12 +69,6 @@ describe('setupServiceHandlers', () => {
       saveDevcontainer: vi.fn(),
     }
 
-    mockDiscovery = {
-      runAIDiscovery: vi.fn(),
-      basicDiscovery: vi.fn(),
-      runEnvAnalysis: vi.fn(),
-    }
-
     mockRegistry = {
       getRegistry: vi.fn().mockReturnValue({ projects: [] }),
       addProject: vi.fn(),
@@ -91,7 +78,6 @@ describe('setupServiceHandlers', () => {
     handlers = setupServiceHandlers(
       mockContainer as ContainerService,
       mockConfig as ProjectConfigService,
-      mockDiscovery as DiscoveryService,
       mockRegistry as RegistryService
     )
   })
