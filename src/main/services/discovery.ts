@@ -458,17 +458,22 @@ export class DiscoveryService {
         usedIds.add(serviceId)
       }
 
-      // Always allocate ports from project range to prevent conflicts
+      // Port allocation differs between services and tools
       let allocatedPort: number | undefined
       let discoveredPort: number | undefined = s.port
+      let useOriginalPort = false
 
-      // Allocate port for services (always) and tools with ports
-      if (isService || s.port) {
+      if (isService) {
+        // Services always get allocated ports from project range
         allocatedPort = allocatePort(basePort, usedPorts)
         usedPorts.add(allocatedPort)
+      } else if (s.port) {
+        // Tools keep their discovered port (no remapping)
+        // They typically have fixed, well-known ports (Inngest: 8288, Redis: 6379, etc.)
+        useOriginalPort = true
       }
 
-      // Allocate debug ports from project's debug range
+      // Allocate debug ports from project's debug range (services only)
       let allocatedDebugPort: number | undefined
       let discoveredDebugPort: number | undefined = s.debugPort
 
@@ -477,6 +482,9 @@ export class DiscoveryService {
         usedDebugPorts.add(allocatedDebugPort)
       }
 
+      // For tools, use discovered port directly; for services, use allocated port
+      const effectivePort = useOriginalPort ? discoveredPort : allocatedPort
+
       return {
         id: serviceId,
         name: s.name || s.id || serviceId,
@@ -484,12 +492,13 @@ export class DiscoveryService {
         path: s.path,
         command: s.command,
         debugCommand: s.debugCommand,
-        port: allocatedPort,           // Use allocated port by default
-        debugPort: allocatedDebugPort, // Use allocated debug port by default
+        port: effectivePort,
+        debugPort: allocatedDebugPort,
         discoveredPort,
         allocatedPort,
         discoveredDebugPort,
         allocatedDebugPort,
+        useOriginalPort,
         env: s.env || {},
         dependsOn: s.dependsOn,
         devcontainer: isService ? `.simple-local/devcontainers/${serviceId}/devcontainer.json` : undefined,
@@ -575,6 +584,7 @@ export class DiscoveryService {
             allocatedPort,                   // Port from project range
             discoveredDebugPort: undefined,  // Not discovered from basic scan
             allocatedDebugPort,              // Debug port from project range
+            useOriginalPort: false,          // Services use allocated ports
             env: {},
             devcontainer: `.simple-local/devcontainers/${serviceId}/devcontainer.json`,
             active: true,

@@ -19,6 +19,11 @@ export interface Service {
   debugCommand?: string
   port?: number
   debugPort?: number
+  discoveredPort?: number      // Original port from AI discovery
+  allocatedPort?: number       // Port allocated from project range
+  discoveredDebugPort?: number // Original debug port from AI discovery
+  allocatedDebugPort?: number  // Debug port allocated from project range
+  useOriginalPort?: boolean    // When true, use discoveredPort instead of allocatedPort
   env: Record<string, string>
   dependsOn?: string[]
   active: boolean
