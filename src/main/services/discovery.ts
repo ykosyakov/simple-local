@@ -186,6 +186,29 @@ export function allocatePort(basePort: number, usedPorts: Set<number>): number {
   return port
 }
 
+/**
+ * Replaces hardcoded port references in a string with template syntax.
+ * Transforms localhost:PORT or 127.0.0.1:PORT to localhost:${services.serviceId.port}
+ * while preserving the rest of the URL structure (paths, query strings, etc).
+ * @internal Exported for testing
+ */
+export function replacePortReferences(
+  value: string,
+  portMapping: Map<number, string>
+): string {
+  return value.replace(
+    /(?:localhost|127\.0\.0\.1):(\d+)/g,
+    (match, portStr) => {
+      const port = parseInt(portStr, 10)
+      const serviceId = portMapping.get(port)
+      if (serviceId) {
+        return `localhost:\${services.${serviceId}.port}`
+      }
+      return match
+    }
+  )
+}
+
 const FRONTEND_FRAMEWORKS = new Set(['next', 'react', 'vue', 'vite', 'webpack', 'parcel'])
 const BACKEND_FRAMEWORKS = new Set(['express', 'fastify', 'nest', 'django', 'flask', 'rails', 'spring'])
 
@@ -363,7 +386,8 @@ export class DiscoveryService {
     projectPath: string,
     cliTool: AiAgentId = 'claude',
     onProgress?: (progress: DiscoveryProgress) => void,
-    basePort: number = 3000
+    basePort: number = 3000,
+    debugPortBase: number = 9200
   ): Promise<ProjectConfig | null> {
     log.info('Starting AI discovery for:', projectPath)
 
@@ -396,7 +420,7 @@ export class DiscoveryService {
     if (result.success && result.data) {
       log.info('Parsed result:', JSON.stringify(result.data, null, 2))
       onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
-      return this.convertToProjectConfig(result.data, projectPath, basePort)
+      return this.convertToProjectConfig(result.data, projectPath, basePort, debugPortBase)
     } else {
       log.error('AI discovery failed:', result.error)
       onProgress?.({ projectPath, step: 'error', message: result.error || 'AI discovery failed' })
@@ -407,16 +431,18 @@ export class DiscoveryService {
   private convertToProjectConfig(
     aiOutput: AIDiscoveryOutput,
     projectPath: string,
-    basePort: number = 3000
+    basePort: number = 3000,
+    debugPortBase: number = 9200
   ): ProjectConfig {
     const projectName = path.basename(projectPath)
     const usedIds = new Set<string>()
     const usedPorts = new Set<number>()
+    const usedDebugPorts = new Set<number>()
 
-    // First pass: collect explicitly defined IDs and ports
+    // First pass: collect explicitly defined IDs only
+    // Ports are now always allocated from project range, not from AI
     for (const s of aiOutput.services) {
       if (s.id) usedIds.add(s.id)
-      if (s.port) usedPorts.add(s.port)
     }
 
     const services: Service[] = aiOutput.services.map((s) => {
@@ -432,13 +458,23 @@ export class DiscoveryService {
         usedIds.add(serviceId)
       }
 
-      // Use provided port or allocate next available (for services only)
-      let port: number | undefined
-      if (s.port) {
-        port = s.port
-      } else if (isService) {
-        port = allocatePort(basePort, usedPorts)
-        usedPorts.add(port)
+      // Always allocate ports from project range to prevent conflicts
+      let allocatedPort: number | undefined
+      let discoveredPort: number | undefined = s.port
+
+      // Allocate port for services (always) and tools with ports
+      if (isService || s.port) {
+        allocatedPort = allocatePort(basePort, usedPorts)
+        usedPorts.add(allocatedPort)
+      }
+
+      // Allocate debug ports from project's debug range
+      let allocatedDebugPort: number | undefined
+      let discoveredDebugPort: number | undefined = s.debugPort
+
+      if (isService && (s.debugPort || s.debugCommand)) {
+        allocatedDebugPort = allocatePort(debugPortBase, usedDebugPorts)
+        usedDebugPorts.add(allocatedDebugPort)
       }
 
       return {
@@ -448,8 +484,12 @@ export class DiscoveryService {
         path: s.path,
         command: s.command,
         debugCommand: s.debugCommand,
-        port,
-        debugPort: s.debugPort,
+        port: allocatedPort,           // Use allocated port by default
+        debugPort: allocatedDebugPort, // Use allocated debug port by default
+        discoveredPort,
+        allocatedPort,
+        discoveredDebugPort,
+        allocatedDebugPort,
         env: s.env || {},
         dependsOn: s.dependsOn,
         devcontainer: isService ? `.simple-local/devcontainers/${serviceId}/devcontainer.json` : undefined,
@@ -459,12 +499,28 @@ export class DiscoveryService {
       }
     })
 
-    // Apply connections as env var references
+    // Build discoveredPort → serviceId mapping for template conversion
+    const portMapping = new Map<number, string>()
+    for (const service of services) {
+      if (service.discoveredPort) {
+        portMapping.set(service.discoveredPort, service.id)
+      }
+    }
+
+    // Replace hardcoded ports with template references in all env vars
+    // This preserves the full URL structure (paths, query strings, etc.)
+    for (const service of services) {
+      for (const [key, value] of Object.entries(service.env)) {
+        service.env[key] = replacePortReferences(value, portMapping)
+      }
+    }
+
+    // Apply connections as env var references (only if envVar not already set)
     for (const conn of aiOutput.connections || []) {
       const fromService = services.find((s) => s.id === conn.from)
       const toService = services.find((s) => s.id === conn.to)
 
-      if (fromService && toService && conn.envVar) {
+      if (fromService && toService && conn.envVar && !fromService.env[conn.envVar]) {
         fromService.env[conn.envVar] = `http://localhost:\${services.${conn.to}.port}`
       }
     }
@@ -476,14 +532,19 @@ export class DiscoveryService {
   }
 
   // Fallback: Basic discovery without AI
-  async basicDiscovery(projectPath: string, basePort: number = 3000): Promise<ProjectConfig> {
+  async basicDiscovery(
+    projectPath: string,
+    basePort: number = 3000,
+    debugPortBase: number = 9200
+  ): Promise<ProjectConfig> {
     log.info('Starting basic discovery for:', projectPath)
 
     const scanResult = await this.scanProjectStructure(projectPath)
     log.info('Basic scan found:', scanResult.packageJsonPaths.length, 'package.json files')
 
     const services: Service[] = []
-    let portOffset = 0
+    const usedPorts = new Set<number>()
+    const usedDebugPorts = new Set<number>()
 
     for (const pkgPath of scanResult.packageJsonPaths) {
       try {
@@ -494,18 +555,31 @@ export class DiscoveryService {
 
         if (info.devScript) {
           const serviceId = info.name.toLowerCase().replace(/[^a-z0-9]/g, '-')
+
+          // Always allocate ports from project range
+          const allocatedPort = allocatePort(basePort, usedPorts)
+          usedPorts.add(allocatedPort)
+
+          // Allocate debug port from project's debug range
+          const allocatedDebugPort = allocatePort(debugPortBase, usedDebugPorts)
+          usedDebugPorts.add(allocatedDebugPort)
+
           services.push({
             id: serviceId,
             name: info.name,
             path: relativePath || '.',
             command: info.devScript.includes('bun') ? `bun run dev` : `npm run dev`,
-            port: info.port || basePort + portOffset,
+            port: allocatedPort,
+            debugPort: allocatedDebugPort,
+            discoveredPort: info.port,       // Original port from package.json
+            allocatedPort,                   // Port from project range
+            discoveredDebugPort: undefined,  // Not discovered from basic scan
+            allocatedDebugPort,              // Debug port from project range
             env: {},
             devcontainer: `.simple-local/devcontainers/${serviceId}/devcontainer.json`,
             active: true,
             mode: getDefaultMode(info.framework),
           })
-          portOffset++
         }
       } catch (err) {
         log.error('Failed to parse:', pkgPath, err)

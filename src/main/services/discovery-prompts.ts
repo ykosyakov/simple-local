@@ -177,11 +177,39 @@ Only include tools that:
 - Are actually used by this project (config files exist)
 - Don't duplicate already-discovered services
 
+## Step 3: Capture Environment Variables with Port References
+For each service, find env vars containing localhost:PORT or 127.0.0.1:PORT.
+
+Sources to check:
+- .env files (.env, .env.local, .env.development, .env.example)
+- Config files (next.config.js, vite.config.ts, nuxt.config.ts, etc.)
+- Setup scripts (docker-compose.yml environment sections)
+- Code that reads process.env with port-containing values
+
+IMPORTANT: Only include env vars that are ACTUALLY USED by the service:
+- Check if the var is referenced in config files
+- Check if it appears in process.env.VAR_NAME patterns in code
+- Skip vars that exist in .env but aren't used anywhere
+
+For each confirmed env var:
+1. Add the variable and its FULL value to that service's "env" field
+2. Identify which discovered service owns that port
+3. Add a connection entry
+
+Example: If frontend/.env has API_URL=http://localhost:3000/api/v1 and:
+- next.config.js references process.env.API_URL
+- Backend service runs on port 3000
+
+Then:
+- Add to frontend service: "env": { "API_URL": "http://localhost:3000/api/v1" }
+- Add connection: { "from": "frontend", "to": "backend", "envVar": "API_URL" }
+
 ## Field notes:
 - "type": "service" for your code, "tool" for 3rd party tools
 - "command": Primary run command (required)
 - "port": Application port (optional for tools that don't expose ports)
 - "dependsOn": Tools can depend on services (e.g., inngest depends on backend)
+- "env": Environment variables with port references (captured in Step 3)
 
 Only include services/tools with runnable commands.`
 
