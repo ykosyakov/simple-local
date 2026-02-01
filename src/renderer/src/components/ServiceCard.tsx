@@ -12,6 +12,7 @@ interface ServiceCardProps {
   onRestart: (serviceId: string) => void
   onHide?: (serviceId: string) => void
   onModeChange?: (serviceId: string, mode: 'native' | 'container') => void
+  onPortToggle?: (serviceId: string) => void
   index?: number
 }
 
@@ -53,6 +54,7 @@ export const ServiceCard = memo(function ServiceCard({
   onRestart,
   onHide,
   onModeChange,
+  onPortToggle,
   index = 0,
 }: ServiceCardProps) {
   const isRunning = status === 'running'
@@ -61,6 +63,13 @@ export const ServiceCard = memo(function ServiceCard({
   const isBusy = isRunning || isStarting || isBuilding
   const config = STATUS_CONFIG[status]
   const isTool = service.type === 'tool'
+
+  // Port toggle is available when both ports exist and differ
+  const canTogglePort = service.discoveredPort && service.allocatedPort &&
+    service.discoveredPort !== service.allocatedPort
+  const isUsingOriginalPort = service.useOriginalPort ?? false
+  const activePort = service.port
+  const inactivePort = isUsingOriginalPort ? service.allocatedPort : service.discoveredPort
 
   return (
     <div
@@ -108,7 +117,29 @@ export const ServiceCard = memo(function ServiceCard({
               Tool
             </span>
           )}
-          {service.port && <span className="port-display">:{service.port}</span>}
+          {service.port && (
+            canTogglePort && onPortToggle ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onPortToggle(service.id)
+                }}
+                className="port-display"
+                style={{
+                  cursor: 'pointer',
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                }}
+                title={`Click to switch to port ${inactivePort}`}
+              >
+                :{activePort}
+                <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}> ← {inactivePort}</span>
+              </button>
+            ) : (
+              <span className="port-display">:{service.port}</span>
+            )
+          )}
           {onModeChange && !isTool && (
             <select
               value={service.mode}

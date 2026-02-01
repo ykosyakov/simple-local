@@ -10,6 +10,21 @@ import { createLogger } from '../../../shared/logger'
 
 const log = createLogger('ProjectView')
 
+/**
+ * Finds services that depend on a given service's port via env var templates.
+ * Looks for patterns like ${services.serviceId.port} in env values.
+ */
+function findDependentServices(
+  services: ProjectConfig['services'],
+  targetServiceId: string
+): ProjectConfig['services'][number][] {
+  const pattern = `\${services.${targetServiceId}.port}`
+  return services.filter(s =>
+    s.id !== targetServiceId &&
+    Object.values(s.env).some(value => value.includes(pattern))
+  )
+}
+
 interface ProjectViewProps {
   project: Project
   onRerunDiscovery?: () => void
@@ -184,6 +199,65 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       })(serviceId)
     },
     [createConfigAction, project.path]
+  )
+
+  const handlePortToggle = useCallback(
+    async (serviceId: string) => {
+      const currentConfig = configRef.current
+      if (!currentConfig) return
+
+      const service = currentConfig.services.find(s => s.id === serviceId)
+      if (!service || !service.discoveredPort || !service.allocatedPort) return
+
+      const newUseOriginalPort = !service.useOriginalPort
+      const newPort = newUseOriginalPort ? service.discoveredPort : service.allocatedPort
+
+      // Find services that depend on this service's port
+      const dependentServices = findDependentServices(currentConfig.services, serviceId)
+      const runningDependents = dependentServices.filter(s => statuses.get(s.id) === 'running')
+      const isServiceRunning = statuses.get(serviceId) === 'running'
+
+      // Build list of services that need restart
+      const servicesToRestart = [
+        ...(isServiceRunning ? [service] : []),
+        ...runningDependents
+      ]
+
+      // If there are running services affected, prompt user
+      if (servicesToRestart.length > 0) {
+        const serviceNames = servicesToRestart.map(s => s.name).join(', ')
+        const confirmed = window.confirm(
+          `Changing port will affect running services:\n${serviceNames}\n\nRestart them now?`
+        )
+        if (!confirmed) return
+      }
+
+      try {
+        setActionError(null)
+
+        // Update config with new port setting
+        const updatedServices = currentConfig.services.map((s) =>
+          s.id === serviceId ? { ...s, useOriginalPort: newUseOriginalPort, port: newPort } : s
+        )
+        const updatedConfig = { ...currentConfig, services: updatedServices }
+        await window.api.saveProjectConfig(project.path, updatedConfig)
+
+        // Reload config to reflect changes
+        await loadConfig()
+
+        // Restart affected services
+        for (const s of servicesToRestart) {
+          await window.api.stopService(project.id, s.id)
+          await window.api.startService(project.id, s.id)
+        }
+
+        await refreshStatuses()
+      } catch (err) {
+        log.error('Failed to toggle port:', err)
+        setActionError(`Failed to toggle port: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      }
+    },
+    [project.path, project.id, statuses, loadConfig, refreshStatuses]
   )
 
   const handleSaveConfig = async (updatedConfig: ProjectConfig) => {
@@ -381,6 +455,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
             onRestart={handleRestart}
             onHide={handleHideService}
             onModeChange={handleModeChange}
+            onPortToggle={handlePortToggle}
             index={index}
           />
         ))}
