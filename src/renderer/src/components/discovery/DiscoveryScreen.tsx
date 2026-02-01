@@ -181,7 +181,13 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
             <ul className="mt-2 space-y-1">
               {discoveredServices.map((s) => (
                 <li key={s.id} className="text-sm" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                  {s.name} <span style={{ color: 'var(--text-muted)' }}>:{s.port}</span>
+                  {s.name}{' '}
+                  <span style={{ color: 'var(--text-muted)' }}>
+                    :{s.port}
+                    {s.discoveredPort && s.discoveredPort !== s.port && (
+                      <span style={{ color: 'var(--text-muted)', opacity: 0.7 }}> ← {s.discoveredPort}</span>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>

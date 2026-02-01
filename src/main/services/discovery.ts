@@ -2,7 +2,7 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import type { ProjectConfig, Service, DiscoveryProgress, ContainerEnvOverride } from '../../shared/types'
+import type { ProjectConfig, Service, DiscoveryProgress, ContainerEnvOverride, HardcodedPort } from '../../shared/types'
 import { AgentTerminal } from '@agent-flow/agent-terminal'
 import type { AiAgentId } from '@agent-flow/agent-terminal'
 import { createLogger } from '../../shared/logger'
@@ -207,6 +207,40 @@ export function replacePortReferences(
       return match
     }
   )
+}
+
+/**
+ * Detects hardcoded port in a command string.
+ * Returns undefined if the port uses env var syntax.
+ * @internal Exported for testing
+ */
+export function detectHardcodedPort(command: string): HardcodedPort | undefined {
+  // Skip if using env var syntax
+  if (/\$\{?PORT/.test(command) || /\$PORT/.test(command)) {
+    return undefined
+  }
+
+  // Match -p PORT or -p=PORT
+  const shortMatch = command.match(/-p[=\s]+(\d+)/)
+  if (shortMatch) {
+    return {
+      value: parseInt(shortMatch[1], 10),
+      source: 'command-flag',
+      flag: '-p',
+    }
+  }
+
+  // Match --port PORT or --port=PORT
+  const longMatch = command.match(/--port[=\s]+(\d+)/)
+  if (longMatch) {
+    return {
+      value: parseInt(longMatch[1], 10),
+      source: 'command-flag',
+      flag: '--port',
+    }
+  }
+
+  return undefined
 }
 
 const FRONTEND_FRAMEWORKS = new Set(['next', 'react', 'vue', 'vite', 'webpack', 'parcel'])
@@ -485,6 +519,9 @@ export class DiscoveryService {
       // For tools, use discovered port directly; for services, use allocated port
       const effectivePort = useOriginalPort ? discoveredPort : allocatedPort
 
+      // Detect hardcoded port in command
+      const hardcodedPort = detectHardcodedPort(s.command)
+
       return {
         id: serviceId,
         name: s.name || s.id || serviceId,
@@ -505,6 +542,7 @@ export class DiscoveryService {
         active: true,
         mode: isService ? getDefaultMode(s.framework || s.type) : 'native',
         containerEnvOverrides: s.containerEnvOverrides || [],
+        hardcodedPort,
       }
     })
 

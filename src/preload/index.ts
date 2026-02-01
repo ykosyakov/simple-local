@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride, PortExtractionResult } from '../shared/types'
 
 const api = {
   // Registry
@@ -67,6 +67,25 @@ const api = {
     ipcRenderer.invoke('settings:get'),
   saveSettings: (settings: AppSettings): Promise<void> =>
     ipcRenderer.invoke('settings:save', settings),
+
+  // Port extraction
+  ports: {
+    extractAnalyze: (projectId: string, serviceId: string): Promise<PortExtractionResult | null> =>
+      ipcRenderer.invoke('ports:extract:analyze', projectId, serviceId),
+    extractApply: (
+      projectId: string,
+      serviceId: string,
+      changes: PortExtractionResult,
+      options: { commit: boolean }
+    ): Promise<{ success: boolean; error?: string }> =>
+      ipcRenderer.invoke('ports:extract:apply', projectId, serviceId, changes, options),
+    onExtractProgress: (callback: (data: { serviceId: string; message: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { serviceId: string; message: string }) =>
+        callback(data)
+      ipcRenderer.on('ports:extract:progress', handler)
+      return () => ipcRenderer.removeListener('ports:extract:progress', handler)
+    },
+  },
 
   // Agent Terminal
   agentTerminal: {

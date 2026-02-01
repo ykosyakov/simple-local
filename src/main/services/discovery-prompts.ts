@@ -213,6 +213,65 @@ Then:
 
 Only include services/tools with runnable commands.`
 
+/**
+ * Template for port extraction prompt.
+ * Placeholders:
+ * - {{SERVICE_NAME}} - Display name of the service
+ * - {{SERVICE_PATH}} - Full path to service directory
+ * - {{COMMAND}} - Current start command
+ * - {{PORT}} - The hardcoded port value
+ * - {{RESULT_FILE}} - Path where agent should write results
+ */
+export const PORT_EXTRACTION_TEMPLATE = `Extract hardcoded port {{PORT}} to a PORT environment variable.
+
+Service: {{SERVICE_NAME}}
+Directory: {{SERVICE_PATH}}
+Current command: {{COMMAND}}
+Hardcoded port: {{PORT}}
+
+Tasks:
+1. Find all references to port {{PORT}} in this service's directory
+2. Transform each reference to use the PORT env var with {{PORT}} as default
+3. Add PORT={{PORT}} to .env file if not already present
+
+Files to check:
+- package.json (scripts section)
+- *.config.{js,ts,mjs} files (next.config.js, vite.config.ts, etc.)
+- docker-compose.yml, Dockerfile if present
+- .env, .env.local, .env.development, .env.example
+
+IMPORTANT: Write your result to this exact file: {{RESULT_FILE}}
+
+Use the Write tool to create the file with this JSON format:
+{
+  "changes": [
+    {
+      "file": "package.json",
+      "description": "Update dev script to use PORT env var",
+      "before": "next dev -p {{PORT}}",
+      "after": "next dev -p \${PORT:-{{PORT}}}"
+    }
+  ],
+  "envAdditions": {
+    "PORT": "{{PORT}}"
+  },
+  "warnings": []
+}
+
+Transformation rules:
+- package.json scripts: -p {{PORT}} -> -p \${PORT:-{{PORT}}}
+- package.json scripts: --port {{PORT}} -> --port \${PORT:-{{PORT}}}
+- JS config files: port: {{PORT}} -> port: process.env.PORT || {{PORT}}
+- TS config files: port: {{PORT}} -> port: Number(process.env.PORT) || {{PORT}}
+- docker-compose.yml: "{{PORT}}:{{PORT}}" -> "\${PORT:-{{PORT}}}:\${PORT:-{{PORT}}}"
+
+Rules:
+- Always preserve the default value ({{PORT}})
+- Only transform references to port {{PORT}}, not other ports
+- If .env already has PORT, don't add it to envAdditions
+- If uncertain about a transformation, add to warnings instead of guessing
+- If no changes needed, return empty changes array`
+
 // ====================
 // Builder functions
 // ====================
@@ -260,4 +319,27 @@ export function buildDiscoveryPrompt(options: DiscoveryPromptOptions): string {
     .replace('{{MAKEFILES}}', formatPathList(scanResult.makefilePaths))
     .replace('{{TOOL_CONFIGS}}', formatPathList(scanResult.toolConfigPaths))
     .replace('{{RESULT_FILE}}', sanitizePath(resultFilePath))
+}
+
+export interface PortExtractionPromptOptions {
+  serviceName: string
+  servicePath: string
+  command: string
+  port: number
+  resultFilePath: string
+}
+
+/**
+ * Builds the port extraction prompt for a service.
+ */
+export function buildPortExtractionPrompt(options: PortExtractionPromptOptions): string {
+  const { serviceName, servicePath, command, port, resultFilePath } = options
+  const portStr = String(port)
+
+  return PORT_EXTRACTION_TEMPLATE
+    .replace(/\{\{SERVICE_NAME\}\}/g, serviceName)
+    .replace(/\{\{SERVICE_PATH\}\}/g, sanitizePath(servicePath))
+    .replace(/\{\{COMMAND\}\}/g, command)
+    .replace(/\{\{PORT\}\}/g, portStr)
+    .replace(/\{\{RESULT_FILE\}\}/g, sanitizePath(resultFilePath))
 }

@@ -5,12 +5,14 @@ import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { PrerequisitesService } from '../services/prerequisites'
 import { SettingsService } from '../services/settings'
+import { PortExtractionService } from '../services/port-extraction'
 import { AgentTerminal } from '@agent-flow/agent-terminal'
 import { setupRegistryHandlers } from './registry-handlers'
 import { setupServiceHandlers } from './service-handlers'
 import { setupDiscoveryHandlers } from './discovery-handlers'
 import { setupPrerequisitesHandlers } from './prerequisites-handlers'
 import { setupAgentTerminalHandlers } from './agent-terminal-handlers'
+import { setupPortExtractionHandlers } from './port-extraction-handlers'
 
 export function setupIpcHandlers(): {
   registry: RegistryService
@@ -31,6 +33,7 @@ export function setupIpcHandlers(): {
   const config = new ProjectConfigService()
   const discovery = new DiscoveryService()
   const prerequisites = new PrerequisitesService()
+  const portExtraction = new PortExtractionService({})
   const agentTerminal = new AgentTerminal()
 
   const { getLogBuffer, startService, stopService, cleanupProjectLogs } = setupServiceHandlers(
@@ -44,6 +47,7 @@ export function setupIpcHandlers(): {
   })
   setupPrerequisitesHandlers(prerequisites, settings, container)
   setupAgentTerminalHandlers(agentTerminal)
+  setupPortExtractionHandlers(portExtraction, config, registry)
 
   // Dialog handler for folder selection
   ipcMain.handle('dialog:selectFolder', async () => {

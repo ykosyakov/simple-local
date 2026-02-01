@@ -4,6 +4,7 @@ import {
   formatPathList,
   buildEnvAnalysisPrompt,
   buildDiscoveryPrompt,
+  buildPortExtractionPrompt,
   ENV_ANALYSIS_TEMPLATE,
   DISCOVERY_PROMPT_TEMPLATE,
 } from '../services/discovery-prompts'
@@ -235,6 +236,26 @@ describe('discovery-prompts', () => {
       expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{MAKEFILES}}')
       expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{TOOL_CONFIGS}}')
       expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{RESULT_FILE}}')
+    })
+  })
+
+  describe('buildPortExtractionPrompt', () => {
+    it('builds prompt with service details', () => {
+      const prompt = buildPortExtractionPrompt({
+        serviceName: 'Web Frontend',
+        servicePath: '/project/web',
+        command: 'next dev -p 3001',
+        port: 3001,
+        resultFilePath: '/project/.simple-local/port-extraction-web.json',
+      })
+
+      expect(prompt).toContain('Web Frontend')
+      expect(prompt).toContain('/project/web')
+      expect(prompt).toContain('3001')
+      expect(prompt).toContain('next dev -p 3001')
+      expect(prompt).toContain('port-extraction-web.json')
+      expect(prompt).toContain('PORT')
+      expect(prompt).toContain('${PORT:-3001}')
     })
   })
 })

@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { Play, Square, RotateCcw, EyeOff, Wrench } from 'lucide-react'
+import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle } from 'lucide-react'
 import type { Service, ServiceStatus } from '../../../shared/types'
 
 interface ServiceCardProps {
@@ -13,6 +13,7 @@ interface ServiceCardProps {
   onHide?: (serviceId: string) => void
   onModeChange?: (serviceId: string, mode: 'native' | 'container') => void
   onPortToggle?: (serviceId: string) => void
+  onExtractPort?: (serviceId: string) => void
   index?: number
 }
 
@@ -55,6 +56,7 @@ export const ServiceCard = memo(function ServiceCard({
   onHide,
   onModeChange,
   onPortToggle,
+  onExtractPort,
   index = 0,
 }: ServiceCardProps) {
   const isRunning = status === 'running'
@@ -139,6 +141,24 @@ export const ServiceCard = memo(function ServiceCard({
             ) : (
               <span className="port-display">:{service.port}</span>
             )
+          )}
+          {service.hardcodedPort && onExtractPort && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onExtractPort(service.id)
+              }}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
+              style={{
+                background: 'var(--status-warning-bg)',
+                border: '1px solid var(--status-warning)',
+                color: 'var(--status-warning)',
+              }}
+              title={`Port ${service.hardcodedPort.value} is hardcoded in command. Click to make configurable.`}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Hardcoded
+            </button>
           )}
           {onModeChange && !isTool && (
             <select

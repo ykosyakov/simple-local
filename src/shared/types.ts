@@ -30,6 +30,7 @@ export interface Service {
   mode: 'native' | 'container'
   devcontainer?: string
   containerEnvOverrides?: ContainerEnvOverride[]
+  hardcodedPort?: HardcodedPort
 }
 
 export interface ContainerEnvOverride {
@@ -38,6 +39,25 @@ export interface ContainerEnvOverride {
   containerValue: string
   reason: string
   enabled: boolean
+}
+
+export interface HardcodedPort {
+  value: number
+  source: 'command-flag' | 'config-file' | 'unknown'
+  flag?: string  // e.g., "-p", "--port"
+}
+
+export interface PortExtractionChange {
+  file: string
+  description: string
+  before: string
+  after: string
+}
+
+export interface PortExtractionResult {
+  changes: PortExtractionChange[]
+  envAdditions: Record<string, string>
+  warnings: string[]
 }
 
 export interface ProjectConfig {
@@ -80,6 +100,15 @@ export type IpcChannels = {
 
   // Discovery
   'discovery:analyze': (projectPath: string) => ProjectConfig
+
+  // Port extraction
+  'ports:extract:analyze': (projectId: string, serviceId: string) => PortExtractionResult | null
+  'ports:extract:apply': (
+    projectId: string,
+    serviceId: string,
+    changes: PortExtractionResult,
+    options: { commit: boolean }
+  ) => { success: boolean; error?: string }
 }
 
 export type DiscoveryStep = 'scanning' | 'ai-analysis' | 'processing' | 'complete' | 'error'

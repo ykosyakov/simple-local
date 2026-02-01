@@ -4,8 +4,9 @@ import { LogViewer } from './LogViewer'
 import { HiddenServices } from './project/HiddenServices'
 import { ConfigEditorModal } from './ConfigEditorModal'
 import { EnvOverridesPanel } from './EnvOverridesPanel'
+import { PortExtractionModal } from './PortExtractionModal'
 import { Server, Code2, RefreshCw } from 'lucide-react'
-import type { Project, ProjectConfig, ServiceStatus, ContainerEnvOverride } from '../../../shared/types'
+import type { Project, ProjectConfig, ServiceStatus, ContainerEnvOverride, Service } from '../../../shared/types'
 import { createLogger } from '../../../shared/logger'
 
 const log = createLogger('ProjectView')
@@ -80,6 +81,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [isConfigEditorOpen, setIsConfigEditorOpen] = useState(false)
   const [reanalyzingService, setReanalyzingService] = useState<string | null>(null)
+  const [extractingService, setExtractingService] = useState<Service | null>(null)
 
   const loadConfig = useCallback(async () => {
     try {
@@ -309,6 +311,13 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     }
   }
 
+  const handleExtractPort = useCallback((serviceId: string) => {
+    const service = config?.services.find(s => s.id === serviceId)
+    if (service) {
+      setExtractingService(service)
+    }
+  }, [config?.services])
+
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
 
   if (configError) {
@@ -456,6 +465,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
             onHide={handleHideService}
             onModeChange={handleModeChange}
             onPortToggle={handlePortToggle}
+            onExtractPort={handleExtractPort}
             index={index}
           />
         ))}
@@ -495,6 +505,18 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         onClose={() => setIsConfigEditorOpen(false)}
         onSave={handleSaveConfig}
       />
+
+      {/* Port Extraction Modal */}
+      {extractingService && (
+        <PortExtractionModal
+          projectId={project.id}
+          service={extractingService}
+          onClose={() => setExtractingService(null)}
+          onSuccess={() => {
+            loadConfig()
+          }}
+        />
+      )}
     </div>
   )
 }

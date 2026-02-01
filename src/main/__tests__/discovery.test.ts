@@ -7,6 +7,7 @@ import {
   slugify,
   makeUniqueId,
   allocatePort,
+  detectHardcodedPort,
 } from '../services/discovery'
 import type { AgentTerminal } from '@agent-flow/agent-terminal'
 
@@ -412,6 +413,115 @@ describe('DiscoveryService', () => {
       expect(result.services[0].port).toBe(3100)
       expect(result.services[1].port).toBe(3101)
     })
+
+    it('stores both discovered and allocated ports', async () => {
+      vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+        if (dirPath === '/project') {
+          return [
+            { name: 'package.json', isDirectory: () => false, isFile: () => true },
+          ]
+        }
+        return []
+      })
+      vi.mocked(mockFs.readFile).mockResolvedValue(JSON.stringify({
+        name: 'my-app',
+        scripts: { dev: 'vite dev --port 5173' },
+        dependencies: {},
+      }))
+
+      const result = await discovery.basicDiscovery('/project', 3100)
+
+      expect(result.services).toHaveLength(1)
+      const service = result.services[0]
+      // Allocated port should be used as the active port
+      expect(service.port).toBe(3100)
+      expect(service.allocatedPort).toBe(3100)
+      // Discovered port should be preserved from package.json
+      expect(service.discoveredPort).toBe(5173)
+    })
+
+    it('allocates debug ports from project debug range', async () => {
+      vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+        if (dirPath === '/project') {
+          return [
+            { name: 'frontend', isDirectory: () => true, isFile: () => false },
+            { name: 'backend', isDirectory: () => true, isFile: () => false },
+          ]
+        }
+        if (String(dirPath).includes('frontend')) {
+          return [{ name: 'package.json', isDirectory: () => false, isFile: () => true }]
+        }
+        if (String(dirPath).includes('backend')) {
+          return [{ name: 'package.json', isDirectory: () => false, isFile: () => true }]
+        }
+        return []
+      })
+      vi.mocked(mockFs.readFile).mockImplementation(async (filePath) => {
+        if (String(filePath).includes('frontend')) {
+          return JSON.stringify({
+            name: 'frontend-app',
+            scripts: { dev: 'vite dev' },
+            dependencies: {},
+          })
+        }
+        return JSON.stringify({
+          name: 'backend-api',
+          scripts: { dev: 'node server.js' },
+          dependencies: {},
+        })
+      })
+
+      const result = await discovery.basicDiscovery('/project', 3100, 9210)
+
+      expect(result.services).toHaveLength(2)
+      // Debug ports should start from 9210
+      expect(result.services[0].debugPort).toBe(9210)
+      expect(result.services[0].allocatedDebugPort).toBe(9210)
+      expect(result.services[1].debugPort).toBe(9211)
+      expect(result.services[1].allocatedDebugPort).toBe(9211)
+    })
+
+    it('services get unique ports even when none discovered', async () => {
+      vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+        if (dirPath === '/project') {
+          return [
+            { name: 'api', isDirectory: () => true, isFile: () => false },
+            { name: 'worker', isDirectory: () => true, isFile: () => false },
+          ]
+        }
+        if (String(dirPath).includes('api')) {
+          return [{ name: 'package.json', isDirectory: () => false, isFile: () => true }]
+        }
+        if (String(dirPath).includes('worker')) {
+          return [{ name: 'package.json', isDirectory: () => false, isFile: () => true }]
+        }
+        return []
+      })
+      vi.mocked(mockFs.readFile).mockImplementation(async (filePath) => {
+        if (String(filePath).includes('api')) {
+          return JSON.stringify({
+            name: 'api-service',
+            scripts: { dev: 'node index.js' },
+            dependencies: {},
+          })
+        }
+        return JSON.stringify({
+          name: 'worker-service',
+          scripts: { dev: 'node worker.js' },
+          dependencies: {},
+        })
+      })
+
+      const result = await discovery.basicDiscovery('/project', 3000)
+
+      expect(result.services).toHaveLength(2)
+      // Both should have unique allocated ports
+      const ports = result.services.map(s => s.port)
+      expect(new Set(ports).size).toBe(2)
+      // discoveredPort should be undefined when not in package.json
+      expect(result.services[0].discoveredPort).toBeUndefined()
+      expect(result.services[1].discoveredPort).toBeUndefined()
+    })
   })
 
   describe('backward compatibility', () => {
@@ -486,5 +596,107 @@ describe('allocatePort', () => {
   it('handles gaps in used ports', () => {
     const usedPorts = new Set([3000, 3002])
     expect(allocatePort(3000, usedPorts)).toBe(3001)
+  })
+})
+
+describe('hardcodedPort detection', () => {
+  it('detects hardcoded port in command flag', () => {
+    const command = 'next dev -p 3001'
+    const result = detectHardcodedPort(command)
+    expect(result).toEqual({
+      value: 3001,
+      source: 'command-flag',
+      flag: '-p',
+    })
+  })
+
+  it('detects --port flag', () => {
+    const command = 'vite --port 5173'
+    const result = detectHardcodedPort(command)
+    expect(result).toEqual({
+      value: 5173,
+      source: 'command-flag',
+      flag: '--port',
+    })
+  })
+
+  it('detects --port= syntax', () => {
+    const command = 'vite --port=5173'
+    const result = detectHardcodedPort(command)
+    expect(result).toEqual({
+      value: 5173,
+      source: 'command-flag',
+      flag: '--port',
+    })
+  })
+
+  it('returns undefined for env var ports', () => {
+    const command = 'next dev -p ${PORT:-3000}'
+    const result = detectHardcodedPort(command)
+    expect(result).toBeUndefined()
+  })
+
+  it('returns undefined for $PORT reference', () => {
+    const command = 'next dev -p $PORT'
+    const result = detectHardcodedPort(command)
+    expect(result).toBeUndefined()
+  })
+})
+
+describe('convertToProjectConfig hardcodedPort', () => {
+  it('sets hardcodedPort when command has -p flag', async () => {
+    const mockFs = createMockFileSystem()
+    const discovery = new DiscoveryService({
+      fileSystem: mockFs,
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    // Access private method via any cast for testing
+    const config = (discovery as any).convertToProjectConfig(
+      {
+        services: [{
+          id: 'web',
+          name: 'Web',
+          path: '.',
+          command: 'next dev -p 3001',
+          port: 3001,
+        }],
+      },
+      '/project',
+      3000,
+      9200
+    )
+
+    expect(config.services[0].hardcodedPort).toEqual({
+      value: 3001,
+      source: 'command-flag',
+      flag: '-p',
+    })
+  })
+
+  it('does not set hardcodedPort when using env var', async () => {
+    const discovery = new DiscoveryService({
+      fileSystem: createMockFileSystem(),
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    const config = (discovery as any).convertToProjectConfig(
+      {
+        services: [{
+          id: 'web',
+          name: 'Web',
+          path: '.',
+          command: 'next dev -p ${PORT:-3000}',
+          port: 3000,
+        }],
+      },
+      '/project',
+      3000,
+      9200
+    )
+
+    expect(config.services[0].hardcodedPort).toBeUndefined()
   })
 })

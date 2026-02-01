@@ -31,16 +31,21 @@ export function setupDiscoveryHandlers(
       ? existingProject.portRange[0]  // Use existing project's port range
       : registry.getNextPortRange()[0]  // Get next available port range for new project
 
-    log.info('Using base port:', basePort, existingProject ? '(existing project)' : '(new project)')
+    // Get debug port base from existing project or calculate next available
+    const debugPortBase = existingProject
+      ? existingProject.debugPortRange[0]  // Use existing project's debug port range
+      : 9200 + registry.getRegistry().projects.length * 10  // Next available debug port range
+
+    log.info('Using base port:', basePort, 'debug port base:', debugPortBase, existingProject ? '(existing project)' : '(new project)')
 
     // Try AI discovery first, fall back to basic
     log.info('Attempting AI discovery...')
-    let result = await discovery.runAIDiscovery(projectPath, 'claude', sendProgress, basePort)
+    let result = await discovery.runAIDiscovery(projectPath, 'claude', sendProgress, basePort, debugPortBase)
 
     if (!result) {
       log.info('AI discovery failed or timed out, falling back to basic discovery')
       sendProgress({ projectPath, step: 'ai-analysis', message: 'AI discovery failed, using basic detection...' })
-      result = await discovery.basicDiscovery(projectPath, basePort)
+      result = await discovery.basicDiscovery(projectPath, basePort, debugPortBase)
     } else {
       log.info('AI discovery succeeded')
     }

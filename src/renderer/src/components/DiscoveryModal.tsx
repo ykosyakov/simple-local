@@ -132,6 +132,8 @@ export function DiscoveryModal({ isOpen, projectPath, onClose, onConfirm }: Disc
 }
 
 function ServicePreview({ service }: { service: Service }) {
+  const showOriginalPort = service.discoveredPort && service.discoveredPort !== service.port
+
   return (
     <div className="flex items-center justify-between rounded bg-gray-900 px-3 py-2">
       <div>
@@ -139,7 +141,12 @@ function ServicePreview({ service }: { service: Service }) {
         <p className="font-mono text-xs text-gray-500">{service.path}</p>
       </div>
       <div className="text-right">
-        <p className="font-mono text-sm">:{service.port}</p>
+        <p className="font-mono text-sm">
+          :{service.port}
+          {showOriginalPort && (
+            <span className="text-gray-500 ml-1">← {service.discoveredPort}</span>
+          )}
+        </p>
         <p className="text-xs text-gray-500">{service.command}</p>
       </div>
     </div>
