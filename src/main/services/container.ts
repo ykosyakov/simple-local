@@ -1,10 +1,27 @@
 import Docker from 'dockerode'
-import { spawn } from 'child_process'
+import { spawn, type ChildProcess, type SpawnOptions } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
 import type { ContainerEnvOverride, Service, ServiceStatus } from '../../shared/types'
 import { NativeProcessManager } from './native-process-manager'
 import { PortManager } from './port-manager'
+
+/**
+ * Spawns a process and pipes stdout/stderr to a log function.
+ * Also attaches an error handler for process spawn failures.
+ */
+function spawnWithOutput(
+  cmd: string,
+  args: string[],
+  options: SpawnOptions,
+  log: (msg: string) => void
+): ChildProcess {
+  const proc = spawn(cmd, args, options)
+  proc.stdout?.on('data', (data: Buffer) => log(data.toString()))
+  proc.stderr?.on('data', (data: Buffer) => log(data.toString()))
+  proc.on('error', (err) => log(`Process error: ${err.message}`))
+  return proc
+}
 
 export function applyContainerEnvOverrides(
   env: Record<string, string>,
@@ -121,13 +138,7 @@ export class ContainerService extends EventEmitter {
     return new Promise((resolve, reject) => {
       const args = this.buildDevcontainerCommand('build', workspaceFolder, configPath)
 
-      const proc = spawn('npx', args, {
-        env: process.env,
-        shell: true,
-      })
-
-      proc.stdout?.on('data', (data) => onLog(data.toString()))
-      proc.stderr?.on('data', (data) => onLog(data.toString()))
+      const proc = spawnWithOutput('npx', args, { env: process.env, shell: true }, onLog)
 
       proc.on('close', (code) => {
         if (code !== 0) {
@@ -153,22 +164,12 @@ export class ContainerService extends EventEmitter {
       this.emit('log', data)
     }
 
+    const spawnOptions = { env: { ...process.env, ...env }, shell: true }
+
     return new Promise((resolve, reject) => {
       // First, start the devcontainer
       const upArgs = this.buildDevcontainerCommand('up', workspaceFolder, configPath)
-
-      const upProcess = spawn('npx', upArgs, {
-        env: { ...process.env, ...env },
-        shell: true,
-      })
-
-      upProcess.stdout?.on('data', (data) => {
-        log(data.toString())
-      })
-
-      upProcess.stderr?.on('data', (data) => {
-        log(data.toString())
-      })
+      const upProcess = spawnWithOutput('npx', upArgs, spawnOptions, log)
 
       upProcess.on('close', (code) => {
         if (code !== 0) {
@@ -178,19 +179,7 @@ export class ContainerService extends EventEmitter {
 
         // Then exec the command inside
         const execArgs = this.buildDevcontainerCommand('exec', workspaceFolder, configPath, command)
-
-        const execProcess = spawn('npx', execArgs, {
-          env: { ...process.env, ...env },
-          shell: true,
-        })
-
-        execProcess.stdout?.on('data', (data) => {
-          log(data.toString())
-        })
-
-        execProcess.stderr?.on('data', (data) => {
-          log(data.toString())
-        })
+        spawnWithOutput('npx', execArgs, spawnOptions, log)
 
         // Don't wait for exec to finish - it's a long-running dev server
         this.invalidateStatusCache()

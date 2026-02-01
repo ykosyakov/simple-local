@@ -511,6 +511,239 @@ describe('ContainerService', () => {
         expect.any(Object)
       )
     })
+
+    it('forwards stdout to onLog callback', async () => {
+      const { spawn } = await import('child_process')
+      const callbacks: Record<string, (data: Buffer) => void> = {}
+      const mockProcess = {
+        stdout: {
+          on: vi.fn((event: string, cb: (data: Buffer) => void) => {
+            if (event === 'data') callbacks.stdout = cb
+          }),
+        },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event: string, cb: (code: number) => void) => {
+          if (event === 'close') setTimeout(() => cb(0), 10)
+        }),
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const onLog = vi.fn()
+      const promise = containerService.buildContainer('/path', '/config.json', onLog)
+
+      callbacks.stdout?.(Buffer.from('build output'))
+      await promise
+
+      expect(onLog).toHaveBeenCalledWith('build output')
+    })
+
+    it('forwards stderr to onLog callback', async () => {
+      const { spawn } = await import('child_process')
+      const callbacks: Record<string, (data: Buffer) => void> = {}
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: {
+          on: vi.fn((event: string, cb: (data: Buffer) => void) => {
+            if (event === 'data') callbacks.stderr = cb
+          }),
+        },
+        on: vi.fn((event: string, cb: (code: number) => void) => {
+          if (event === 'close') setTimeout(() => cb(0), 10)
+        }),
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const onLog = vi.fn()
+      const promise = containerService.buildContainer('/path', '/config.json', onLog)
+
+      callbacks.stderr?.(Buffer.from('warning message'))
+      await promise
+
+      expect(onLog).toHaveBeenCalledWith('warning message')
+    })
+
+    it('rejects on non-zero exit code', async () => {
+      const { spawn } = await import('child_process')
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => {
+          if (event === 'close') setTimeout(() => cb(1), 10)
+        }),
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      await expect(
+        containerService.buildContainer('/path', '/config.json', vi.fn())
+      ).rejects.toThrow('devcontainer build failed with code 1')
+    })
+
+    it('rejects on process error', async () => {
+      const { spawn } = await import('child_process')
+      const callbacks: Record<string, (err: Error) => void> = {}
+      const mockProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event: string, cb: (err: Error) => void) => {
+          if (event === 'error') callbacks.error = cb
+        }),
+      }
+      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+
+      const promise = containerService.buildContainer('/path', '/config.json', vi.fn())
+      callbacks.error?.(new Error('spawn failed'))
+
+      await expect(promise).rejects.toThrow('spawn failed')
+    })
+  })
+
+  describe('startService', () => {
+    it('runs devcontainer up with correct args', async () => {
+      const { spawn } = await import('child_process')
+      const mockUpProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => {
+          if (event === 'close') setTimeout(() => cb(0), 10)
+        }),
+      }
+      const mockExecProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+      }
+      vi.mocked(spawn)
+        .mockReturnValueOnce(mockUpProcess as any)
+        .mockReturnValueOnce(mockExecProcess as any)
+
+      await containerService.startService(
+        '/workspace',
+        '/config.json',
+        'npm run dev',
+        { NODE_ENV: 'dev' }
+      )
+
+      expect(spawn).toHaveBeenNthCalledWith(
+        1,
+        'npx',
+        ['devcontainer', 'up', '--workspace-folder', '/workspace', '--config', '/config.json'],
+        expect.objectContaining({
+          env: expect.objectContaining({ NODE_ENV: 'dev' }),
+          shell: true,
+        })
+      )
+    })
+
+    it('runs devcontainer exec after up completes', async () => {
+      const { spawn } = await import('child_process')
+      const mockUpProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => {
+          if (event === 'close') setTimeout(() => cb(0), 10)
+        }),
+      }
+      const mockExecProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+      }
+      vi.mocked(spawn)
+        .mockReturnValueOnce(mockUpProcess as any)
+        .mockReturnValueOnce(mockExecProcess as any)
+
+      await containerService.startService(
+        '/workspace',
+        '/config.json',
+        'npm run dev',
+        {}
+      )
+
+      expect(spawn).toHaveBeenNthCalledWith(
+        2,
+        'npx',
+        ['devcontainer', 'exec', '--workspace-folder', '/workspace', '--config', '/config.json', 'npm run dev'],
+        expect.any(Object)
+      )
+    })
+
+    it('forwards stdout to onLog callback and emits log event', async () => {
+      const { spawn } = await import('child_process')
+      const callbacks: Record<string, (data: Buffer) => void> = {}
+      const mockUpProcess = {
+        stdout: {
+          on: vi.fn((event: string, cb: (data: Buffer) => void) => {
+            if (event === 'data') callbacks.stdout = cb
+          }),
+        },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event: string, cb: (code: number) => void) => {
+          if (event === 'close') setTimeout(() => cb(0), 10)
+        }),
+      }
+      const mockExecProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+      }
+      vi.mocked(spawn)
+        .mockReturnValueOnce(mockUpProcess as any)
+        .mockReturnValueOnce(mockExecProcess as any)
+
+      const onLog = vi.fn()
+      const logEmitted = vi.fn()
+      containerService.on('log', logEmitted)
+
+      const promise = containerService.startService('/workspace', '/config.json', 'npm run dev', {}, onLog)
+      callbacks.stdout?.(Buffer.from('starting up'))
+      await promise
+
+      expect(onLog).toHaveBeenCalledWith('starting up')
+      expect(logEmitted).toHaveBeenCalledWith('starting up')
+    })
+
+    it('rejects if devcontainer up fails', async () => {
+      const { spawn } = await import('child_process')
+      const eventHandlers: Record<string, (arg: unknown) => void> = {}
+      const mockUpProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event: string, cb: (arg: unknown) => void) => {
+          eventHandlers[event] = cb
+          if (event === 'close') setTimeout(() => cb(1), 10)
+        }),
+      }
+      vi.mocked(spawn).mockReturnValue(mockUpProcess as any)
+
+      await expect(
+        containerService.startService('/workspace', '/config.json', 'npm run dev', {})
+      ).rejects.toThrow('devcontainer up failed with code 1')
+    })
+
+    it('invalidates status cache after starting service', async () => {
+      const { spawn } = await import('child_process')
+      const mockUpProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn((event, cb) => {
+          if (event === 'close') setTimeout(() => cb(0), 10)
+        }),
+      }
+      const mockExecProcess = {
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+      }
+      vi.mocked(spawn)
+        .mockReturnValueOnce(mockUpProcess as any)
+        .mockReturnValueOnce(mockExecProcess as any)
+
+      const invalidateSpy = vi.spyOn(containerService, 'invalidateStatusCache')
+
+      await containerService.startService('/workspace', '/config.json', 'npm run dev', {})
+
+      expect(invalidateSpy).toHaveBeenCalled()
+    })
   })
 
   describe('streamLogs', () => {
