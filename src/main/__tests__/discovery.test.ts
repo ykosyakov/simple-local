@@ -156,6 +156,56 @@ describe('DiscoveryService', () => {
       expect(readdirMock).toHaveBeenCalledWith('/project/level1', { withFileTypes: true })
       expect(readdirMock).not.toHaveBeenCalledWith('/project/level1/level2', expect.anything())
     })
+
+    it('skips directories that cannot be read and logs at debug level', async () => {
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
+      vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+        if (dirPath === '/project') {
+          return [
+            { name: 'package.json', isDirectory: () => false, isFile: () => true },
+            { name: 'private', isDirectory: () => true, isFile: () => false },
+          ]
+        }
+        if (String(dirPath).includes('private')) {
+          throw new Error('EACCES: permission denied')
+        }
+        return []
+      })
+
+      const result = await discovery.scanProjectStructure('/project')
+
+      // Should still find the package.json
+      expect(result.packageJsonPaths).toHaveLength(1)
+      // Should log at debug level about the skipped directory
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringMatching(/\[Discovery\].*Skipping directory.*private.*EACCES/)
+      )
+      debugSpy.mockRestore()
+    })
+
+    it('continues scanning after directory read error', async () => {
+      vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+        if (dirPath === '/project') {
+          return [
+            { name: 'accessible', isDirectory: () => true, isFile: () => false },
+            { name: 'protected', isDirectory: () => true, isFile: () => false },
+          ]
+        }
+        if (String(dirPath).includes('protected')) {
+          throw new Error('EACCES: permission denied')
+        }
+        if (String(dirPath).includes('accessible')) {
+          return [{ name: 'package.json', isDirectory: () => false, isFile: () => true }]
+        }
+        return []
+      })
+
+      const result = await discovery.scanProjectStructure('/project')
+
+      // Should still find files in accessible directories
+      expect(result.packageJsonPaths).toHaveLength(1)
+      expect(result.packageJsonPaths[0]).toContain('accessible')
+    })
   })
 
   describe('parsePackageJson', () => {

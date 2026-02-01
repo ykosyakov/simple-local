@@ -5,6 +5,9 @@ import type { Readable } from 'stream'
 import type { ContainerEnvOverride, Service, ServiceStatus } from '../../shared/types'
 import { NativeProcessManager } from './native-process-manager'
 import { PortManager } from './port-manager'
+import { createLogger } from '../../shared/logger'
+
+const log = createLogger('Container')
 
 /**
  * Spawns a process and pipes stdout/stderr to a log function.
@@ -95,9 +98,28 @@ export class ContainerService extends EventEmitter {
       if (container.State === 'created' || container.State === 'restarting') return 'starting'
 
       return 'stopped'
-    } catch {
+    } catch (error) {
+      // Expected: Docker daemon not running or connection refused
+      // Log unexpected errors for debugging
+      if (error instanceof Error && !this.isDockerConnectionError(error)) {
+        log.error('Unexpected error checking container status:', error.message)
+      }
       return 'stopped'
     }
+  }
+
+  /**
+   * Check if an error is a Docker connection error (expected when Docker isn't running).
+   */
+  private isDockerConnectionError(error: Error): boolean {
+    const message = error.message.toLowerCase()
+    return (
+      message.includes('enoent') ||
+      message.includes('econnrefused') ||
+      message.includes('socket') ||
+      message.includes('docker daemon') ||
+      message.includes('cannot connect')
+    )
   }
 
   /**

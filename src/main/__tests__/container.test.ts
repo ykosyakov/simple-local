@@ -51,6 +51,47 @@ describe('ContainerService', () => {
       const status = await containerService.getContainerStatus('nonexistent')
       expect(status).toBe('stopped')
     })
+
+    it('returns stopped on Docker connection error without logging', async () => {
+      const mockDocker = containerService['docker']
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(mockDocker.listContainers).mockRejectedValue(new Error('connect ECONNREFUSED'))
+
+      const status = await containerService.getContainerStatus('test-container')
+
+      expect(status).toBe('stopped')
+      // Should not log expected Docker connection errors
+      expect(consoleSpy).not.toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+
+    it('returns stopped and logs unexpected errors', async () => {
+      const mockDocker = containerService['docker']
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(mockDocker.listContainers).mockRejectedValue(new Error('Unexpected database error'))
+
+      const status = await containerService.getContainerStatus('test-container')
+
+      expect(status).toBe('stopped')
+      // Should log unexpected errors
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Container]'),
+        expect.stringContaining('Unexpected database error')
+      )
+      consoleSpy.mockRestore()
+    })
+
+    it('handles Docker ENOENT error silently', async () => {
+      const mockDocker = containerService['docker']
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(mockDocker.listContainers).mockRejectedValue(new Error('ENOENT: no such file /var/run/docker.sock'))
+
+      const status = await containerService.getContainerStatus('test-container')
+
+      expect(status).toBe('stopped')
+      expect(consoleSpy).not.toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
   })
 
   describe('getContainerStatus - caching', () => {

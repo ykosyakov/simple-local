@@ -201,8 +201,12 @@ export class DiscoveryService {
             }
           }
         }
-      } catch {
-        // Skip directories we can't read
+      } catch (error) {
+        // Expected: permission denied or directory deleted during scan
+        // Log at debug level for troubleshooting without cluttering output
+        if (error instanceof Error) {
+          log.debug(`Skipping directory ${dir}: ${error.message}`)
+        }
       }
     }
 
