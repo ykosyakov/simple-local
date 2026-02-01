@@ -1,7 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { ConfigPaths, CONFIG_DIR_NAME } from '../services/config-paths'
-import { homedir } from 'os'
-import { join } from 'path'
 
 vi.mock('os', () => ({
   homedir: vi.fn(() => '/mock/home'),
@@ -54,6 +52,20 @@ describe('ConfigPaths', () => {
     it('handles service IDs with special characters', () => {
       expect(ConfigPaths.devcontainerDir('/path/to/project', 'my-service')).toBe(
         '/path/to/project/.simple-local/devcontainers/my-service'
+      )
+    })
+  })
+
+  describe('devcontainerConfig', () => {
+    it('returns the devcontainer config file path for a service', () => {
+      expect(ConfigPaths.devcontainerConfig('/path/to/project', 'frontend')).toBe(
+        '/path/to/project/.simple-local/devcontainers/frontend/devcontainer.json'
+      )
+    })
+
+    it('handles service IDs with special characters', () => {
+      expect(ConfigPaths.devcontainerConfig('/path/to/project', 'my-service')).toBe(
+        '/path/to/project/.simple-local/devcontainers/my-service/devcontainer.json'
       )
     })
   })

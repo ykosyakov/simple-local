@@ -1,3 +1,4 @@
+import path from 'path'
 import { ipcMain, BrowserWindow } from 'electron'
 import { ContainerService, applyContainerEnvOverrides } from '../services/container'
 import { ProjectConfigService } from '../services/project-config'
@@ -6,6 +7,7 @@ import { RegistryService } from '../services/registry'
 import { LogManager } from '../services/log-manager'
 import { getServiceContext, getProjectContext } from '../services/service-lookup'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
+import { ConfigPaths } from '../services/config-paths'
 import type { DiscoveryProgress } from '../../shared/types'
 import { createLogger } from '../../shared/logger'
 
@@ -21,8 +23,12 @@ function isLookupError(error: Error): boolean {
 }
 
 function buildDevcontainerPath(projectPath: string, serviceId: string): string {
+  if (!path.isAbsolute(projectPath)) {
+    throw new Error('projectPath must be absolute')
+  }
+
   const safeServiceId = sanitizeServiceId(serviceId)
-  const devcontainerPath = `${projectPath}/.simple-local/devcontainers/${safeServiceId}/devcontainer.json`
+  const devcontainerPath = ConfigPaths.devcontainerConfig(projectPath, safeServiceId)
   validatePathWithinProject(projectPath, devcontainerPath)
   return devcontainerPath
 }

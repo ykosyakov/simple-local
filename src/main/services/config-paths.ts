@@ -34,4 +34,10 @@ export const ConfigPaths = {
    */
   devcontainerDir: (projectPath: string, serviceId: string) =>
     join(projectPath, CONFIG_DIR_NAME, 'devcontainers', serviceId),
+
+  /**
+   * Devcontainer config file: <projectPath>/.simple-local/devcontainers/<serviceId>/devcontainer.json
+   */
+  devcontainerConfig: (projectPath: string, serviceId: string) =>
+    join(projectPath, CONFIG_DIR_NAME, 'devcontainers', serviceId, 'devcontainer.json'),
 }

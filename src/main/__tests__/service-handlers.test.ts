@@ -165,6 +165,57 @@ describe('setupServiceHandlers', () => {
         expect.any(Function)
       )
     })
+
+    it('rejects relative project path for container service', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: 'relative/path' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'frontend',
+          name: 'Frontend',
+          command: 'npm run dev',
+          path: 'packages/frontend',
+          mode: 'container',
+          env: {},
+          active: true,
+        },
+      })
+
+      await expect(handlers.startService('proj1', 'frontend', 'container')).rejects.toThrow(
+        'projectPath must be absolute'
+      )
+    })
+
+    it('sanitizes service id with path traversal attempts', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/projects/myapp' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: '../../../etc/passwd',
+          name: 'Malicious',
+          command: 'npm run dev',
+          path: 'packages/frontend',
+          mode: 'container',
+          env: {},
+          active: true,
+        },
+      })
+
+      vi.mocked(mockContainer.buildContainer!).mockResolvedValue(undefined)
+      vi.mocked(mockContainer.startService!).mockResolvedValue(undefined)
+
+      await handlers.startService('proj1', '../../../etc/passwd', 'container')
+
+      // The sanitizeServiceId function removes ".." and replaces "/" with "-"
+      // So "../../../etc/passwd" becomes "---etc-passwd"
+      expect(mockContainer.buildContainer).toHaveBeenCalledWith(
+        '/projects/myapp/packages/frontend',
+        '/projects/myapp/.simple-local/devcontainers/---etc-passwd/devcontainer.json',
+        expect.any(Function)
+      )
+    })
   })
 
   describe('log buffer cleanup - memory leak prevention', () => {
