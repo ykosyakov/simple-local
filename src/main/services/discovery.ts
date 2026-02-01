@@ -2,7 +2,6 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
-import { firstValueFrom, timeout } from 'rxjs'
 import type { ProjectConfig, Service, DiscoveryProgress, ContainerEnvOverride } from '../../shared/types'
 import { AgentTerminal } from '@agent-flow/agent-terminal'
 import type { AiAgentId } from '@agent-flow/agent-terminal'
@@ -12,16 +11,10 @@ import {
   buildEnvAnalysisPrompt as buildEnvAnalysisPromptFromTemplate,
   type ScanResult,
 } from './discovery-prompts'
+import { AIAgentRunner } from './ai-agent-runner'
 
 const execAsync = promisify(exec)
 const log = createLogger('Discovery')
-const AI_DISCOVERY_TIMEOUT = 120000 // 2 minutes for AI analysis
-
-// Strip ANSI escape codes for clean log output
-function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
-}
 
 async function isCommandAvailable(command: string): Promise<boolean> {
   try {
@@ -115,6 +108,15 @@ interface AIConnectionOutput {
   envVar?: string
 }
 
+interface AIDiscoveryOutput {
+  services: AIServiceOutput[]
+  connections?: AIConnectionOutput[]
+}
+
+interface EnvAnalysisOutput {
+  overrides: ContainerEnvOverride[]
+}
+
 const FRAMEWORK_PATTERNS: Record<string, RegExp> = {
   next: /next/i,
   react: /react-scripts|vite.*react/i,
@@ -137,13 +139,18 @@ function getDefaultMode(framework?: string): 'native' | 'container' {
 
 export class DiscoveryService {
   private readonly fs: FileSystemOperations
-  private readonly agentTerminalFactory: AgentTerminalFactory
-  private readonly commandChecker: CommandChecker
+  private readonly agentRunner: AIAgentRunner
 
   constructor(deps: DiscoveryServiceDeps = {}) {
     this.fs = deps.fileSystem ?? defaultFileSystem
-    this.agentTerminalFactory = deps.agentTerminalFactory ?? defaultAgentTerminalFactory
-    this.commandChecker = deps.commandChecker ?? defaultCommandChecker
+    const agentTerminalFactory = deps.agentTerminalFactory ?? defaultAgentTerminalFactory
+    const commandChecker = deps.commandChecker ?? defaultCommandChecker
+
+    this.agentRunner = new AIAgentRunner({
+      fileSystem: this.fs,
+      agentTerminalFactory,
+      commandChecker,
+    })
   }
 
   async scanProjectStructure(projectPath: string, depth = 2): Promise<ScanResult> {
@@ -251,93 +258,34 @@ export class DiscoveryService {
   ): Promise<ContainerEnvOverride[]> {
     log.info('Starting env analysis for service:', service.id)
 
-    // Check if the CLI tool is available
-    const isAvailable = await this.commandChecker.isAvailable(cliTool)
-    if (!isAvailable) {
-      log.error(`${cliTool} CLI not found in PATH`)
-      onProgress?.({ projectPath, step: 'error', message: `${cliTool} CLI not found. Install it first.` })
-      return []
-    }
-
     onProgress?.({ projectPath, step: 'scanning', message: `Analyzing ${service.name} environment...` })
 
-    // Result file for this specific service
-    const resultDir = path.join(projectPath, '.simple-local')
-    const resultFile = path.join(resultDir, `env-analysis-${service.id}.json`)
-    await this.fs.mkdir(resultDir, { recursive: true })
-
-    // Clean up any previous result
-    try {
-      await this.fs.unlink(resultFile)
-    } catch {
-      // File doesn't exist, that's fine
-    }
-
+    const resultFile = path.join(projectPath, '.simple-local', `env-analysis-${service.id}.json`)
     const prompt = this.buildEnvAnalysisPrompt(projectPath, service, resultFile)
-    const terminal = this.agentTerminalFactory.create()
 
-    const subscriptions: { unsubscribe: () => void }[] = []
+    const result = await this.agentRunner.run<EnvAnalysisOutput>({
+      cwd: path.join(projectPath, service.path),
+      prompt,
+      resultFilePath: resultFile,
+      allowedTools: ['Read', 'Glob', 'Write'],
+      cliTool,
+      onProgress: (message, logText) => {
+        if (logText) {
+          onProgress?.({ projectPath, step: 'ai-analysis', message: 'Analyzing environment files...', log: logText })
+        } else {
+          onProgress?.({ projectPath, step: 'ai-analysis', message })
+        }
+      },
+    })
 
-    try {
-      log.info(`Spawning ${cliTool} for env analysis`)
-      onProgress?.({ projectPath, step: 'ai-analysis', message: `Running ${cliTool} analysis...` })
-
-      const session = terminal.spawn({
-        agent: cliTool,
-        cwd: path.join(projectPath, service.path),
-        prompt: prompt,
-        allowedTools: ['Read', 'Glob', 'Write'],
-      })
-
-      log.info(`Env analysis session ID: ${session.id}`)
-
-      // Subscribe to raw output for logging
-      subscriptions.push(
-        session.raw$.subscribe({
-          next: (text) => {
-            const cleanText = stripAnsi(text)
-            if (cleanText.trim()) {
-              onProgress?.({ projectPath, step: 'ai-analysis', message: 'Analyzing environment files...', log: cleanText })
-            }
-          },
-        })
-      )
-
-      // Wait for session to complete with timeout
-      await firstValueFrom(
-        session.pty.exit$.pipe(
-          timeout(AI_DISCOVERY_TIMEOUT)
-        )
-      ).catch(() => {
-        log.info('Env analysis session timed out')
-        session.kill()
-        throw new Error('Environment analysis timed out')
-      })
-
-      log.info('Env analysis session completed')
-      onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
-
-      // Read result from file
-      try {
-        const resultContent = await this.fs.readFile(resultFile, 'utf-8')
-        const parsed = JSON.parse(resultContent)
-        log.info('Env analysis result:', JSON.stringify(parsed, null, 2))
-
-        onProgress?.({ projectPath, step: 'complete', message: 'Environment analysis complete' })
-        return parsed.overrides || []
-      } catch (readErr) {
-        log.error('Failed to read env analysis result:', readErr)
-        onProgress?.({ projectPath, step: 'error', message: 'Agent did not produce valid result' })
-        return []
-      }
-
-    } catch (err) {
-      log.error('Env analysis failed:', err)
-      onProgress?.({ projectPath, step: 'error', message: `Analysis failed: ${err}` })
+    if (result.success && result.data) {
+      log.info('Env analysis result:', JSON.stringify(result.data, null, 2))
+      onProgress?.({ projectPath, step: 'complete', message: 'Environment analysis complete' })
+      return result.data.overrides || []
+    } else {
+      log.error('Env analysis failed:', result.error)
+      onProgress?.({ projectPath, step: 'error', message: result.error || 'Environment analysis failed' })
       return []
-    } finally {
-      subscriptions.forEach(s => s.unsubscribe())
-      terminal.dispose()
     }
   }
 
@@ -355,15 +303,6 @@ export class DiscoveryService {
   ): Promise<ProjectConfig | null> {
     log.info('Starting AI discovery for:', projectPath)
 
-    // Check if the CLI tool is available
-    const isAvailable = await this.commandChecker.isAvailable(cliTool)
-    if (!isAvailable) {
-      log.error(`${cliTool} CLI not found in PATH`)
-      onProgress?.({ projectPath, step: 'error', message: `${cliTool} CLI not found. Install it first.` })
-      return null
-    }
-    log.info(`${cliTool} CLI found`)
-
     log.info('Scanning project structure...')
     onProgress?.({ projectPath, step: 'scanning', message: 'Scanning file structure...' })
 
@@ -372,99 +311,37 @@ export class DiscoveryService {
 
     onProgress?.({ projectPath, step: 'scanning', message: `Found ${scanResult.packageJsonPaths.length} package.json files` })
 
-    // Result file for reliable JSON output (more reliable than parsing TUI)
-    const resultDir = path.join(projectPath, '.simple-local')
-    const resultFile = path.join(resultDir, 'discovery-result.json')
-    await this.fs.mkdir(resultDir, { recursive: true })
-
-    // Clean up any previous result
-    try {
-      await this.fs.unlink(resultFile)
-    } catch {
-      // File doesn't exist, that's fine
-    }
-
+    const resultFile = path.join(projectPath, '.simple-local', 'discovery-result.json')
     const prompt = this.buildDiscoveryPrompt(scanResult, resultFile)
-    const terminal = this.agentTerminalFactory.create()
-    const subscriptions: { unsubscribe: () => void }[] = []
 
-    try {
-      log.info(`Spawning ${cliTool} via AgentTerminal`)
-      onProgress?.({ projectPath, step: 'ai-analysis', message: `Running ${cliTool} analysis...` })
+    const result = await this.agentRunner.run<AIDiscoveryOutput>({
+      cwd: projectPath,
+      prompt,
+      resultFilePath: resultFile,
+      allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
+      cliTool,
+      onProgress: (message, logText) => {
+        if (logText) {
+          onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: logText })
+        } else {
+          onProgress?.({ projectPath, step: 'ai-analysis', message })
+        }
+      },
+    })
 
-      const session = terminal.spawn({
-        agent: cliTool,
-        cwd: projectPath,
-        prompt: prompt,
-        // Allow only the tools needed for discovery (passed to CLI as --allowedTools)
-        allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
-      })
-
-      log.info(`Session ID: ${session.id}`)
-
-      // Subscribe to raw output for logging (captures all terminal output)
-      subscriptions.push(
-        session.raw$.subscribe({
-          next: (text) => {
-            const cleanText = stripAnsi(text)
-            if (cleanText.trim()) {
-              onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI analysis...', log: cleanText })
-            }
-          },
-        })
-      )
-
-      // Subscribe to parsed events for status updates
-      subscriptions.push(
-        session.events$.subscribe({
-          next: (event) => {
-            if (event.type === 'tool-start') {
-              onProgress?.({ projectPath, step: 'ai-analysis', message: `Using ${event.tool}...` })
-            }
-          },
-        })
-      )
-
-      // Wait for session to complete with timeout
-      await firstValueFrom(
-        session.pty.exit$.pipe(
-          timeout(AI_DISCOVERY_TIMEOUT)
-        )
-      ).catch(() => {
-        log.info('Session timed out or errored')
-        session.kill()
-        throw new Error('AI analysis timed out')
-      })
-
-      log.info('Session completed')
-      onProgress?.({ projectPath, step: 'processing', message: 'Processing results...' })
-
-      // Read result from file (more reliable than parsing TUI output)
-      try {
-        const resultContent = await this.fs.readFile(resultFile, 'utf-8')
-        const parsed = JSON.parse(resultContent)
-        log.info('Parsed result:', JSON.stringify(parsed, null, 2))
-
-        onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
-        return this.convertToProjectConfig(parsed, projectPath)
-      } catch (readErr) {
-        log.error('Failed to read result file:', readErr)
-        onProgress?.({ projectPath, step: 'error', message: 'Agent did not produce valid result file' })
-        return null
-      }
-
-    } catch (err) {
-      log.error('AI discovery failed:', err)
-      onProgress?.({ projectPath, step: 'error', message: `AI analysis failed: ${err}` })
+    if (result.success && result.data) {
+      log.info('Parsed result:', JSON.stringify(result.data, null, 2))
+      onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
+      return this.convertToProjectConfig(result.data, projectPath)
+    } else {
+      log.error('AI discovery failed:', result.error)
+      onProgress?.({ projectPath, step: 'error', message: result.error || 'AI discovery failed' })
       return null
-    } finally {
-      subscriptions.forEach(s => s.unsubscribe())
-      terminal.dispose()
     }
   }
 
   private convertToProjectConfig(
-    aiOutput: { services: AIServiceOutput[]; connections?: AIConnectionOutput[] },
+    aiOutput: AIDiscoveryOutput,
     projectPath: string
   ): ProjectConfig {
     const projectName = path.basename(projectPath)
