@@ -511,7 +511,7 @@ describe('ContainerService', () => {
         kill: mockKill,
         pid: 12345,
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       vi.mocked(spawn).mockReturnValue(mockProcess as any)
 
       // Start a service first

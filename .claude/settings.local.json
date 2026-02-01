@@ -51,7 +51,8 @@
       "Bash(git push)",
       "Bash(wc:*)",
       "Bash(git -C /Users/yury/projects/simple-local status)",
-      "Bash(git -C /Users/yury/projects/simple-local diff:*)"
+      "Bash(git -C /Users/yury/projects/simple-local diff:*)",
+      "Bash(find:*)"
     ]
   }
 }

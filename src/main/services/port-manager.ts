@@ -21,6 +21,22 @@ function isExpectedKillError(error: unknown): boolean {
 }
 
 /**
+ * Parse PIDs from lsof output.
+ */
+function parsePids(output: string): string[] {
+  return output.split('\n').filter(Boolean)
+}
+
+/**
+ * Handle kill errors - log only unexpected errors.
+ */
+function handleKillError(pid: string, err: unknown): void {
+  if (!isExpectedKillError(err)) {
+    log.error(`Unexpected error killing PID ${pid}:`, err)
+  }
+}
+
+/**
  * Manages port operations including checking for and killing processes on ports.
  * Extracted from ContainerService to follow Single Responsibility Principle.
  */
@@ -35,15 +51,12 @@ export class PortManager {
     try {
       const result = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf-8' }).trim()
       if (result) {
-        const pids = result.split('\n').filter(Boolean)
+        const pids = parsePids(result)
         for (const pid of pids) {
           try {
             execSync(`kill -9 ${pid}`)
           } catch (err) {
-            // Process may have already exited - only log unexpected errors
-            if (!isExpectedKillError(err)) {
-              log.error(`Unexpected error killing PID ${pid}:`, err)
-            }
+            handleKillError(pid, err)
           }
         }
         return true
@@ -65,14 +78,9 @@ export class PortManager {
       const { stdout } = await exec(`lsof -ti tcp:${port}`)
       const result = stdout.trim()
       if (result) {
-        const pids = result.split('\n').filter(Boolean)
+        const pids = parsePids(result)
         await Promise.all(
-          pids.map((pid) => exec(`kill -9 ${pid}`).catch((err) => {
-            // Process may have already exited - only log unexpected errors
-            if (!isExpectedKillError(err)) {
-              log.error(`Unexpected error killing PID ${pid}:`, err)
-            }
-          }))
+          pids.map((pid) => exec(`kill -9 ${pid}`).catch((err) => handleKillError(pid, err)))
         )
         return true
       }
