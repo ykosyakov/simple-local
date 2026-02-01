@@ -57,10 +57,21 @@ async function startServiceCore(
 
   const effectiveMode = modeOverride ?? service.mode
   const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
-  // Apply container env overrides if in container mode
-  const finalEnv = effectiveMode === 'container' && service.containerEnvOverrides
-    ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
-    : resolvedEnv
+  // Apply container env overrides if in container mode, then inject PORT/DEBUG_PORT
+  const finalEnv = {
+    ...(effectiveMode === 'container' && service.containerEnvOverrides
+      ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
+      : resolvedEnv),
+  }
+
+  // Inject PORT and DEBUG_PORT environment variables
+  if (service.port !== undefined) {
+    finalEnv.PORT = String(service.port)
+  }
+  if (service.debugPort !== undefined) {
+    finalEnv.DEBUG_PORT = String(service.debugPort)
+  }
+
   const servicePath = `${project.path}/${service.path}`
 
   const { sendLog, sendStatus } = callbacks
@@ -71,10 +82,12 @@ async function startServiceCore(
   }
 
   if (effectiveMode === 'native') {
-    if (service.port) {
-      const killed = await container.killProcessOnPortAsync(service.port)
+    // Kill process on the port the service will actually use
+    const portToKill = service.hardcodedPort?.value ?? service.port
+    if (portToKill) {
+      const killed = await container.killProcessOnPortAsync(portToKill)
       if (killed) {
-        sendLog(`Killed existing process on port ${service.port}\n`)
+        sendLog(`Killed existing process on port ${portToKill}\n`)
       }
     }
     try {

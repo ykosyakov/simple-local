@@ -50,6 +50,7 @@ describe('setupServiceHandlers', () => {
 
     mockContainer = {
       killProcessOnPort: vi.fn(),
+      killProcessOnPortAsync: vi.fn().mockResolvedValue(false),
       startNativeService: vi.fn(),
       stopNativeService: vi.fn(),
       getContainerName: vi.fn(),
@@ -237,6 +238,171 @@ describe('setupServiceHandlers', () => {
 
       // Verify logs are cleared
       expect(handlers.getLogBuffer('proj1', 'svc1')).toEqual([])
+    })
+  })
+
+  describe('PORT env var injection', () => {
+    it('injects PORT env var when service.port is defined', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          path: '.',
+          mode: 'native',
+          env: { NODE_ENV: 'development' },
+          port: 3000,
+          active: true,
+        },
+      })
+      vi.mocked(mockConfig.interpolateEnv!).mockReturnValue({
+        env: { NODE_ENV: 'development' },
+        errors: [],
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(mockContainer.startNativeService).toHaveBeenCalledWith(
+        'svc1',
+        'npm run dev',
+        '/test/.',
+        expect.objectContaining({ PORT: '3000', NODE_ENV: 'development' }),
+        expect.any(Function),
+        expect.any(Function)
+      )
+    })
+
+    it('injects DEBUG_PORT env var when service.debugPort is defined', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 3000,
+          debugPort: 9229,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(mockContainer.startNativeService).toHaveBeenCalledWith(
+        'svc1',
+        'npm run dev',
+        '/test/.',
+        expect.objectContaining({ PORT: '3000', DEBUG_PORT: '9229' }),
+        expect.any(Function),
+        expect.any(Function)
+      )
+    })
+
+    it('does not inject PORT when service.port is undefined', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          path: '.',
+          mode: 'native',
+          env: { NODE_ENV: 'development' },
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      const callArgs = vi.mocked(mockContainer.startNativeService!).mock.calls[0]
+      const envArg = callArgs[3] as Record<string, string>
+      expect(envArg).not.toHaveProperty('PORT')
+    })
+  })
+
+  describe('port killing with hardcodedPort', () => {
+    beforeEach(() => {
+      vi.mocked(mockContainer.killProcessOnPortAsync!).mockResolvedValue(true)
+    })
+
+    it('kills process on hardcodedPort.value when it exists', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'next dev -p 3001',
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 3000,  // Allocated port
+          hardcodedPort: { value: 3001, source: 'command-flag', flag: '-p' },
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      // Should kill on hardcodedPort (3001), not allocated port (3000)
+      expect(mockContainer.killProcessOnPortAsync).toHaveBeenCalledWith(3001)
+    })
+
+    it('kills process on service.port when no hardcodedPort exists', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 3000,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(mockContainer.killProcessOnPortAsync).toHaveBeenCalledWith(3000)
+    })
+
+    it('logs the correct port when killing process', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'next dev -p 3001',
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 3000,
+          hardcodedPort: { value: 3001, source: 'command-flag', flag: '-p' },
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      const logs = handlers.getLogBuffer('proj1', 'svc1')
+      expect(logs.some(log => log.includes('port 3001'))).toBe(true)
+      expect(logs.some(log => log.includes('port 3000'))).toBe(false)
     })
   })
 
