@@ -27,6 +27,88 @@ function buildDevcontainerPath(projectPath: string, serviceId: string): string {
   return devcontainerPath
 }
 
+/**
+ * Callbacks for service start operations
+ */
+interface ServiceStartCallbacks {
+  sendLog: (data: string) => void
+  sendStatus: (status: string) => void
+}
+
+/**
+ * Core service start logic used by both IPC handler and exported function.
+ * Handles environment interpolation, container env overrides, port killing,
+ * and starting native or container services.
+ */
+async function startServiceCore(
+  container: ContainerService,
+  config: ProjectConfigService,
+  registry: RegistryService,
+  projectId: string,
+  serviceId: string,
+  callbacks: ServiceStartCallbacks,
+  modeOverride?: 'native' | 'container'
+): Promise<void> {
+  const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
+
+  const effectiveMode = modeOverride ?? service.mode
+  const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
+  // Apply container env overrides if in container mode
+  const finalEnv = effectiveMode === 'container' && service.containerEnvOverrides
+    ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
+    : resolvedEnv
+  const servicePath = `${project.path}/${service.path}`
+
+  const { sendLog, sendStatus } = callbacks
+
+  // Warn about interpolation errors in service logs
+  if (interpolationErrors.length > 0) {
+    sendLog(`Warning: Environment variable interpolation issues:\n${interpolationErrors.map(e => `  - ${e}`).join('\n')}\n`)
+  }
+
+  if (effectiveMode === 'native') {
+    if (service.port) {
+      const killed = await container.killProcessOnPortAsync(service.port)
+      if (killed) {
+        sendLog(`Killed existing process on port ${service.port}\n`)
+      }
+    }
+    try {
+      container.startNativeService(
+        serviceId,
+        service.command,
+        servicePath,
+        finalEnv,
+        sendLog,
+        sendStatus
+      )
+    } catch (err) {
+      sendStatus('error')
+      sendLog(`Failed to start: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
+      throw err
+    }
+  } else {
+    const devcontainerConfigPath = buildDevcontainerPath(project.path, service.id)
+
+    sendStatus('building')
+    sendLog('══════ Building container ══════\n')
+
+    try {
+      await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
+    } catch (err) {
+      sendStatus('error')
+      sendLog(`Build failed: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
+      throw err
+    }
+
+    sendStatus('starting')
+    sendLog('\n══════ Starting service ══════\n')
+
+    await container.startService(servicePath, devcontainerConfigPath, service.command, finalEnv, sendLog)
+    sendStatus('running')
+  }
+}
+
 export interface ServiceHandlersResult {
   getLogBuffer: (projectId: string, serviceId: string) => string[]
   startService: (projectId: string, serviceId: string, mode?: 'native' | 'container') => Promise<void>
@@ -43,73 +125,19 @@ export function setupServiceHandlers(
 ): ServiceHandlersResult {
 
   ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
-    const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
-
-    const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
-    // Apply container env overrides if in container mode
-    const finalEnv = service.mode === 'container' && service.containerEnvOverrides
-      ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
-      : resolvedEnv
-    const servicePath = `${project.path}/${service.path}`
-
-    const sendLog = (data: string) => {
-      logManager.appendLog(projectId, serviceId, data)
-
-      const win = BrowserWindow.fromWebContents(event.sender)
-      win?.webContents.send('service:logs:data', { projectId, serviceId, data })
+    const callbacks: ServiceStartCallbacks = {
+      sendLog: (data: string) => {
+        logManager.appendLog(projectId, serviceId, data)
+        const win = BrowserWindow.fromWebContents(event.sender)
+        win?.webContents.send('service:logs:data', { projectId, serviceId, data })
+      },
+      sendStatus: (status: string) => {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        win?.webContents.send('service:status:change', { projectId, serviceId, status })
+      },
     }
 
-    // Warn about interpolation errors in service logs
-    if (interpolationErrors.length > 0) {
-      sendLog(`Warning: Environment variable interpolation issues:\n${interpolationErrors.map(e => `  - ${e}`).join('\n')}\n`)
-    }
-
-    const sendStatus = (status: string) => {
-      const win = BrowserWindow.fromWebContents(event.sender)
-      win?.webContents.send('service:status:change', { projectId, serviceId, status })
-    }
-
-    if (service.mode === 'native') {
-      if (service.port) {
-        const killed = await container.killProcessOnPortAsync(service.port)
-        if (killed) {
-          sendLog(`Killed existing process on port ${service.port}\n`)
-        }
-      }
-      try {
-        container.startNativeService(
-          serviceId,
-          service.command,
-          servicePath,
-          finalEnv,
-          sendLog,
-          sendStatus
-        )
-      } catch (err) {
-        sendStatus('error')
-        sendLog(`Failed to start: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
-        throw err
-      }
-    } else {
-      const devcontainerConfigPath = buildDevcontainerPath(project.path, service.id)
-
-      sendStatus('building')
-      sendLog('══════ Building container ══════\n')
-
-      try {
-        await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
-      } catch (err) {
-        sendStatus('error')
-        sendLog(`Build failed: ${err instanceof Error ? err.message : 'Unknown error'}\n`)
-        throw err
-      }
-
-      sendStatus('starting')
-      sendLog('\n══════ Starting service ══════\n')
-
-      await container.startService(servicePath, devcontainerConfigPath, service.command, finalEnv, sendLog)
-      sendStatus('running')
-    }
+    await startServiceCore(container, config, registry, projectId, serviceId, callbacks)
   })
 
   ipcMain.handle('service:stop', async (_event, projectId: string, serviceId: string) => {
@@ -263,51 +291,14 @@ export function setupServiceHandlers(
   }
 
   const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
-    const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
-
-    const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
-    const servicePath = `${project.path}/${service.path}`
-    const effectiveMode = modeOverride || service.mode
-    // Apply container env overrides if in container mode
-    const finalEnv = effectiveMode === 'container' && service.containerEnvOverrides
-      ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
-      : resolvedEnv
-
-    const sendLog = (data: string) => {
-      logManager.appendLog(projectId, serviceId, data)
+    const callbacks: ServiceStartCallbacks = {
+      sendLog: (data: string) => {
+        logManager.appendLog(projectId, serviceId, data)
+      },
+      sendStatus: () => {}, // No-op for programmatic usage
     }
 
-    // Warn about interpolation errors in service logs
-    if (interpolationErrors.length > 0) {
-      sendLog(`Warning: Environment variable interpolation issues:\n${interpolationErrors.map(e => `  - ${e}`).join('\n')}\n`)
-    }
-
-    const sendStatus = (_status: string) => {}
-
-    if (effectiveMode === 'native') {
-      if (service.port) {
-        const killed = await container.killProcessOnPortAsync(service.port)
-        if (killed) {
-          sendLog(`Killed existing process on port ${service.port}\n`)
-        }
-      }
-      container.startNativeService(
-        serviceId,
-        service.command,
-        servicePath,
-        finalEnv,
-        sendLog,
-        sendStatus
-      )
-    } else {
-      const devcontainerConfigPath = buildDevcontainerPath(project.path, service.id)
-
-      sendLog('══════ Building container ══════\n')
-      await container.buildContainer(servicePath, devcontainerConfigPath, sendLog)
-
-      sendLog('\n══════ Starting service ══════\n')
-      await container.startService(servicePath, devcontainerConfigPath, service.command, finalEnv, sendLog)
-    }
+    await startServiceCore(container, config, registry, projectId, serviceId, callbacks, modeOverride)
   }
 
   const stopService = async (projectId: string, serviceId: string): Promise<void> => {
