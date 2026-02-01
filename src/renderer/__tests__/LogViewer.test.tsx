@@ -1,145 +1,30 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, act } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { LogViewer } from '../src/components/LogViewer'
 import { mockApi } from './setup'
-import { LOG_CONSTANTS } from '../../shared/constants'
 
-const { MAX_LOG_LINES } = LOG_CONSTANTS
-
-describe('LogViewer - batching', () => {
-  let logDataCallback: ((data: { projectId: string; serviceId: string; data: string }) => void) | null = null
-
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.clearAllMocks()
-    mockApi.getLogs.mockResolvedValue([])
-    mockApi.startLogStream.mockResolvedValue(undefined)
-    mockApi.stopLogStream.mockResolvedValue(undefined)
-    mockApi.clearLogs.mockResolvedValue(undefined)
-
-    // Capture the callback passed to onLogData
-    mockApi.onLogData.mockImplementation((callback) => {
-      logDataCallback = callback
-      return vi.fn() // Return unsubscribe function
-    })
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-    logDataCallback = null
-  })
-
-  it('batches rapid log updates into fewer state updates', async () => {
-    const stateUpdateCount = { current: 0 }
-    const originalSetState = React.useState
-
-    // Track setLogs calls by monkey-patching useState
-    vi.spyOn(React, 'useState').mockImplementation((initialValue) => {
-      const [state, setState] = originalSetState(initialValue)
-      if (Array.isArray(initialValue)) {
-        // This is the logs state
-        const wrappedSetState = (value: unknown) => {
-          stateUpdateCount.current++
-          return setState(value)
-        }
-        return [state, wrappedSetState]
-      }
-      return [state, setState]
-    })
-
-    render(
-      <LogViewer
-        projectId="p1"
-        serviceId="s1"
-        serviceName="Test Service"
-      />
-    )
-
-    // Wait for initial setup
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0)
-    })
-
-    // Reset count after initial render
-    stateUpdateCount.current = 0
-
-    // Simulate 50 rapid log events
-    await act(async () => {
-      for (let i = 0; i < 50; i++) {
-        logDataCallback?.({ projectId: 'p1', serviceId: 's1', data: `Line ${i}` })
-      }
-      // Advance past the flush interval (16ms)
-      await vi.advanceTimersByTimeAsync(20)
-    })
-
-    // Should have batched updates - expect far fewer than 50 state updates
-    expect(stateUpdateCount.current).toBeLessThan(10)
-
-    vi.mocked(React.useState).mockRestore()
-  })
-
-  it('stores all log lines after batching', async () => {
-    // Test that logs are stored correctly (virtualization may not render all in JSDOM)
-    const logState: string[] = []
-
-    mockApi.getLogs.mockImplementation(async () => {
-      return logState
-    })
-
-    render(
-      <LogViewer
-        projectId="p1"
-        serviceId="s1"
-        serviceName="Test Service"
-      />
-    )
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0)
-    })
-
-    // Simulate 10 rapid log events
-    await act(async () => {
-      for (let i = 0; i < 10; i++) {
-        logDataCallback?.({ projectId: 'p1', serviceId: 's1', data: `Line ${i}` })
-      }
-      await vi.advanceTimersByTimeAsync(20)
-    })
-
-    // In JSDOM, the virtualizer may not render items without a measurable height
-    // but the component should still store 10 lines internally
-    // We verify the component doesn't crash and processes logs
-  })
-
-  it(`respects max log limit of ${MAX_LOG_LINES} lines`, async () => {
-    const { container } = render(
-      <LogViewer
-        projectId="p1"
-        serviceId="s1"
-        serviceName="Test Service"
-      />
-    )
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0)
-    })
-
-    // Simulate more log events than the max
-    const excessLogs = MAX_LOG_LINES + 100
-    await act(async () => {
-      for (let i = 0; i < excessLogs; i++) {
-        logDataCallback?.({ projectId: 'p1', serviceId: 's1', data: `Line ${i}` })
-      }
-      await vi.advanceTimersByTimeAsync(100)
-    })
-
-    const lines = container.querySelectorAll('.terminal-line')
-    expect(lines.length).toBeLessThanOrEqual(MAX_LOG_LINES)
-  })
+// Mock xterm.js - it doesn't work in JSDOM (no canvas)
+vi.mock('@xterm/xterm', () => {
+  const MockTerminal = class {
+    loadAddon = vi.fn()
+    open = vi.fn()
+    write = vi.fn()
+    clear = vi.fn()
+    reset = vi.fn()
+    dispose = vi.fn()
+  }
+  return { Terminal: MockTerminal }
 })
 
-describe('LogViewer - virtualization', () => {
+vi.mock('@xterm/addon-fit', () => {
+  const MockFitAddon = class {
+    fit = vi.fn()
+  }
+  return { FitAddon: MockFitAddon }
+})
+
+describe('LogViewer', () => {
   let logDataCallback: ((data: { projectId: string; serviceId: string; data: string }) => void) | null = null
 
   beforeEach(() => {
@@ -161,12 +46,8 @@ describe('LogViewer - virtualization', () => {
     logDataCallback = null
   })
 
-  it('renders only visible rows with virtualization when many logs exist', async () => {
-    // Pre-populate with many logs
-    const initialLogs = Array.from({ length: 500 }, (_, i) => `Log line ${i}`)
-    mockApi.getLogs.mockResolvedValue(initialLogs)
-
-    const { container } = render(
+  it('renders header with service name', async () => {
+    render(
       <LogViewer
         projectId="p1"
         serviceId="s1"
@@ -178,20 +59,11 @@ describe('LogViewer - virtualization', () => {
       await vi.advanceTimersByTimeAsync(0)
     })
 
-    // With virtualization, we should render far fewer DOM elements than total logs
-    const renderedLines = container.querySelectorAll('.terminal-line')
-
-    // Virtualization should render only visible rows (typically ~20-50 depending on height)
-    // Without virtualization, we'd have 500 DOM elements
-    // We allow for some flexibility since the exact number depends on container height
-    expect(renderedLines.length).toBeLessThan(100)
+    expect(screen.getByText('Test Service')).toBeInTheDocument()
   })
 
-  it('handles scroll container and new log events', async () => {
-    const initialLogs = Array.from({ length: 200 }, (_, i) => `Log line ${i}`)
-    mockApi.getLogs.mockResolvedValue(initialLogs)
-
-    const { container } = render(
+  it('starts and stops log stream on mount/unmount', async () => {
+    const { unmount } = render(
       <LogViewer
         projectId="p1"
         serviceId="s1"
@@ -203,18 +75,83 @@ describe('LogViewer - virtualization', () => {
       await vi.advanceTimersByTimeAsync(0)
     })
 
-    // Find scroll container (the one with overflow-auto class)
-    const scrollContainer = container.querySelector('.overflow-auto')
-    expect(scrollContainer).toBeTruthy()
+    expect(mockApi.startLogStream).toHaveBeenCalledWith('p1', 's1')
 
-    // Add a new log while scroll is at bottom - should not throw
+    unmount()
+
+    expect(mockApi.stopLogStream).toHaveBeenCalledWith('p1', 's1')
+  })
+
+  it('fetches existing logs on mount', async () => {
+    mockApi.getLogs.mockResolvedValue(['line 1', 'line 2'])
+
+    render(
+      <LogViewer
+        projectId="p1"
+        serviceId="s1"
+        serviceName="Test Service"
+      />
+    )
+
     await act(async () => {
-      logDataCallback?.({ projectId: 'p1', serviceId: 's1', data: 'New line' })
-      await vi.advanceTimersByTimeAsync(20)
+      await vi.advanceTimersByTimeAsync(0)
     })
 
-    // In JSDOM without real dimensions, the virtualizer may render 0 items
-    // but the component should not crash and should have the scroll container
-    expect(scrollContainer).toBeTruthy()
+    expect(mockApi.getLogs).toHaveBeenCalledWith('p1', 's1')
+  })
+
+  it('subscribes to log data events', async () => {
+    render(
+      <LogViewer
+        projectId="p1"
+        serviceId="s1"
+        serviceName="Test Service"
+      />
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(mockApi.onLogData).toHaveBeenCalled()
+    expect(logDataCallback).toBeTruthy()
+  })
+
+  it('has download and clear buttons', async () => {
+    render(
+      <LogViewer
+        projectId="p1"
+        serviceId="s1"
+        serviceName="Test Service"
+      />
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(screen.getByTitle('Download logs')).toBeInTheDocument()
+    expect(screen.getByTitle('Clear logs')).toBeInTheDocument()
+  })
+
+  it('calls clearLogs API when clear button clicked', async () => {
+    render(
+      <LogViewer
+        projectId="p1"
+        serviceId="s1"
+        serviceName="Test Service"
+      />
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    const clearButton = screen.getByTitle('Clear logs')
+    await act(async () => {
+      clearButton.click()
+    })
+
+    expect(mockApi.clearLogs).toHaveBeenCalledWith('p1', 's1')
   })
 })

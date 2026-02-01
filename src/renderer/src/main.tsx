@@ -1,3 +1,4 @@
+import '@xterm/xterm/css/xterm.css'
 import './assets/main.css'
 
 import React from 'react'

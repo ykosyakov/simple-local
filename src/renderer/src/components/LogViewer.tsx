@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
-import { Terminal, Download, Trash2, ChevronDown } from 'lucide-react'
-import { LOG_CONSTANTS, UI_CONSTANTS } from '../../../shared/constants'
+import { useEffect, useRef } from 'react'
+import { Terminal as XTerm } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { Terminal, Download, Trash2 } from 'lucide-react'
 
 interface LogViewerProps {
   projectId: string
@@ -9,36 +9,63 @@ interface LogViewerProps {
   serviceName: string
 }
 
-const { MAX_LOG_LINES, BUFFER_FLUSH_INTERVAL_MS } = LOG_CONSTANTS
-const { LOG_ROW_HEIGHT } = UI_CONSTANTS
+const XTERM_THEME = {
+  background: '#0A0C0F',
+  foreground: '#8B949E',
+  cursor: 'transparent',
+  cursorAccent: 'transparent',
+  selectionBackground: 'rgba(0, 229, 204, 0.25)',
+  selectionForeground: '#E6EDF3',
+  black: '#161B22',
+  red: '#FF4757',
+  green: '#00E5CC',
+  yellow: '#FFB800',
+  blue: '#58A6FF',
+  magenta: '#BC8CFF',
+  cyan: '#00E5CC',
+  white: '#8B949E',
+  brightBlack: '#6E7681',
+  brightRed: '#FF6B7A',
+  brightGreen: '#00FFE0',
+  brightYellow: '#FFCC00',
+  brightBlue: '#79C0FF',
+  brightMagenta: '#D2A8FF',
+  brightCyan: '#00FFE0',
+  brightWhite: '#E6EDF3',
+}
 
 export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps) {
-  const [logs, setLogs] = useState<string[]>([])
   const containerRef = useRef<HTMLDivElement>(null)
-  const autoScrollRef = useRef(true)
-  const [showScrollButton, setShowScrollButton] = useState(false)
-  const logBufferRef = useRef<string[]>([])
-  const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const virtualizer = useVirtualizer({
-    count: logs.length,
-    getScrollElement: () => containerRef.current,
-    estimateSize: () => LOG_ROW_HEIGHT,
-    overscan: 10,
-    measureElement: (el) => el.getBoundingClientRect().height,
-  })
-
-  const flushLogs = useCallback(() => {
-    if (logBufferRef.current.length === 0) return
-    const newLogs = logBufferRef.current
-    logBufferRef.current = []
-    setLogs((prev) => {
-      const combined = [...prev, ...newLogs]
-      return combined.length > MAX_LOG_LINES ? combined.slice(-MAX_LOG_LINES) : combined
-    })
-  }, [])
+  const xtermRef = useRef<XTerm | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
 
   useEffect(() => {
+    if (!containerRef.current) return
+
+    const terminal = new XTerm({
+      cursorBlink: false,
+      disableStdin: true,
+      convertEol: true,
+      scrollback: 10000,
+      fontFamily: '"JetBrains Mono", monospace',
+      fontSize: 12,
+      lineHeight: 1.3,
+      theme: XTERM_THEME,
+    })
+
+    const fitAddon = new FitAddon()
+    terminal.loadAddon(fitAddon)
+    terminal.open(containerRef.current)
+    fitAddon.fit()
+
+    xtermRef.current = terminal
+    fitAddonRef.current = fitAddon
+
+    const resizeObserver = new ResizeObserver(() => {
+      fitAddon.fit()
+    })
+    resizeObserver.observe(containerRef.current)
+
     let mounted = true
     let streamStarted = false
 
@@ -46,7 +73,10 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
       const storedLogs = await window.api.getLogs(projectId, serviceId)
       if (!mounted) return
 
-      setLogs(storedLogs)
+      if (storedLogs.length > 0) {
+        terminal.write(storedLogs.join('\r\n') + '\r\n')
+      }
+
       await window.api.startLogStream(projectId, serviceId)
       if (mounted) {
         streamStarted = true
@@ -59,57 +89,31 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
 
     const unsubscribe = window.api.onLogData((data) => {
       if (data.projectId === projectId && data.serviceId === serviceId) {
-        logBufferRef.current.push(data.data)
-        if (!flushTimeoutRef.current) {
-          flushTimeoutRef.current = setTimeout(() => {
-            flushTimeoutRef.current = null
-            flushLogs()
-          }, BUFFER_FLUSH_INTERVAL_MS)
-        }
+        terminal.write(data.data + '\r\n')
       }
     })
 
     return () => {
       mounted = false
       unsubscribe()
-      if (flushTimeoutRef.current) {
-        clearTimeout(flushTimeoutRef.current)
-        flushTimeoutRef.current = null
-      }
+      resizeObserver.disconnect()
       if (streamStarted) {
         window.api.stopLogStream(projectId, serviceId)
       }
+      terminal.dispose()
+      xtermRef.current = null
+      fitAddonRef.current = null
     }
-  }, [projectId, serviceId, flushLogs])
-
-  useEffect(() => {
-    if (autoScrollRef.current && logs.length > 0) {
-      virtualizer.scrollToIndex(logs.length - 1, { align: 'end' })
-    }
-  }, [logs.length, virtualizer])
-
-  const handleScroll = () => {
-    if (!containerRef.current) return
-    const { scrollTop, scrollHeight, clientHeight } = containerRef.current
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 50
-    autoScrollRef.current = isNearBottom
-    setShowScrollButton(!isNearBottom && logs.length > 20)
-  }
-
-  const scrollToBottom = () => {
-    if (logs.length > 0) {
-      virtualizer.scrollToIndex(logs.length - 1, { align: 'end' })
-      autoScrollRef.current = true
-      setShowScrollButton(false)
-    }
-  }
+  }, [projectId, serviceId])
 
   const clearLogs = () => {
-    setLogs([])
+    xtermRef.current?.clear()
+    xtermRef.current?.reset()
     window.api.clearLogs(projectId, serviceId)
   }
 
-  const downloadLogs = () => {
+  const downloadLogs = async () => {
+    const logs = await window.api.getLogs(projectId, serviceId)
     const blob = new Blob([logs.join('\n')], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -127,7 +131,6 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
         border: '1px solid var(--border-subtle)',
       }}
     >
-      {/* Header */}
       <div
         className="flex items-center justify-between px-4 py-3"
         style={{
@@ -146,97 +149,18 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
           >
             {serviceName}
           </span>
-          <span
-            className="text-xs"
-            style={{
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            {logs.length} lines
-          </span>
         </div>
         <div className="flex gap-1">
-          <button
-            onClick={downloadLogs}
-            className="btn-icon"
-            title="Download logs"
-          >
+          <button onClick={downloadLogs} className="btn-icon" title="Download logs">
             <Download className="h-4 w-4" />
           </button>
-          <button
-            onClick={clearLogs}
-            className="btn-icon"
-            title="Clear logs"
-          >
+          <button onClick={clearLogs} className="btn-icon" title="Clear logs">
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      {/* Logs */}
-      <div
-        ref={containerRef}
-        onScroll={handleScroll}
-        className="terminal relative flex-1 overflow-auto scanlines"
-      >
-        {logs.length === 0 ? (
-          <div
-            className="flex h-full items-center justify-center"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            <span style={{ fontFamily: 'var(--font-mono)' }}>
-              Waiting for logs...
-            </span>
-          </div>
-        ) : (
-          <div
-            style={{
-              height: `${virtualizer.getTotalSize()}px`,
-              width: '100%',
-              position: 'relative',
-            }}
-          >
-            {virtualizer.getVirtualItems().map((virtualRow) => (
-              <div
-                key={virtualRow.key}
-                data-index={virtualRow.index}
-                ref={virtualizer.measureElement}
-                className="terminal-line whitespace-pre-wrap py-0.5"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
-              >
-                <span style={{ color: 'var(--text-muted)', marginRight: '1rem' }}>
-                  {String(virtualRow.index + 1).padStart(4, ' ')}
-                </span>
-                {logs[virtualRow.index]}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Scroll to bottom button */}
-      {showScrollButton && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg px-3 py-2 transition-all"
-          style={{
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
-            color: 'var(--text-secondary)',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-          }}
-        >
-          <ChevronDown className="h-4 w-4" />
-          <span className="text-xs font-medium">Jump to bottom</span>
-        </button>
-      )}
+      <div ref={containerRef} className="flex-1 overflow-hidden p-2" />
     </div>
   )
 }
