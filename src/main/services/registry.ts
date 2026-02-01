@@ -2,6 +2,21 @@ import Store from 'electron-store'
 import type { Registry, Project, GlobalSettings } from '../../shared/types'
 import { ConfigPaths } from './config-paths'
 
+/**
+ * Base port number for debug connections.
+ * Port 9200+ is chosen to avoid conflicts with common development ports (3000-9000)
+ * and well-known services (e.g., 9200 is sometimes used by Elasticsearch, but
+ * our debug ports start there and increment upward).
+ */
+const DEBUG_PORT_BASE = 9200
+
+/**
+ * Port increment between projects for debug connections.
+ * Each project gets 10 debug ports (e.g., project 0: 9200-9209, project 1: 9210-9219).
+ * This allows multiple debug sessions per project (e.g., main process + workers).
+ */
+const DEBUG_PORT_STEP = 10
+
 const DEFAULT_SETTINGS: GlobalSettings = {
   dockerSocket: 'auto',
   defaultPortStart: 3000,
@@ -49,7 +64,8 @@ export class RegistryService {
   addProject(path: string, name: string): Project {
     const projects = this.store.get('projects') ?? []
     const portRange = this.getNextPortRange()
-    const debugPortRange: [number, number] = [9200 + projects.length * 10, 9209 + projects.length * 10]
+    const debugPortStart = DEBUG_PORT_BASE + projects.length * DEBUG_PORT_STEP
+    const debugPortRange: [number, number] = [debugPortStart, debugPortStart + DEBUG_PORT_STEP - 1]
 
     const project: Project = {
       id: `proj_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
