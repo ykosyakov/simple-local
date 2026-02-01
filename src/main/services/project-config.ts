@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import type { ProjectConfig, Service } from '../../shared/types'
+import { ConfigPaths } from './config-paths'
 
 /**
  * Properties that can be safely interpolated in environment variables.
@@ -23,12 +24,9 @@ export interface InterpolateEnvResult {
   errors: string[]
 }
 
-const CONFIG_DIR = '.simple-local'
-const CONFIG_FILE = 'config.json'
-
 export class ProjectConfigService {
   private getConfigPath(projectPath: string): string {
-    return path.join(projectPath, CONFIG_DIR, CONFIG_FILE)
+    return ConfigPaths.projectConfig(projectPath)
   }
 
   async loadConfig(projectPath: string): Promise<ProjectConfig | null> {
@@ -44,7 +42,7 @@ export class ProjectConfigService {
   }
 
   async saveConfig(projectPath: string, config: ProjectConfig): Promise<void> {
-    const configDir = path.join(projectPath, CONFIG_DIR)
+    const configDir = ConfigPaths.projectDir(projectPath)
     const configPath = this.getConfigPath(projectPath)
 
     await fs.mkdir(configDir, { recursive: true })
@@ -132,7 +130,7 @@ export class ProjectConfigService {
   }
 
   async saveDevcontainer(projectPath: string, service: Service, config: object): Promise<string> {
-    const devcontainerDir = path.join(projectPath, CONFIG_DIR, 'devcontainers', service.id)
+    const devcontainerDir = ConfigPaths.devcontainerDir(projectPath, service.id)
     const devcontainerPath = path.join(devcontainerDir, 'devcontainer.json')
 
     await fs.mkdir(devcontainerDir, { recursive: true })
