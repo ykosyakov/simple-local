@@ -43,13 +43,20 @@ export class PortService {
     })
   }
 
+  /**
+   * Default baseline port for port suggestions.
+   * Matches the registry's defaultPortStart setting.
+   */
+  static readonly DEFAULT_PORT_BASELINE = 3000
+
   suggestPortRemap(
     originalPort: number,
     existingRanges: PortRange[],
-    rangeSize: number
+    rangeSize: number,
+    baselinePort: number = PortService.DEFAULT_PORT_BASELINE
   ): number {
-    // Find highest used port
-    let maxPort = 3000
+    // Find highest used port, starting from the baseline
+    let maxPort = baselinePort
     for (const range of existingRanges) {
       if (range.portRange[1] > maxPort) {
         maxPort = range.portRange[1]

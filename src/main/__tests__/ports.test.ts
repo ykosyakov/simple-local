@@ -57,5 +57,25 @@ describe('PortService', () => {
       const suggested = portService.suggestPortRemap(3050, existing, 100)
       expect(suggested).toBeGreaterThanOrEqual(3200)
     })
+
+    it('uses default baseline port when no ranges exist', () => {
+      const suggested = portService.suggestPortRemap(50, [], 100)
+      // With default baseline of 3000, next range starts at 3100 (ceil((3000+1)/100)*100)
+      // Then add offset 50 = 3150
+      expect(suggested).toBe(3150)
+    })
+
+    it('respects custom baseline port', () => {
+      const suggested = portService.suggestPortRemap(50, [], 100, 4000)
+      // With baseline of 4000, next range starts at 4100, offset 50 gives 4150
+      expect(suggested).toBe(4150)
+    })
+
+    it('ignores baseline when existing ranges exceed it', () => {
+      const existing = [{ portRange: [5000, 5099] as [number, number] }]
+      const suggested = portService.suggestPortRemap(50, existing, 100, 3000)
+      // Existing range ends at 5099, so next range starts at 5100, offset 50 gives 5150
+      expect(suggested).toBe(5150)
+    })
   })
 })
