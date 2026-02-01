@@ -127,6 +127,65 @@ const FRAMEWORK_PATTERNS: Record<string, RegExp> = {
   bun: /bun/i,
 }
 
+/**
+ * Converts a string to a URL-friendly slug.
+ * Used for generating deterministic service IDs.
+ * @internal Exported for testing
+ */
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50) // Limit length
+    || 'service' // Fallback if empty after processing
+}
+
+/**
+ * Generates a deterministic service ID based on name or path.
+ * Falls back to 'service' if neither is available.
+ */
+function generateServiceId(service: AIServiceOutput): string {
+  if (service.name) {
+    return slugify(service.name)
+  }
+  if (service.path && service.path !== '.') {
+    // Use the last segment of the path
+    const pathSegment = service.path.split('/').filter(Boolean).pop()
+    if (pathSegment) {
+      return slugify(pathSegment)
+    }
+  }
+  return 'service'
+}
+
+/**
+ * Makes an ID unique by appending a suffix if needed.
+ * @internal Exported for testing
+ */
+export function makeUniqueId(baseId: string, usedIds: Set<string>): string {
+  if (!usedIds.has(baseId)) {
+    return baseId
+  }
+  let counter = 2
+  while (usedIds.has(`${baseId}-${counter}`)) {
+    counter++
+  }
+  return `${baseId}-${counter}`
+}
+
+/**
+ * Allocates the next available port starting from a base port.
+ * @internal Exported for testing
+ */
+export function allocatePort(basePort: number, usedPorts: Set<number>): number {
+  let port = basePort
+  while (usedPorts.has(port)) {
+    port++
+  }
+  return port
+}
+
 const FRONTEND_FRAMEWORKS = new Set(['next', 'react', 'vue', 'vite', 'webpack', 'parcel'])
 const BACKEND_FRAMEWORKS = new Set(['express', 'fastify', 'nest', 'django', 'flask', 'rails', 'spring'])
 
@@ -349,10 +408,37 @@ export class DiscoveryService {
     projectPath: string
   ): ProjectConfig {
     const projectName = path.basename(projectPath)
+    const usedIds = new Set<string>()
+    const usedPorts = new Set<number>()
 
-    const services: Service[] = aiOutput.services.map((s, index) => {
+    // First pass: collect explicitly defined IDs and ports
+    for (const s of aiOutput.services) {
+      if (s.id) usedIds.add(s.id)
+      if (s.port) usedPorts.add(s.port)
+    }
+
+    const services: Service[] = aiOutput.services.map((s) => {
       const isService = s.type !== 'tool'
-      const serviceId = s.id || `service-${index}`
+
+      // Use provided ID or generate a deterministic one from name/path
+      let serviceId: string
+      if (s.id) {
+        serviceId = s.id
+      } else {
+        const baseId = generateServiceId(s)
+        serviceId = makeUniqueId(baseId, usedIds)
+        usedIds.add(serviceId)
+      }
+
+      // Use provided port or allocate next available (for services only)
+      let port: number | undefined
+      if (s.port) {
+        port = s.port
+      } else if (isService) {
+        port = allocatePort(3000, usedPorts)
+        usedPorts.add(port)
+      }
+
       return {
         id: serviceId,
         name: s.name || s.id || serviceId,
@@ -360,7 +446,7 @@ export class DiscoveryService {
         path: s.path,
         command: s.command,
         debugCommand: s.debugCommand,
-        port: s.port || (isService ? 3000 + index : undefined),
+        port,
         debugPort: s.debugPort,
         env: s.env || {},
         dependsOn: s.dependsOn,

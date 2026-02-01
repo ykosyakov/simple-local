@@ -4,6 +4,9 @@ import {
   type FileSystemOperations,
   type AgentTerminalFactory,
   type CommandChecker,
+  slugify,
+  makeUniqueId,
+  allocatePort,
 } from '../services/discovery'
 import type { AgentTerminal } from '@agent-flow/agent-terminal'
 
@@ -378,5 +381,71 @@ describe('DiscoveryService', () => {
       const service = new DiscoveryService()
       expect(service).toBeInstanceOf(DiscoveryService)
     })
+  })
+})
+
+describe('slugify', () => {
+  it('converts text to lowercase', () => {
+    expect(slugify('HelloWorld')).toBe('helloworld')
+  })
+
+  it('replaces non-alphanumeric characters with hyphens', () => {
+    expect(slugify('My App Name')).toBe('my-app-name')
+    expect(slugify('service@2.0')).toBe('service-2-0')
+  })
+
+  it('removes leading and trailing hyphens', () => {
+    expect(slugify('--hello--')).toBe('hello')
+    expect(slugify('  hello  ')).toBe('hello')
+  })
+
+  it('limits length to 50 characters', () => {
+    const longName = 'a'.repeat(100)
+    expect(slugify(longName).length).toBeLessThanOrEqual(50)
+  })
+
+  it('returns "service" for empty or all-special-char input', () => {
+    expect(slugify('')).toBe('service')
+    expect(slugify('---')).toBe('service')
+    expect(slugify('   ')).toBe('service')
+  })
+})
+
+describe('makeUniqueId', () => {
+  it('returns base ID if not in use', () => {
+    const usedIds = new Set<string>()
+    expect(makeUniqueId('backend', usedIds)).toBe('backend')
+  })
+
+  it('appends -2 suffix for first collision', () => {
+    const usedIds = new Set(['backend'])
+    expect(makeUniqueId('backend', usedIds)).toBe('backend-2')
+  })
+
+  it('increments suffix for multiple collisions', () => {
+    const usedIds = new Set(['backend', 'backend-2', 'backend-3'])
+    expect(makeUniqueId('backend', usedIds)).toBe('backend-4')
+  })
+})
+
+describe('allocatePort', () => {
+  it('returns base port if available', () => {
+    const usedPorts = new Set<number>()
+    expect(allocatePort(3000, usedPorts)).toBe(3000)
+  })
+
+  it('finds next available port when base is in use', () => {
+    const usedPorts = new Set([3000])
+    expect(allocatePort(3000, usedPorts)).toBe(3001)
+  })
+
+  it('skips multiple used ports', () => {
+    const usedPorts = new Set([3000, 3001, 3002])
+    expect(allocatePort(3000, usedPorts)).toBe(3003)
+  })
+
+  it('handles gaps in used ports', () => {
+    const usedPorts = new Set([3000, 3002])
+    expect(allocatePort(3000, usedPorts)).toBe(3001)
   })
 })
