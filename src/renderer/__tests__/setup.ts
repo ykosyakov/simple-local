@@ -16,6 +16,11 @@ const mockApi = {
   onLogData: vi.fn(() => vi.fn()),
   onStatusChange: vi.fn(() => vi.fn()),
   reanalyzeServiceEnv: vi.fn(),
+  // Setup-related API methods
+  checkPrerequisites: vi.fn(),
+  getSettings: vi.fn(),
+  saveSettings: vi.fn(),
+  getRegistry: vi.fn(),
 }
 
 Object.defineProperty(window, 'api', {

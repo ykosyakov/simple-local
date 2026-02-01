@@ -11,16 +11,26 @@ import type {
   Registry,
   Service,
   ProjectConfig,
-  PrerequisitesResult,
-  AppSettings,
 } from "../../shared/types";
 import { createLogger } from "../../shared/logger";
+import { useAppSetup } from "./hooks/useAppSetup";
 
 const log = createLogger("Renderer");
 
-type AppState = "checking" | "setup" | "ready";
-
 function App() {
+  // Setup/initialization state (encapsulates prerequisites checking, setup flow)
+  const {
+    status: appStatus,
+    prerequisites,
+    isRechecking,
+    hasCompletedSetup,
+    recheck,
+    completeSetup,
+    openSettings,
+    cancelSettings,
+  } = useAppSetup();
+
+  // Project state
   const [registry, setRegistry] = useState<Registry | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
@@ -28,52 +38,13 @@ function App() {
   const [loadingProjectPath, setLoadingProjectPath] = useState<string | null>(
     null,
   );
+
+  // UI ephemeral state
   const [addError, setAddError] = useState<string | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
-  const [appState, setAppState] = useState<AppState>("checking");
-  const [prerequisites, setPrerequisites] =
-    useState<PrerequisitesResult | null>(null);
-  const [isRechecking, setIsRechecking] = useState(false);
-  const [hasCompletedSetup, setHasCompletedSetup] = useState(false);
 
   useEffect(() => {
     window.api.getRegistry().then(setRegistry);
-  }, []);
-
-  useEffect(() => {
-    const checkStartup = async () => {
-      try {
-        const [prereqs, settings] = await Promise.all([
-          window.api.checkPrerequisites(),
-          window.api.getSettings(),
-        ]);
-
-        setPrerequisites(prereqs);
-
-        if (settings) {
-          setHasCompletedSetup(true);
-          // Validate saved settings still work
-          const savedRuntime = prereqs.runtimes.find(
-            (r) => r.id === settings.containerRuntime.selected,
-          );
-          const savedAgent = prereqs.agents.find(
-            (a) => a.id === settings.aiAgent.selected,
-          );
-
-          if (savedRuntime?.running && savedAgent?.available) {
-            setAppState("ready");
-            return;
-          }
-        }
-
-        setAppState("setup");
-      } catch (error) {
-        log.error("Failed to check prerequisites:", error);
-        setAppState("setup");
-      }
-    };
-
-    checkStartup();
   }, []);
 
   const selectedProject = registry?.projects.find(
@@ -219,29 +190,7 @@ function App() {
     setProjectToDelete(null);
   };
 
-  const handleSetupComplete = async (settings: AppSettings) => {
-    await window.api.saveSettings(settings);
-    setHasCompletedSetup(true);
-    setAppState("ready");
-  };
-
-  const handleSettingsCancel = () => {
-    setAppState("ready");
-  };
-
-  const handleRecheck = async () => {
-    setIsRechecking(true);
-    try {
-      const prereqs = await window.api.checkPrerequisites();
-      setPrerequisites(prereqs);
-    } catch (error) {
-      log.error("Failed to recheck prerequisites:", error);
-    } finally {
-      setIsRechecking(false);
-    }
-  };
-
-  if (appState === "checking") {
+  if (appStatus === "checking") {
     return (
       <div className="flex h-screen items-center justify-center gradient-mesh noise">
         <div className="text-center">
@@ -260,14 +209,14 @@ function App() {
     );
   }
 
-  if (appState === "setup" && prerequisites) {
+  if (appStatus === "setup" && prerequisites) {
     return (
       <SetupScreen
         prerequisites={prerequisites}
-        onComplete={handleSetupComplete}
-        onRecheck={handleRecheck}
+        onComplete={completeSetup}
+        onRecheck={recheck}
         isRechecking={isRechecking}
-        onCancel={hasCompletedSetup ? handleSettingsCancel : undefined}
+        onCancel={hasCompletedSetup ? cancelSettings : undefined}
       />
     );
   }
@@ -279,9 +228,7 @@ function App() {
         selectedProjectId={selectedProjectId ?? undefined}
         onSelectProject={setSelectedProjectId}
         onAddProject={handleAddProject}
-        onOpenSettings={() => {
-          setAppState("setup");
-        }}
+        onOpenSettings={openSettings}
         onDeleteProject={setProjectToDelete}
       />
 
