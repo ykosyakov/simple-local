@@ -3,6 +3,17 @@ import * as path from 'path'
 import type { ProjectConfig, Service } from '../../shared/types'
 
 /**
+ * Properties that can be safely interpolated in environment variables.
+ * Only primitive string/number values should be in this list.
+ */
+const ALLOWED_SERVICE_PROPS = ['id', 'name', 'path', 'command', 'port', 'debugPort', 'mode'] as const
+type AllowedServiceProp = (typeof ALLOWED_SERVICE_PROPS)[number]
+
+function isAllowedProp(prop: string): prop is AllowedServiceProp {
+  return (ALLOWED_SERVICE_PROPS as readonly string[]).includes(prop)
+}
+
+/**
  * Result of environment variable interpolation
  */
 export interface InterpolateEnvResult {
@@ -60,12 +71,19 @@ export class ProjectConfigService {
         const service = services.find((s) => s.id === serviceId)
 
         if (!service) {
-          const error = `Unknown service '${serviceId}' in env var '${key}'. Available services: ${services.map(s => s.id).join(', ') || 'none'}`
+          const error = `Unknown service '${serviceId}' in env var '${key}'. Available services: ${services.map((s) => s.id).join(', ') || 'none'}`
           errors.push(error)
           return match // Keep original pattern to make error visible
         }
 
-        const propValue = service[prop as keyof Service]
+        if (!isAllowedProp(prop)) {
+          const allowedList = ALLOWED_SERVICE_PROPS.join(', ')
+          const error = `Property '${prop}' is not allowed in interpolation for env var '${key}'. Allowed properties: ${allowedList}`
+          errors.push(error)
+          return match // Keep original pattern to make error visible
+        }
+
+        const propValue = service[prop]
 
         if (propValue === undefined || propValue === null) {
           const error = `Property '${prop}' is undefined on service '${serviceId}' in env var '${key}'`

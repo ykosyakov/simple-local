@@ -141,5 +141,63 @@ describe('ProjectConfigService', () => {
       expect(result.errors).toHaveLength(1)
       expect(result.errors[0]).toContain('undefined')
     })
+
+    it('returns error when property is not in allowed whitelist', () => {
+      const services = [
+        {
+          id: 'backend',
+          port: 3001,
+          env: { SECRET: 'secret-value' },
+          active: true,
+        },
+      ] as any[]
+
+      // 'env' and 'active' exist on Service but shouldn't be interpolatable
+      const env = {
+        BAD_ENV: '${services.backend.env}',
+        BAD_ACTIVE: '${services.backend.active}',
+      }
+      const result = configService.interpolateEnv(env, services)
+
+      expect(result.env.BAD_ENV).toBe('${services.backend.env}')
+      expect(result.env.BAD_ACTIVE).toBe('${services.backend.active}')
+      expect(result.errors).toHaveLength(2)
+      expect(result.errors[0]).toContain('not allowed')
+      expect(result.errors[1]).toContain('not allowed')
+    })
+
+    it('interpolates all allowed properties correctly', () => {
+      const services = [
+        {
+          id: 'backend',
+          name: 'Backend Service',
+          path: './backend',
+          command: 'npm run dev',
+          port: 3001,
+          debugPort: 9229,
+          mode: 'native',
+        },
+      ] as any[]
+
+      const env = {
+        SERVICE_ID: '${services.backend.id}',
+        SERVICE_NAME: '${services.backend.name}',
+        SERVICE_PATH: '${services.backend.path}',
+        SERVICE_CMD: '${services.backend.command}',
+        SERVICE_PORT: '${services.backend.port}',
+        SERVICE_DEBUG: '${services.backend.debugPort}',
+        SERVICE_MODE: '${services.backend.mode}',
+      }
+      const result = configService.interpolateEnv(env, services)
+
+      expect(result.env.SERVICE_ID).toBe('backend')
+      expect(result.env.SERVICE_NAME).toBe('Backend Service')
+      expect(result.env.SERVICE_PATH).toBe('./backend')
+      expect(result.env.SERVICE_CMD).toBe('npm run dev')
+      expect(result.env.SERVICE_PORT).toBe('3001')
+      expect(result.env.SERVICE_DEBUG).toBe('9229')
+      expect(result.env.SERVICE_MODE).toBe('native')
+      expect(result.errors).toEqual([])
+    })
   })
 })
