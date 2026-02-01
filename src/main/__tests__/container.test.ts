@@ -499,13 +499,19 @@ describe('ContainerService', () => {
     it('stops a running native service', async () => {
       const { spawn } = await import('child_process')
       const mockKill = vi.fn().mockReturnValue(true)
+      // Track close handlers to simulate process exit
+      let closeOnceHandler: (() => void) | undefined
       const mockProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn(),
+        once: vi.fn((event: string, handler: () => void) => {
+          if (event === 'close') closeOnceHandler = handler
+        }),
         kill: mockKill,
         pid: 12345,
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(spawn).mockReturnValue(mockProcess as any)
 
       // Start a service first
@@ -518,15 +524,19 @@ describe('ContainerService', () => {
         vi.fn()
       )
 
-      // Now stop it
-      const result = containerService.stopNativeService('test-service')
+      // Start the stop operation (async)
+      const stopPromise = containerService.stopNativeService('test-service')
 
-      expect(result).toBe(true)
+      // Simulate process exiting after SIGTERM
       expect(mockKill).toHaveBeenCalledWith('SIGTERM')
+      closeOnceHandler?.()
+
+      const result = await stopPromise
+      expect(result).toBe(true)
     })
 
-    it('returns false if no process found', () => {
-      const result = containerService.stopNativeService('nonexistent')
+    it('returns false if no process found', async () => {
+      const result = await containerService.stopNativeService('nonexistent')
       expect(result).toBe(false)
     })
   })

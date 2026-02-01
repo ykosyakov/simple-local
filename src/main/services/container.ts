@@ -243,7 +243,7 @@ export class ContainerService extends EventEmitter {
    * Stop a native service process.
    * Delegates to NativeProcessManager.
    */
-  stopNativeService(serviceId: string): boolean {
+  async stopNativeService(serviceId: string): Promise<boolean> {
     return this.nativeProcessManager.stopService(serviceId)
   }
 

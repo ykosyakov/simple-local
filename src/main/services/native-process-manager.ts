@@ -7,6 +7,8 @@ import type { ServiceStatus } from '../../shared/types'
  */
 export class NativeProcessManager {
   private processes = new Map<string, ChildProcess>()
+  /** Timeout in ms before escalating from SIGTERM to SIGKILL */
+  private readonly KILL_TIMEOUT_MS = 5000
 
   /**
    * Start a native service process.
@@ -56,16 +58,57 @@ export class NativeProcessManager {
   }
 
   /**
-   * Stop a native service process.
-   * @returns true if the process was found and stopped, false otherwise
+   * Stop a native service process with graceful shutdown.
+   * Sends SIGTERM first, then SIGKILL after timeout if process doesn't exit.
+   * @returns true if the process was found and stop was initiated, false otherwise
    */
-  stopService(serviceId: string): boolean {
+  async stopService(serviceId: string): Promise<boolean> {
     const proc = this.processes.get(serviceId)
     if (!proc) return false
 
+    // Try graceful shutdown first
     proc.kill('SIGTERM')
+
+    // Wait for process to exit or timeout
+    const exited = await this.waitForExit(proc, this.KILL_TIMEOUT_MS)
+
+    if (!exited) {
+      // Force kill if graceful shutdown failed
+      proc.kill('SIGKILL')
+    }
+
+    // Process cleanup happens in the 'close' event handler registered in startService.
+    // But if the process is somehow stuck, ensure we clean up the map.
+    // The 'close' handler will be a no-op if already deleted.
     this.processes.delete(serviceId)
     return true
+  }
+
+  /**
+   * Wait for a process to exit within the given timeout.
+   * @returns true if process exited, false if timeout was reached
+   */
+  private waitForExit(proc: ChildProcess, timeoutMs: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      let resolved = false
+
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          resolve(false)
+        }
+      }, timeoutMs)
+
+      const onClose = () => {
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          resolve(true)
+        }
+      }
+
+      proc.once('close', onClose)
+    })
   }
 
   /**

@@ -151,7 +151,7 @@ export function setupServiceHandlers(
     const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
     if (service.mode === 'native') {
-      container.stopNativeService(serviceId)
+      await container.stopNativeService(serviceId)
     } else {
       const containerName = container.getContainerName(projectConfig.name, serviceId)
       await container.stopService(containerName)
@@ -240,7 +240,7 @@ export function setupServiceHandlers(
     const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
 
     if (service.mode === 'native') {
-      container.stopNativeService(serviceId)
+      await container.stopNativeService(serviceId)
     } else {
       const containerName = container.getContainerName(projectConfig.name, serviceId)
       await container.stopService(containerName)
