@@ -65,10 +65,16 @@ export class ContainerService extends EventEmitter {
     this.docker = new Docker({ socketPath })
   }
 
+  /**
+   * Sanitize a string for use in Docker container names.
+   * Only allows lowercase letters, digits, and hyphens.
+   */
+  private sanitizeForDocker(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9-]/g, '-')
+  }
+
   getContainerName(projectName: string, serviceId: string): string {
-    // Sanitize names for Docker
-    const sanitized = (s: string) => s.toLowerCase().replace(/[^a-z0-9-]/g, '-')
-    return `simple-local-${sanitized(projectName)}-${sanitized(serviceId)}`
+    return `simple-local-${this.sanitizeForDocker(projectName)}-${this.sanitizeForDocker(serviceId)}`
   }
 
   private async getCachedContainers(): Promise<Docker.ContainerInfo[]> {
@@ -309,7 +315,7 @@ export class ContainerService extends EventEmitter {
   }
 
   async listProjectContainers(projectName: string): Promise<string[]> {
-    const prefix = `simple-local-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`
+    const prefix = `simple-local-${this.sanitizeForDocker(projectName)}`
     const containers = await this.docker.listContainers({ all: true })
 
     return containers

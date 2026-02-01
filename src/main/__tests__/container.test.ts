@@ -814,6 +814,47 @@ describe('ContainerService', () => {
     })
   })
 
+  describe('listProjectContainers', () => {
+    it('returns containers matching project prefix', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/simple-local-my-project-frontend'] } as any,
+        { Names: ['/simple-local-my-project-backend'] } as any,
+        { Names: ['/simple-local-other-project-api'] } as any,
+        { Names: ['/unrelated-container'] } as any,
+      ])
+
+      const containers = await containerService.listProjectContainers('my-project')
+
+      expect(containers).toHaveLength(2)
+      expect(containers).toContain('simple-local-my-project-frontend')
+      expect(containers).toContain('simple-local-my-project-backend')
+    })
+
+    it('sanitizes project name for prefix matching', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/simple-local-my-project--frontend'] } as any,
+      ])
+
+      const containers = await containerService.listProjectContainers('My Project!')
+
+      expect(containers).toHaveLength(1)
+      expect(containers).toContain('simple-local-my-project--frontend')
+    })
+
+    it('returns empty array when no containers match', async () => {
+      const mockDocker = containerService['docker']
+      vi.mocked(mockDocker.listContainers).mockResolvedValue([
+        { Names: ['/unrelated-container'] } as any,
+      ])
+
+      const containers = await containerService.listProjectContainers('my-project')
+
+      expect(containers).toEqual([])
+    })
+  })
+
   describe('getServiceStatus', () => {
     it('returns running for native service when process is running', async () => {
       const { spawn } = await import('child_process')
