@@ -373,6 +373,45 @@ describe('DiscoveryService', () => {
       expect(result.services).toHaveLength(1)
       expect(result.services[0].name).toBe('my-app')
     })
+
+    it('uses custom basePort for port allocation', async () => {
+      vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+        if (dirPath === '/project') {
+          return [
+            { name: 'frontend', isDirectory: () => true, isFile: () => false },
+            { name: 'backend', isDirectory: () => true, isFile: () => false },
+          ]
+        }
+        if (String(dirPath).includes('frontend')) {
+          return [{ name: 'package.json', isDirectory: () => false, isFile: () => true }]
+        }
+        if (String(dirPath).includes('backend')) {
+          return [{ name: 'package.json', isDirectory: () => false, isFile: () => true }]
+        }
+        return []
+      })
+      vi.mocked(mockFs.readFile).mockImplementation(async (filePath) => {
+        if (String(filePath).includes('frontend')) {
+          return JSON.stringify({
+            name: 'frontend-app',
+            scripts: { dev: 'vite dev' },
+            dependencies: {},
+          })
+        }
+        return JSON.stringify({
+          name: 'backend-api',
+          scripts: { dev: 'node server.js' },
+          dependencies: {},
+        })
+      })
+
+      const result = await discovery.basicDiscovery('/project', 3100)
+
+      expect(result.services).toHaveLength(2)
+      // Ports should start from 3100, not 3000
+      expect(result.services[0].port).toBe(3100)
+      expect(result.services[1].port).toBe(3101)
+    })
   })
 
   describe('backward compatibility', () => {

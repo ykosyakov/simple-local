@@ -25,14 +25,22 @@ export function setupDiscoveryHandlers(
       win?.webContents.send('discovery:progress', progress)
     }
 
+    // Check if this project already exists (re-discovery case)
+    const existingProject = registry.getRegistry().projects.find(p => p.path === projectPath)
+    const basePort = existingProject
+      ? existingProject.portRange[0]  // Use existing project's port range
+      : registry.getNextPortRange()[0]  // Get next available port range for new project
+
+    log.info('Using base port:', basePort, existingProject ? '(existing project)' : '(new project)')
+
     // Try AI discovery first, fall back to basic
     log.info('Attempting AI discovery...')
-    let result = await discovery.runAIDiscovery(projectPath, 'claude', sendProgress)
+    let result = await discovery.runAIDiscovery(projectPath, 'claude', sendProgress, basePort)
 
     if (!result) {
       log.info('AI discovery failed or timed out, falling back to basic discovery')
       sendProgress({ projectPath, step: 'ai-analysis', message: 'AI discovery failed, using basic detection...' })
-      result = await discovery.basicDiscovery(projectPath)
+      result = await discovery.basicDiscovery(projectPath, basePort)
     } else {
       log.info('AI discovery succeeded')
     }

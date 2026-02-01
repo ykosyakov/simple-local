@@ -362,7 +362,8 @@ export class DiscoveryService {
   async runAIDiscovery(
     projectPath: string,
     cliTool: AiAgentId = 'claude',
-    onProgress?: (progress: DiscoveryProgress) => void
+    onProgress?: (progress: DiscoveryProgress) => void,
+    basePort: number = 3000
   ): Promise<ProjectConfig | null> {
     log.info('Starting AI discovery for:', projectPath)
 
@@ -395,7 +396,7 @@ export class DiscoveryService {
     if (result.success && result.data) {
       log.info('Parsed result:', JSON.stringify(result.data, null, 2))
       onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
-      return this.convertToProjectConfig(result.data, projectPath)
+      return this.convertToProjectConfig(result.data, projectPath, basePort)
     } else {
       log.error('AI discovery failed:', result.error)
       onProgress?.({ projectPath, step: 'error', message: result.error || 'AI discovery failed' })
@@ -405,7 +406,8 @@ export class DiscoveryService {
 
   private convertToProjectConfig(
     aiOutput: AIDiscoveryOutput,
-    projectPath: string
+    projectPath: string,
+    basePort: number = 3000
   ): ProjectConfig {
     const projectName = path.basename(projectPath)
     const usedIds = new Set<string>()
@@ -435,7 +437,7 @@ export class DiscoveryService {
       if (s.port) {
         port = s.port
       } else if (isService) {
-        port = allocatePort(3000, usedPorts)
+        port = allocatePort(basePort, usedPorts)
         usedPorts.add(port)
       }
 
@@ -474,7 +476,7 @@ export class DiscoveryService {
   }
 
   // Fallback: Basic discovery without AI
-  async basicDiscovery(projectPath: string): Promise<ProjectConfig> {
+  async basicDiscovery(projectPath: string, basePort: number = 3000): Promise<ProjectConfig> {
     log.info('Starting basic discovery for:', projectPath)
 
     const scanResult = await this.scanProjectStructure(projectPath)
@@ -497,7 +499,7 @@ export class DiscoveryService {
             name: info.name,
             path: relativePath || '.',
             command: info.devScript.includes('bun') ? `bun run dev` : `npm run dev`,
-            port: info.port || 3000 + portOffset,
+            port: info.port || basePort + portOffset,
             env: {},
             devcontainer: `.simple-local/devcontainers/${serviceId}/devcontainer.json`,
             active: true,
