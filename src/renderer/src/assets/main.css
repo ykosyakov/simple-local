@@ -186,6 +186,12 @@ body {
   outline-offset: 2px;
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
 .btn-primary {
   background: var(--accent-primary);
   color: var(--bg-deep);

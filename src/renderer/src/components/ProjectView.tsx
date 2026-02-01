@@ -83,6 +83,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [reanalyzingService, setReanalyzingService] = useState<string | null>(null)
   const [extractingService, setExtractingService] = useState<Service | null>(null)
   const [stoppingServices, setStoppingServices] = useState<Set<string>>(new Set())
+  const [restartingServices, setRestartingServices] = useState<Set<string>>(new Set())
 
   const loadConfig = useCallback(async () => {
     try {
@@ -166,8 +167,17 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
 
   const handleRestart = useMemo(
     () => createServiceAction('restart', async (serviceId) => {
-      await window.api.stopService(project.id, serviceId)
-      await window.api.startService(project.id, serviceId)
+      setRestartingServices(prev => new Set(prev).add(serviceId))
+      try {
+        await window.api.stopService(project.id, serviceId)
+        await window.api.startService(project.id, serviceId)
+      } finally {
+        setRestartingServices(prev => {
+          const next = new Set(prev)
+          next.delete(serviceId)
+          return next
+        })
+      }
     }),
     [createServiceAction, project.id]
   )
@@ -470,7 +480,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
             service={service}
             status={statuses.get(service.id) || 'stopped'}
             isSelected={selectedServiceId === service.id}
-            isStopping={stoppingServices.has(service.id)}
+            isStopping={stoppingServices.has(service.id) || restartingServices.has(service.id)}
             onSelect={handleSelectService}
             onStart={handleStart}
             onStop={handleStop}

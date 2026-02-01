@@ -40,6 +40,30 @@ interface ServiceStartCallbacks {
 }
 
 /**
+ * Create callbacks for service start operations.
+ * Broadcasts events to all windows for UI updates.
+ */
+function createServiceCallbacks(
+  logManager: LogManager,
+  projectId: string,
+  serviceId: string
+): ServiceStartCallbacks {
+  return {
+    sendLog: (data: string) => {
+      logManager.appendLog(projectId, serviceId, data)
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('service:logs:data', { projectId, serviceId, data })
+      }
+    },
+    sendStatus: (status: string) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('service:status:change', { projectId, serviceId, status })
+      }
+    },
+  }
+}
+
+/**
  * Core service start logic used by both IPC handler and exported function.
  * Handles environment interpolation, container env overrides, port killing,
  * and starting native or container services.
@@ -144,19 +168,9 @@ export function setupServiceHandlers(
   logManager: LogManager = new LogManager()
 ): ServiceHandlersResult {
 
-  ipcMain.handle('service:start', async (event, projectId: string, serviceId: string) => {
-    const callbacks: ServiceStartCallbacks = {
-      sendLog: (data: string) => {
-        logManager.appendLog(projectId, serviceId, data)
-        const win = BrowserWindow.fromWebContents(event.sender)
-        win?.webContents.send('service:logs:data', { projectId, serviceId, data })
-      },
-      sendStatus: (status: string) => {
-        const win = BrowserWindow.fromWebContents(event.sender)
-        win?.webContents.send('service:status:change', { projectId, serviceId, status })
-      },
-    }
-
+  ipcMain.handle('service:start', async (_event, projectId: string, serviceId: string) => {
+    logManager.clearBuffer(projectId, serviceId)
+    const callbacks = createServiceCallbacks(logManager, projectId, serviceId)
     await startServiceCore(container, config, registry, projectId, serviceId, callbacks)
   })
 
@@ -239,13 +253,8 @@ export function setupServiceHandlers(
   }
 
   const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
-    const callbacks: ServiceStartCallbacks = {
-      sendLog: (data: string) => {
-        logManager.appendLog(projectId, serviceId, data)
-      },
-      sendStatus: () => {}, // No-op for programmatic usage
-    }
-
+    logManager.clearBuffer(projectId, serviceId)
+    const callbacks = createServiceCallbacks(logManager, projectId, serviceId)
     await startServiceCore(container, config, registry, projectId, serviceId, callbacks, modeOverride)
   }
 
