@@ -6,6 +6,8 @@ import {
   tryGetProjectContext,
   tryGetServiceContext
 } from '../services/service-lookup'
+import type { RegistryService } from '../services/registry'
+import type { ProjectConfigService } from '../services/project-config'
 
 // Create mock objects with vi.fn() - lightweight and type-safe
 const createMockRegistry = () => ({
@@ -30,7 +32,7 @@ describe('Service Lookup Helper', () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [] })
 
       await expect(
-        getServiceContext(mockRegistry as any, mockConfig as any, 'nonexistent', 'service1')
+        getServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'nonexistent', 'service1')
       ).rejects.toThrow('Project not found')
     })
 
@@ -41,7 +43,7 @@ describe('Service Lookup Helper', () => {
       mockConfig.loadConfig.mockResolvedValue(null)
 
       await expect(
-        getServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'service1')
+        getServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1', 'service1')
       ).rejects.toThrow('Project config not found')
     })
 
@@ -55,7 +57,7 @@ describe('Service Lookup Helper', () => {
       })
 
       await expect(
-        getServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'nonexistent')
+        getServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1', 'nonexistent')
       ).rejects.toThrow('Service not found')
     })
 
@@ -67,7 +69,7 @@ describe('Service Lookup Helper', () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [project] })
       mockConfig.loadConfig.mockResolvedValue(projectConfig)
 
-      const result = await getServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'service1')
+      const result = await getServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1', 'service1')
 
       expect(result.project).toEqual(project)
       expect(result.projectConfig).toEqual(projectConfig)
@@ -80,7 +82,7 @@ describe('Service Lookup Helper', () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [] })
 
       await expect(
-        getProjectContext(mockRegistry as any, mockConfig as any, 'nonexistent')
+        getProjectContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'nonexistent')
       ).rejects.toThrow('Project not found')
     })
 
@@ -91,7 +93,7 @@ describe('Service Lookup Helper', () => {
       mockConfig.loadConfig.mockResolvedValue(null)
 
       await expect(
-        getProjectContext(mockRegistry as any, mockConfig as any, 'proj1')
+        getProjectContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1')
       ).rejects.toThrow('Project config not found')
     })
 
@@ -102,7 +104,7 @@ describe('Service Lookup Helper', () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [project] })
       mockConfig.loadConfig.mockResolvedValue(projectConfig)
 
-      const result = await getProjectContext(mockRegistry as any, mockConfig as any, 'proj1')
+      const result = await getProjectContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1')
 
       expect(result.project).toEqual(project)
       expect(result.projectConfig).toEqual(projectConfig)
@@ -113,7 +115,7 @@ describe('Service Lookup Helper', () => {
     it('returns null when project does not exist', () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [] })
 
-      const result = findProject(mockRegistry as any, 'nonexistent')
+      const result = findProject(mockRegistry as unknown as RegistryService, 'nonexistent')
 
       expect(result).toBeNull()
     })
@@ -122,7 +124,7 @@ describe('Service Lookup Helper', () => {
       const project = { id: 'proj1', name: 'Project 1', path: '/path/to/project' }
       mockRegistry.getRegistry.mockReturnValue({ projects: [project] })
 
-      const result = findProject(mockRegistry as any, 'proj1')
+      const result = findProject(mockRegistry as unknown as RegistryService, 'proj1')
 
       expect(result).toEqual(project)
     })
@@ -132,7 +134,7 @@ describe('Service Lookup Helper', () => {
     it('returns PROJECT_NOT_FOUND error when project does not exist', async () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [] })
 
-      const result = await tryGetProjectContext(mockRegistry as any, mockConfig as any, 'nonexistent')
+      const result = await tryGetProjectContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'nonexistent')
 
       expect(result).toEqual({ success: false, error: 'PROJECT_NOT_FOUND' })
     })
@@ -143,7 +145,7 @@ describe('Service Lookup Helper', () => {
       })
       mockConfig.loadConfig.mockResolvedValue(null)
 
-      const result = await tryGetProjectContext(mockRegistry as any, mockConfig as any, 'proj1')
+      const result = await tryGetProjectContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1')
 
       expect(result).toEqual({ success: false, error: 'CONFIG_NOT_FOUND' })
     })
@@ -155,7 +157,7 @@ describe('Service Lookup Helper', () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [project] })
       mockConfig.loadConfig.mockResolvedValue(projectConfig)
 
-      const result = await tryGetProjectContext(mockRegistry as any, mockConfig as any, 'proj1')
+      const result = await tryGetProjectContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1')
 
       expect(result).toEqual({
         success: true,
@@ -168,7 +170,7 @@ describe('Service Lookup Helper', () => {
     it('returns PROJECT_NOT_FOUND error when project does not exist', async () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [] })
 
-      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'nonexistent', 'service1')
+      const result = await tryGetServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'nonexistent', 'service1')
 
       expect(result).toEqual({ success: false, error: 'PROJECT_NOT_FOUND' })
     })
@@ -179,7 +181,7 @@ describe('Service Lookup Helper', () => {
       })
       mockConfig.loadConfig.mockResolvedValue(null)
 
-      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'service1')
+      const result = await tryGetServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1', 'service1')
 
       expect(result).toEqual({ success: false, error: 'CONFIG_NOT_FOUND' })
     })
@@ -193,7 +195,7 @@ describe('Service Lookup Helper', () => {
         services: [{ id: 'other-service', name: 'Other Service' }]
       })
 
-      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'nonexistent')
+      const result = await tryGetServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1', 'nonexistent')
 
       expect(result).toEqual({ success: false, error: 'SERVICE_NOT_FOUND' })
     })
@@ -206,7 +208,7 @@ describe('Service Lookup Helper', () => {
       mockRegistry.getRegistry.mockReturnValue({ projects: [project] })
       mockConfig.loadConfig.mockResolvedValue(projectConfig)
 
-      const result = await tryGetServiceContext(mockRegistry as any, mockConfig as any, 'proj1', 'service1')
+      const result = await tryGetServiceContext(mockRegistry as unknown as RegistryService, mockConfig as unknown as ProjectConfigService, 'proj1', 'service1')
 
       expect(result).toEqual({
         success: true,

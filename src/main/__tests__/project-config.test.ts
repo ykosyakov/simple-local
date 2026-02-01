@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { ProjectConfigService } from '../services/project-config'
+import type { Service } from '../../shared/types'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 
@@ -61,7 +62,7 @@ describe('ProjectConfigService', () => {
       const services = [
         { id: 'backend', port: 3001 },
         { id: 'frontend', port: 3000 },
-      ] as any[]
+      ] as Service[]
 
       const env = { API_URL: 'http://localhost:${services.backend.port}' }
       const result = configService.interpolateEnv(env, services)
@@ -74,7 +75,7 @@ describe('ProjectConfigService', () => {
       const services = [
         { id: 'backend', port: 3001, name: 'Backend API' },
         { id: 'frontend', port: 3000 },
-      ] as any[]
+      ] as Service[]
 
       const env = { SERVICES: '${services.backend.name}:${services.backend.port}' }
       const result = configService.interpolateEnv(env, services)
@@ -84,7 +85,7 @@ describe('ProjectConfigService', () => {
     })
 
     it('returns error when service does not exist', () => {
-      const services = [{ id: 'backend', port: 3001 }] as any[]
+      const services = [{ id: 'backend', port: 3001 }] as Service[]
 
       const env = { API_URL: 'http://localhost:${services.unknown.port}' }
       const result = configService.interpolateEnv(env, services)
@@ -95,7 +96,7 @@ describe('ProjectConfigService', () => {
     })
 
     it('returns error when property does not exist on service', () => {
-      const services = [{ id: 'backend', port: 3001 }] as any[]
+      const services = [{ id: 'backend', port: 3001 }] as Service[]
 
       const env = { API_URL: 'http://localhost:${services.backend.missingProp}' }
       const result = configService.interpolateEnv(env, services)
@@ -106,7 +107,7 @@ describe('ProjectConfigService', () => {
     })
 
     it('collects multiple errors from different env vars', () => {
-      const services = [{ id: 'backend', port: 3001 }] as any[]
+      const services = [{ id: 'backend', port: 3001 }] as Service[]
 
       const env = {
         API_URL: 'http://localhost:${services.unknown.port}',
@@ -120,7 +121,7 @@ describe('ProjectConfigService', () => {
     })
 
     it('passes through values without interpolation patterns', () => {
-      const services = [{ id: 'backend', port: 3001 }] as any[]
+      const services = [{ id: 'backend', port: 3001 }] as Service[]
 
       const env = { STATIC_VAR: 'some-value', PORT: '8080' }
       const result = configService.interpolateEnv(env, services)
@@ -131,7 +132,7 @@ describe('ProjectConfigService', () => {
     })
 
     it('handles undefined property values gracefully', () => {
-      const services = [{ id: 'backend', port: undefined }] as any[]
+      const services = [{ id: 'backend', port: undefined }] as Service[]
 
       const env = { API_URL: 'http://localhost:${services.backend.port}' }
       const result = configService.interpolateEnv(env, services)
@@ -146,11 +147,15 @@ describe('ProjectConfigService', () => {
       const services = [
         {
           id: 'backend',
+          name: 'Backend',
+          path: './backend',
+          command: 'npm start',
+          mode: 'native' as const,
           port: 3001,
           env: { SECRET: 'secret-value' },
           active: true,
         },
-      ] as any[]
+      ] as Service[]
 
       // 'env' and 'active' exist on Service but shouldn't be interpolatable
       const env = {
@@ -177,7 +182,7 @@ describe('ProjectConfigService', () => {
           debugPort: 9229,
           mode: 'native',
         },
-      ] as any[]
+      ] as Service[]
 
       const env = {
         SERVICE_ID: '${services.backend.id}',

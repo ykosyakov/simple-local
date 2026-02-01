@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import type { ChildProcess } from 'child_process'
+import type Docker from 'dockerode'
 import { ContainerService } from '../services/container'
 
 // Mock child_process
@@ -21,6 +23,39 @@ vi.mock('dockerode', () => {
     },
   }
 })
+
+// --- Test Mock Types ---
+
+/** Minimal mock for ChildProcess returned by spawn() */
+interface MockChildProcess {
+  stdout: { on: ReturnType<typeof vi.fn> }
+  stderr: { on: ReturnType<typeof vi.fn> }
+  on: ReturnType<typeof vi.fn>
+  once?: ReturnType<typeof vi.fn>
+  kill?: ReturnType<typeof vi.fn>
+  pid: number
+}
+
+/** Create a mock ChildProcess with optional overrides */
+function createMockProcess(overrides?: Partial<MockChildProcess>): MockChildProcess {
+  return {
+    stdout: { on: vi.fn() },
+    stderr: { on: vi.fn() },
+    on: vi.fn(),
+    pid: 12345,
+    ...overrides,
+  }
+}
+
+/** Create a partial Docker ContainerInfo for listContainers mocks */
+function createContainerInfo(
+  names: string[],
+  state?: string
+): Partial<Docker.ContainerInfo> {
+  const info: Partial<Docker.ContainerInfo> = { Names: names }
+  if (state !== undefined) info.State = state
+  return info
+}
 
 describe('ContainerService', () => {
   let containerService: ContainerService
@@ -106,7 +141,7 @@ describe('ContainerService', () => {
     it('returns cached result within TTL (2s)', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/test-container'], State: 'running' } as any,
+        createContainerInfo(['/test-container'], 'running') as Docker.ContainerInfo,
       ])
 
       await containerService.getContainerStatus('test-container')
@@ -118,7 +153,7 @@ describe('ContainerService', () => {
     it('refreshes after TTL expires', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/test-container'], State: 'running' } as any,
+        createContainerInfo(['/test-container'], 'running') as Docker.ContainerInfo,
       ])
 
       await containerService.getContainerStatus('test-container')
@@ -131,8 +166,8 @@ describe('ContainerService', () => {
     it('shares cache across different containers', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/container-1'], State: 'running' } as any,
-        { Names: ['/container-2'], State: 'stopped' } as any,
+        createContainerInfo(['/container-1'], 'running') as Docker.ContainerInfo,
+        createContainerInfo(['/container-2'], 'stopped') as Docker.ContainerInfo,
       ])
 
       await containerService.getContainerStatus('container-1')
@@ -144,7 +179,7 @@ describe('ContainerService', () => {
     it('invalidates cache manually', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/test-container'], State: 'running' } as any,
+        createContainerInfo(['/test-container'], 'running') as Docker.ContainerInfo,
       ])
 
       await containerService.getContainerStatus('test-container')
@@ -173,13 +208,8 @@ describe('ContainerService', () => {
   describe('startNativeService', () => {
     it('spawns process with correct cwd and env', async () => {
       const { spawn } = await import('child_process')
-      const mockProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-        pid: 12345,
-      }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      const mockProcess = createMockProcess()
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const onLog = vi.fn()
       const onStatusChange = vi.fn()
@@ -207,13 +237,8 @@ describe('ContainerService', () => {
 
     it('splits command by spaces', async () => {
       const { spawn } = await import('child_process')
-      const mockProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-        pid: 12345,
-      }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      const mockProcess = createMockProcess()
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       containerService.startNativeService(
         'test-service',
@@ -229,13 +254,8 @@ describe('ContainerService', () => {
 
     it('handles commands with multiple arguments', async () => {
       const { spawn } = await import('child_process')
-      const mockProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-        pid: 12345,
-      }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      const mockProcess = createMockProcess()
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       containerService.startNativeService(
         'test-service',
@@ -255,13 +275,8 @@ describe('ContainerService', () => {
 
     it('calls onStatusChange with starting immediately', async () => {
       const { spawn } = await import('child_process')
-      const mockProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-        pid: 12345,
-      }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      const mockProcess = createMockProcess()
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const onStatusChange = vi.fn()
 
@@ -280,7 +295,7 @@ describe('ContainerService', () => {
     it('calls onStatusChange with running on spawn event', async () => {
       const { spawn } = await import('child_process')
       let spawnCallback: () => void = () => {}
-      const mockProcess = {
+      const mockProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event, cb) => {
@@ -288,7 +303,7 @@ describe('ContainerService', () => {
         }),
         pid: 12345,
       }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const onStatusChange = vi.fn()
 
@@ -309,7 +324,7 @@ describe('ContainerService', () => {
     it('forwards stdout data to onLog', async () => {
       const { spawn } = await import('child_process')
       let stdoutCallback: (data: Buffer) => void = () => {}
-      const mockProcess = {
+      const mockProcess: MockChildProcess = {
         stdout: {
           on: vi.fn((event, cb) => {
             if (event === 'data') stdoutCallback = cb
@@ -319,7 +334,7 @@ describe('ContainerService', () => {
         on: vi.fn(),
         pid: 12345,
       }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const onLog = vi.fn()
 
@@ -342,8 +357,8 @@ describe('ContainerService', () => {
     it('returns true when process is killed', async () => {
       const { execSync } = await import('child_process')
       vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes('lsof')) return '12345' as any
-        return '' as any
+        if (cmd.includes('lsof')) return '12345'
+        return ''
       })
 
       const result = containerService.killProcessOnPort(3000)
@@ -367,8 +382,8 @@ describe('ContainerService', () => {
     it('handles multiple PIDs on same port', async () => {
       const { execSync } = await import('child_process')
       vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes('lsof')) return '12345\n67890' as any
-        return '' as any
+        if (cmd.includes('lsof')) return '12345\n67890'
+        return ''
       })
 
       const result = containerService.killProcessOnPort(3000)
@@ -382,12 +397,12 @@ describe('ContainerService', () => {
       const { execSync } = await import('child_process')
       let killCount = 0
       vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes('lsof')) return '12345\n67890' as any
+        if (cmd.includes('lsof')) return '12345\n67890'
         if (cmd.includes('kill')) {
           killCount++
           if (killCount === 1) throw new Error('process already exited')
         }
-        return '' as any
+        return ''
       })
 
       const result = containerService.killProcessOnPort(3000)
@@ -435,8 +450,8 @@ describe('ContainerService', () => {
         } else {
           callback(null, { stdout: '', stderr: '' })
         }
-        return {} as any
-      }) as any)
+        return {} as unknown as ChildProcess
+      }) as typeof exec)
 
       const result = await containerService.killProcessOnPortAsync(3000)
 
@@ -448,8 +463,8 @@ describe('ContainerService', () => {
       const { exec } = await import('child_process')
       vi.mocked(exec).mockImplementation(((_cmd: string, callback: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
         callback(new Error('no process'), { stdout: '', stderr: '' })
-        return {} as any
-      }) as any)
+        return {} as unknown as ChildProcess
+      }) as typeof exec)
 
       const result = await containerService.killProcessOnPortAsync(3000)
 
@@ -460,8 +475,8 @@ describe('ContainerService', () => {
       const { exec, execSync } = await import('child_process')
       vi.mocked(exec).mockImplementation(((_cmd: string, callback: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
         callback(new Error('no process'), { stdout: '', stderr: '' })
-        return {} as any
-      }) as any)
+        return {} as unknown as ChildProcess
+      }) as typeof exec)
 
       await containerService.killProcessOnPortAsync(3000)
 
@@ -478,8 +493,8 @@ describe('ContainerService', () => {
         } else {
           callback(null, { stdout: '', stderr: '' })
         }
-        return {} as any
-      }) as any)
+        return {} as unknown as ChildProcess
+      }) as typeof exec)
 
       const result = await containerService.killProcessOnPortAsync(3000)
 
@@ -512,7 +527,7 @@ describe('ContainerService', () => {
         pid: 12345,
       }
        
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       // Start a service first
       containerService.startNativeService(
@@ -544,14 +559,15 @@ describe('ContainerService', () => {
   describe('buildContainer', () => {
     it('runs devcontainer build with correct args', async () => {
       const { spawn } = await import('child_process')
-      const mockProcess = {
+      const mockProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event, cb) => {
           if (event === 'close') setTimeout(() => cb(0), 10)
         }),
+        pid: 0,
       }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const onLog = vi.fn()
       await containerService.buildContainer('/path/to/workspace', '/path/to/config.json', onLog)
@@ -566,7 +582,7 @@ describe('ContainerService', () => {
     it('forwards stdout to onLog callback', async () => {
       const { spawn } = await import('child_process')
       const callbacks: Record<string, (data: Buffer) => void> = {}
-      const mockProcess = {
+      const mockProcess: MockChildProcess = {
         stdout: {
           on: vi.fn((event: string, cb: (data: Buffer) => void) => {
             if (event === 'data') callbacks.stdout = cb
@@ -576,8 +592,9 @@ describe('ContainerService', () => {
         on: vi.fn((event: string, cb: (code: number) => void) => {
           if (event === 'close') setTimeout(() => cb(0), 10)
         }),
+        pid: 0,
       }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const onLog = vi.fn()
       const promise = containerService.buildContainer('/path', '/config.json', onLog)
@@ -591,7 +608,7 @@ describe('ContainerService', () => {
     it('forwards stderr to onLog callback', async () => {
       const { spawn } = await import('child_process')
       const callbacks: Record<string, (data: Buffer) => void> = {}
-      const mockProcess = {
+      const mockProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: {
           on: vi.fn((event: string, cb: (data: Buffer) => void) => {
@@ -601,8 +618,9 @@ describe('ContainerService', () => {
         on: vi.fn((event: string, cb: (code: number) => void) => {
           if (event === 'close') setTimeout(() => cb(0), 10)
         }),
+        pid: 0,
       }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const onLog = vi.fn()
       const promise = containerService.buildContainer('/path', '/config.json', onLog)
@@ -615,14 +633,15 @@ describe('ContainerService', () => {
 
     it('rejects on non-zero exit code', async () => {
       const { spawn } = await import('child_process')
-      const mockProcess = {
+      const mockProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event, cb) => {
           if (event === 'close') setTimeout(() => cb(1), 10)
         }),
+        pid: 0,
       }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       await expect(
         containerService.buildContainer('/path', '/config.json', vi.fn())
@@ -632,14 +651,15 @@ describe('ContainerService', () => {
     it('rejects on process error', async () => {
       const { spawn } = await import('child_process')
       const callbacks: Record<string, (err: Error) => void> = {}
-      const mockProcess = {
+      const mockProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event: string, cb: (err: Error) => void) => {
           if (event === 'error') callbacks.error = cb
         }),
+        pid: 0,
       }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       const promise = containerService.buildContainer('/path', '/config.json', vi.fn())
       callbacks.error?.(new Error('spawn failed'))
@@ -651,21 +671,18 @@ describe('ContainerService', () => {
   describe('startService', () => {
     it('runs devcontainer up with correct args', async () => {
       const { spawn } = await import('child_process')
-      const mockUpProcess = {
+      const mockUpProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event, cb) => {
           if (event === 'close') setTimeout(() => cb(0), 10)
         }),
+        pid: 0,
       }
-      const mockExecProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-      }
+      const mockExecProcess = createMockProcess()
       vi.mocked(spawn)
-        .mockReturnValueOnce(mockUpProcess as any)
-        .mockReturnValueOnce(mockExecProcess as any)
+        .mockReturnValueOnce(mockUpProcess as unknown as ChildProcess)
+        .mockReturnValueOnce(mockExecProcess as unknown as ChildProcess)
 
       await containerService.startService(
         '/workspace',
@@ -687,21 +704,18 @@ describe('ContainerService', () => {
 
     it('runs devcontainer exec after up completes', async () => {
       const { spawn } = await import('child_process')
-      const mockUpProcess = {
+      const mockUpProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event, cb) => {
           if (event === 'close') setTimeout(() => cb(0), 10)
         }),
+        pid: 0,
       }
-      const mockExecProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-      }
+      const mockExecProcess = createMockProcess()
       vi.mocked(spawn)
-        .mockReturnValueOnce(mockUpProcess as any)
-        .mockReturnValueOnce(mockExecProcess as any)
+        .mockReturnValueOnce(mockUpProcess as unknown as ChildProcess)
+        .mockReturnValueOnce(mockExecProcess as unknown as ChildProcess)
 
       await containerService.startService(
         '/workspace',
@@ -721,7 +735,7 @@ describe('ContainerService', () => {
     it('forwards stdout to onLog callback and emits log event', async () => {
       const { spawn } = await import('child_process')
       const callbacks: Record<string, (data: Buffer) => void> = {}
-      const mockUpProcess = {
+      const mockUpProcess: MockChildProcess = {
         stdout: {
           on: vi.fn((event: string, cb: (data: Buffer) => void) => {
             if (event === 'data') callbacks.stdout = cb
@@ -731,15 +745,12 @@ describe('ContainerService', () => {
         on: vi.fn((event: string, cb: (code: number) => void) => {
           if (event === 'close') setTimeout(() => cb(0), 10)
         }),
+        pid: 0,
       }
-      const mockExecProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-      }
+      const mockExecProcess = createMockProcess()
       vi.mocked(spawn)
-        .mockReturnValueOnce(mockUpProcess as any)
-        .mockReturnValueOnce(mockExecProcess as any)
+        .mockReturnValueOnce(mockUpProcess as unknown as ChildProcess)
+        .mockReturnValueOnce(mockExecProcess as unknown as ChildProcess)
 
       const onLog = vi.fn()
       const logEmitted = vi.fn()
@@ -756,15 +767,16 @@ describe('ContainerService', () => {
     it('rejects if devcontainer up fails', async () => {
       const { spawn } = await import('child_process')
       const eventHandlers: Record<string, (arg: unknown) => void> = {}
-      const mockUpProcess = {
+      const mockUpProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event: string, cb: (arg: unknown) => void) => {
           eventHandlers[event] = cb
           if (event === 'close') setTimeout(() => cb(1), 10)
         }),
+        pid: 0,
       }
-      vi.mocked(spawn).mockReturnValue(mockUpProcess as any)
+      vi.mocked(spawn).mockReturnValue(mockUpProcess as unknown as ChildProcess)
 
       await expect(
         containerService.startService('/workspace', '/config.json', 'npm run dev', {})
@@ -773,21 +785,18 @@ describe('ContainerService', () => {
 
     it('invalidates status cache after starting service', async () => {
       const { spawn } = await import('child_process')
-      const mockUpProcess = {
+      const mockUpProcess: MockChildProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn((event, cb) => {
           if (event === 'close') setTimeout(() => cb(0), 10)
         }),
+        pid: 0,
       }
-      const mockExecProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-      }
+      const mockExecProcess = createMockProcess()
       vi.mocked(spawn)
-        .mockReturnValueOnce(mockUpProcess as any)
-        .mockReturnValueOnce(mockExecProcess as any)
+        .mockReturnValueOnce(mockUpProcess as unknown as ChildProcess)
+        .mockReturnValueOnce(mockExecProcess as unknown as ChildProcess)
 
       const invalidateSpy = vi.spyOn(containerService, 'invalidateStatusCache')
 
@@ -803,7 +812,7 @@ describe('ContainerService', () => {
       vi.mocked(mockDocker.getContainer).mockReturnValue({
         inspect: vi.fn().mockRejectedValue(new Error('no such container')),
         logs: vi.fn(),
-      } as any)
+      } as unknown as Docker.Container)
 
       const onLog = vi.fn()
       const cleanup = await containerService.streamLogs('nonexistent', onLog)
@@ -818,10 +827,10 @@ describe('ContainerService', () => {
     it('returns containers matching project prefix', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/simple-local-my-project-frontend'] } as any,
-        { Names: ['/simple-local-my-project-backend'] } as any,
-        { Names: ['/simple-local-other-project-api'] } as any,
-        { Names: ['/unrelated-container'] } as any,
+        createContainerInfo(['/simple-local-my-project-frontend']) as Docker.ContainerInfo,
+        createContainerInfo(['/simple-local-my-project-backend']) as Docker.ContainerInfo,
+        createContainerInfo(['/simple-local-other-project-api']) as Docker.ContainerInfo,
+        createContainerInfo(['/unrelated-container']) as Docker.ContainerInfo,
       ])
 
       const containers = await containerService.listProjectContainers('my-project')
@@ -834,7 +843,7 @@ describe('ContainerService', () => {
     it('sanitizes project name for prefix matching', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/simple-local-my-project--frontend'] } as any,
+        createContainerInfo(['/simple-local-my-project--frontend']) as Docker.ContainerInfo,
       ])
 
       const containers = await containerService.listProjectContainers('My Project!')
@@ -846,7 +855,7 @@ describe('ContainerService', () => {
     it('returns empty array when no containers match', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/unrelated-container'] } as any,
+        createContainerInfo(['/unrelated-container']) as Docker.ContainerInfo,
       ])
 
       const containers = await containerService.listProjectContainers('my-project')
@@ -858,13 +867,8 @@ describe('ContainerService', () => {
   describe('getServiceStatus', () => {
     it('returns running for native service when process is running', async () => {
       const { spawn } = await import('child_process')
-      const mockProcess = {
-        stdout: { on: vi.fn() },
-        stderr: { on: vi.fn() },
-        on: vi.fn(),
-        pid: 12345,
-      }
-      vi.mocked(spawn).mockReturnValue(mockProcess as any)
+      const mockProcess = createMockProcess()
+      vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
       // Start a native service first
       containerService.startNativeService(
@@ -910,7 +914,7 @@ describe('ContainerService', () => {
     it('returns running for container service when container is running', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/simple-local-test-project-backend'], State: 'running' } as any,
+        createContainerInfo(['/simple-local-test-project-backend'], 'running') as Docker.ContainerInfo,
       ])
 
       const service = {
@@ -950,7 +954,7 @@ describe('ContainerService', () => {
     it('returns starting for container service when container is starting', async () => {
       const mockDocker = containerService['docker']
       vi.mocked(mockDocker.listContainers).mockResolvedValue([
-        { Names: ['/simple-local-test-project-api'], State: 'created' } as any,
+        createContainerInfo(['/simple-local-test-project-api'], 'created') as Docker.ContainerInfo,
       ])
 
       const service = {
