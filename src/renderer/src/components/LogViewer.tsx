@@ -25,6 +25,7 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
     getScrollElement: () => containerRef.current,
     estimateSize: () => LOG_ROW_HEIGHT,
     overscan: 10,
+    measureElement: (el) => el.getBoundingClientRect().height,
   })
 
   const flushLogs = useCallback(() => {
@@ -199,13 +200,14 @@ export function LogViewer({ projectId, serviceId, serviceName }: LogViewerProps)
             {virtualizer.getVirtualItems().map((virtualRow) => (
               <div
                 key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
                 className="terminal-line whitespace-pre-wrap py-0.5"
                 style={{
                   position: 'absolute',
                   top: 0,
                   left: 0,
                   width: '100%',
-                  height: `${virtualRow.size}px`,
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
