@@ -150,6 +150,12 @@ function App() {
     setSelectedProjectId(null);
   };
 
+  const handleSelectProject = (projectId: string | null) => {
+    setSelectedProjectId(projectId);
+    // Note: Don't clear loadingProjectPath here - discovery should continue
+    // in the background. The render logic handles showing the right view.
+  };
+
   const handleRerunDiscovery = () => {
     if (!selectedProject) return;
     setLoadingProjectPath(selectedProject.path);
@@ -226,7 +232,7 @@ function App() {
       <Sidebar
         projects={registry?.projects ?? []}
         selectedProjectId={selectedProjectId ?? undefined}
-        onSelectProject={setSelectedProjectId}
+        onSelectProject={handleSelectProject}
         onAddProject={handleAddProject}
         onOpenSettings={openSettings}
         onDeleteProject={setProjectToDelete}
@@ -275,18 +281,36 @@ function App() {
             </div>
           )}
 
-          {loadingProjectPath ? (
-            <DiscoveryScreen
-              projectPath={loadingProjectPath}
-              onComplete={handleDiscoveryComplete}
-              onCancel={handleDiscoveryCancel}
-            />
-          ) : selectedProject ? (
-            <ProjectView
-              project={selectedProject}
-              onRerunDiscovery={handleRerunDiscovery}
-            />
-          ) : (
+          {/* Keep DiscoveryScreen mounted while discovery is in progress */}
+          {loadingProjectPath && (
+            <div
+              style={{
+                display:
+                  selectedProject?.path === loadingProjectPath
+                    ? "block"
+                    : "none",
+              }}
+            >
+              <DiscoveryScreen
+                projectPath={loadingProjectPath}
+                onComplete={handleDiscoveryComplete}
+                onCancel={handleDiscoveryCancel}
+              />
+            </div>
+          )}
+
+          {/* Show ProjectView when viewing a non-loading project */}
+          {selectedProject &&
+            selectedProject.path !== loadingProjectPath &&
+            selectedProject.status !== "loading" && (
+              <ProjectView
+                project={selectedProject}
+                onRerunDiscovery={handleRerunDiscovery}
+              />
+            )}
+
+          {/* Empty state */}
+          {!selectedProject && !loadingProjectPath && (
             <div className="empty-state h-full">
               <Layers className="empty-state-icon" strokeWidth={1} />
               <h3 className="empty-state-title">No project selected</h3>
