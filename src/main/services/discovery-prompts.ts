@@ -135,7 +135,8 @@ Use the Write tool to create the file with this JSON:
       "debugPort": 9229,
       "env": {},
       "dependsOn": [],
-      "containerEnvOverrides": []
+      "containerEnvOverrides": [],
+      "externalCallbackUrls": []
     },
     {
       "id": "inngest",
@@ -203,6 +204,23 @@ Example: If frontend/.env has API_URL=http://localhost:3000/api/v1 and:
 Then:
 - Add to frontend service: "env": { "API_URL": "http://localhost:3000/api/v1" }
 - Add connection: { "from": "frontend", "to": "backend", "envVar": "API_URL" }
+
+## Step 4: Identify External Callback URLs
+
+Find environment variables containing URLs that third-party providers need to know about.
+
+Look for variables with names containing:
+- CALLBACK, REDIRECT, WEBHOOK, OAUTH, AUTH
+- Provider-specific patterns (CLERK, AUTH0, STRIPE, SUPABASE)
+
+For each callback URL found, add to that service's "externalCallbackUrls" array:
+- envVar: the variable name
+- provider: your best guess at the provider (Clerk, Auth0, Stripe, etc.) or null if unclear
+- description: brief explanation (e.g., "OAuth redirect URI", "Webhook endpoint")
+
+Example:
+If frontend/.env has NEXT_PUBLIC_CLERK_SIGN_IN_URL=http://localhost:3000/sign-in:
+- Add to frontend service: "externalCallbackUrls": [{"envVar": "NEXT_PUBLIC_CLERK_SIGN_IN_URL", "provider": "Clerk", "description": "Sign-in redirect URL"}]
 
 ## Field notes:
 - "type": "service" for your code, "tool" for 3rd party tools
