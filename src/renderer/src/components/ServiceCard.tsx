@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from 'react'
-import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Info, Cpu, HardDrive, ExternalLink } from 'lucide-react'
+import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Info, Cpu, HardDrive, ExternalLink, Copy, Check } from 'lucide-react'
 import type { Service, ServiceStatus, ServiceResourceStats } from '../../../shared/types'
 
 interface ServiceCardProps {
@@ -66,6 +66,7 @@ export const ServiceCard = memo(function ServiceCard({
   const [showStats, setShowStats] = useState(false)
   const [stats, setStats] = useState<ServiceResourceStats | null>(null)
   const [loadingStats, setLoadingStats] = useState(false)
+  const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
@@ -82,6 +83,23 @@ export const ServiceCard = memo(function ServiceCard({
   const isUsingOriginalPort = service.useOriginalPort ?? false
   const activePort = service.port
   const inactivePort = isUsingOriginalPort ? service.allocatedPort : service.discoveredPort
+
+  // External callback URLs warning
+  const hasCallbackUrls = service.externalCallbackUrls && service.externalCallbackUrls.length > 0
+  const showCallbackWarning = hasCallbackUrls && !isUsingOriginalPort && canTogglePort
+
+  const handleCopyCallbackUrl = async (e: React.MouseEvent, url: string) => {
+    e.stopPropagation()
+    await navigator.clipboard.writeText(url)
+    setCopiedCallbackUrl(url)
+    setTimeout(() => setCopiedCallbackUrl(null), 2000)
+  }
+
+  const getInterpolatedUrl = (envVar: string): string => {
+    const value = service.env[envVar]
+    if (!value) return ''
+    return value.replace(/\$\{services\.\w+\.port\}/g, String(service.port))
+  }
 
   // Close popover when clicking outside
   useEffect(() => {
@@ -348,6 +366,65 @@ export const ServiceCard = memo(function ServiceCard({
             }}
           >
             debug:{service.debugPort}
+          </div>
+        )}
+
+        {/* External callback URLs warning */}
+        {showCallbackWarning && (
+          <div
+            className="mt-2 rounded px-2 py-1.5"
+            style={{
+              background: 'var(--status-warning-bg)',
+              border: '1px solid var(--status-warning)',
+            }}
+          >
+            <div className="mb-1 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" style={{ color: 'var(--status-warning)' }} />
+              <span
+                className="text-[10px] font-medium"
+                style={{ color: 'var(--status-warning)' }}
+              >
+                Update external providers:
+              </span>
+            </div>
+            <div className="space-y-1">
+              {service.externalCallbackUrls!.map((callback) => {
+                const url = getInterpolatedUrl(callback.envVar)
+                const isCopied = copiedCallbackUrl === url
+                return (
+                  <div
+                    key={callback.envVar}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <span
+                        className="text-[10px]"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        {callback.envVar}
+                        {callback.provider && (
+                          <span style={{ color: 'var(--text-muted)' }}> → {callback.provider}</span>
+                        )}
+                      </span>
+                    </div>
+                    {url && (
+                      <button
+                        onClick={(e) => handleCopyCallbackUrl(e, url)}
+                        className="btn-icon ml-1 shrink-0"
+                        style={{ padding: '2px' }}
+                        title={isCopied ? 'Copied!' : url}
+                      >
+                        {isCopied ? (
+                          <Check className="h-3 w-3" style={{ color: 'var(--status-running)' }} />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
