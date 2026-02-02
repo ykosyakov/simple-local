@@ -1,8 +1,9 @@
-import { memo } from 'react'
-import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2 } from 'lucide-react'
-import type { Service, ServiceStatus } from '../../../shared/types'
+import { memo, useState, useRef, useEffect } from 'react'
+import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Info, Cpu, HardDrive, ExternalLink } from 'lucide-react'
+import type { Service, ServiceStatus, ServiceResourceStats } from '../../../shared/types'
 
 interface ServiceCardProps {
+  projectId: string
   service: Service
   status: ServiceStatus['status']
   isSelected: boolean
@@ -47,6 +48,7 @@ const STATUS_CONFIG = {
 }
 
 export const ServiceCard = memo(function ServiceCard({
+  projectId,
   service,
   status,
   isSelected,
@@ -61,6 +63,12 @@ export const ServiceCard = memo(function ServiceCard({
   onExtractPort,
   index = 0,
 }: ServiceCardProps) {
+  const [showStats, setShowStats] = useState(false)
+  const [stats, setStats] = useState<ServiceResourceStats | null>(null)
+  const [loadingStats, setLoadingStats] = useState(false)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
   const isRunning = status === 'running'
   const isStarting = status === 'starting'
   const isBuilding = status === 'building'
@@ -75,10 +83,66 @@ export const ServiceCard = memo(function ServiceCard({
   const activePort = service.port
   const inactivePort = isUsingOriginalPort ? service.allocatedPort : service.discoveredPort
 
+  // Close popover when clicking outside
+  useEffect(() => {
+    if (!showStats) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
+        buttonRef.current && !buttonRef.current.contains(e.target as Node)
+      ) {
+        setShowStats(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showStats])
+
+  // Fetch stats when popover opens
+  useEffect(() => {
+    if (!showStats || !isRunning) return
+
+    let cancelled = false
+    const fetchStats = async () => {
+      setLoadingStats(true)
+      try {
+        const result = await window.api.getServiceStats(projectId, service.id)
+        if (!cancelled) setStats(result)
+      } catch {
+        if (!cancelled) setStats(null)
+      } finally {
+        if (!cancelled) setLoadingStats(false)
+      }
+    }
+
+    fetchStats()
+    const interval = setInterval(fetchStats, 2000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [showStats, isRunning, projectId, service.id])
+
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowStats(!showStats)
+  }
+
+  const handleOpenInBrowser = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const port = service.port
+    if (port) {
+      window.open(`http://localhost:${port}`, '_blank')
+    }
+  }
+
   return (
     <div
       onClick={() => onSelect(service.id)}
-      className="animate-fade-up cursor-pointer rounded-xl p-4 transition-all"
+      className="animate-fade-up flex cursor-pointer flex-col rounded-xl p-4 transition-all"
       style={{
         background: isSelected ? 'var(--bg-elevated)' : 'var(--bg-surface)',
         border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
@@ -89,6 +153,7 @@ export const ServiceCard = memo(function ServiceCard({
             : 'none',
         animationDelay: `${index * 50}ms`,
         opacity: 0,
+        minHeight: '160px',
       }}
     >
       {/* Status row */}
@@ -107,6 +172,78 @@ export const ServiceCard = memo(function ServiceCard({
           >
             {config.label}
           </span>
+          {isRunning && (
+            <div className="relative">
+              <button
+                ref={buttonRef}
+                onClick={handleInfoClick}
+                className="btn-icon ml-1 opacity-60 hover:opacity-100"
+                style={{ padding: '2px' }}
+                title="View resource usage"
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+              {showStats && (
+                <div
+                  ref={popoverRef}
+                  className="absolute left-0 top-full z-50 mt-2 w-40 rounded-lg p-3"
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-default)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {loadingStats && !stats ? (
+                    <div className="flex items-center justify-center py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--text-muted)' }} />
+                    </div>
+                  ) : stats ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Cpu className="h-3.5 w-3.5" style={{ color: 'var(--accent-primary)' }} />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>CPU</span>
+                        <span
+                          className="ml-auto text-xs font-medium"
+                          style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}
+                        >
+                          {stats.cpuPercent.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <HardDrive className="h-3.5 w-3.5" style={{ color: 'var(--status-starting)' }} />
+                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Memory</span>
+                        <span
+                          className="ml-auto text-xs font-medium"
+                          style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}
+                        >
+                          {stats.memoryMB} MB
+                        </span>
+                      </div>
+                      {stats.memoryPercent !== undefined && (
+                        <div
+                          className="mt-1 h-1 w-full overflow-hidden rounded-full"
+                          style={{ background: 'var(--bg-deep)' }}
+                        >
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.min(stats.memoryPercent, 100)}%`,
+                              background: stats.memoryPercent > 80 ? 'var(--status-error)' : 'var(--status-starting)',
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+                      No stats available
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {isTool && (
@@ -186,47 +323,47 @@ export const ServiceCard = memo(function ServiceCard({
         </div>
       </div>
 
-      {/* Service name */}
-      <h3
-        className="mb-1 flex items-center gap-2 text-sm font-semibold leading-tight"
-        style={{
-          fontFamily: 'var(--font-display)',
-          color: 'var(--text-primary)',
-        }}
-        title={service.name}
-      >
-        {isTool && <Wrench className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />}
-        {service.name}
-      </h3>
-
-      {/* Debug port if exists */}
-      {service.debugPort && (
-        <div
-          className="mb-3 text-[11px]"
+      {/* Content area - grows to fill space */}
+      <div className="flex-1">
+        {/* Service name */}
+        <h3
+          className="mb-1 flex items-center gap-2 text-sm font-semibold leading-tight"
           style={{
-            fontFamily: 'var(--font-mono)',
-            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-display)',
+            color: 'var(--text-primary)',
           }}
+          title={service.name}
         >
-          debug:{service.debugPort}
-        </div>
-      )}
+          {isTool && <Wrench className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />}
+          {service.name}
+        </h3>
 
-      {/* Spacer if no debug port */}
-      {!service.debugPort && <div className="mb-3" />}
+        {/* Debug port if exists */}
+        {service.debugPort && (
+          <div
+            className="text-[11px]"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            debug:{service.debugPort}
+          </div>
+        )}
+      </div>
 
-      {/* Actions */}
-      <div className="group flex gap-2">
+      {/* Actions - always at bottom */}
+      <div className="group mt-3 flex items-center gap-1.5">
         {!isRunning && !isStarting && !isBuilding && (
           <button
             onClick={(e) => {
               e.stopPropagation()
               onStart(service.id)
             }}
-            className="btn btn-primary flex-1"
-            style={{ padding: '0.5rem' }}
+            className="btn btn-primary flex-1 text-xs"
+            style={{ padding: '0.375rem 0.5rem' }}
           >
-            <Play className="h-4 w-4" />
+            <Play className="h-3.5 w-3.5" />
             Start
           </button>
         )}
@@ -238,14 +375,14 @@ export const ServiceCard = memo(function ServiceCard({
                 e.stopPropagation()
                 onStop(service.id)
               }}
-              className="btn btn-danger flex-1"
-              style={{ padding: '0.5rem' }}
+              className="btn btn-danger flex-1 text-xs"
+              style={{ padding: '0.375rem 0.5rem' }}
               disabled={isStopping}
             >
               {isStopping ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Square className="h-4 w-4" />
+                <Square className="h-3.5 w-3.5" />
               )}
               {isStopping ? 'Stopping' : 'Stop'}
             </button>
@@ -255,14 +392,17 @@ export const ServiceCard = memo(function ServiceCard({
                 onRestart(service.id)
               }}
               className="btn btn-ghost"
-              style={{ padding: '0.5rem' }}
+              style={{ padding: '0.375rem' }}
               title="Restart service"
               disabled={isStopping}
             >
-              <RotateCcw className="h-4 w-4" />
+              <RotateCcw className="h-3.5 w-3.5" />
             </button>
           </>
         )}
+
+        {/* Spacer between control buttons and utility buttons */}
+        <div className="flex-1" />
 
         {onHide && (
           <button
@@ -273,7 +413,18 @@ export const ServiceCard = memo(function ServiceCard({
             className="btn-icon opacity-0 transition-opacity group-hover:opacity-100"
             title="Hide service"
           >
-            <EyeOff className="h-4 w-4" />
+            <EyeOff className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {service.port && (
+          <button
+            onClick={handleOpenInBrowser}
+            className="btn btn-ghost"
+            style={{ padding: '0.375rem' }}
+            title={`Open http://localhost:${service.port}`}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
           </button>
         )}
       </div>

@@ -72,6 +72,12 @@ export interface ServiceStatus {
   error?: string
 }
 
+export interface ServiceResourceStats {
+  cpuPercent: number
+  memoryMB: number
+  memoryPercent?: number
+}
+
 export interface GlobalSettings {
   dockerSocket: 'auto' | string
   defaultPortStart: number

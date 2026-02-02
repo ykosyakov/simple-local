@@ -7,6 +7,8 @@ import type { ServiceStatus } from '../../shared/types'
  */
 export class NativeProcessManager {
   private processes = new Map<string, ChildProcess>()
+  /** Services that were started and may have child processes still running */
+  private startedServices = new Set<string>()
   /** Timeout in ms before escalating from SIGTERM to SIGKILL */
   private readonly KILL_TIMEOUT_MS = 5000
 
@@ -37,6 +39,7 @@ export class NativeProcessManager {
     })
 
     this.processes.set(serviceId, proc)
+    this.startedServices.add(serviceId)
 
     proc.stdout?.on('data', (data) => onLog(data.toString()))
     proc.stderr?.on('data', (data) => onLog(data.toString()))
@@ -81,6 +84,7 @@ export class NativeProcessManager {
     // But if the process is somehow stuck, ensure we clean up the map.
     // The 'close' handler will be a no-op if already deleted.
     this.processes.delete(serviceId)
+    this.startedServices.delete(serviceId)
     return true
   }
 
@@ -116,5 +120,20 @@ export class NativeProcessManager {
    */
   isRunning(serviceId: string): boolean {
     return this.processes.has(serviceId)
+  }
+
+  /**
+   * Check if a service was started by us (may have child processes still running).
+   * Used for port-based fallback status checking.
+   */
+  wasStarted(serviceId: string): boolean {
+    return this.startedServices.has(serviceId)
+  }
+
+  /**
+   * Clear the started flag for a service (e.g., when port-based check shows it's stopped).
+   */
+  clearStarted(serviceId: string): void {
+    this.startedServices.delete(serviceId)
   }
 }

@@ -248,6 +248,18 @@ export function setupServiceHandlers(
     logManager.clearBuffer(projectId, serviceId)
   })
 
+  ipcMain.handle('service:stats', async (_event, projectId: string, serviceId: string) => {
+    try {
+      const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
+      return await container.getServiceStats(service, projectConfig.name)
+    } catch (err) {
+      if (err instanceof Error && !isLookupError(err)) {
+        log.error('service:stats unexpected error:', err)
+      }
+      return null
+    }
+  })
+
   const getLogBuffer = (projectId: string, serviceId: string): string[] => {
     return logManager.getBuffer(projectId, serviceId)
   }

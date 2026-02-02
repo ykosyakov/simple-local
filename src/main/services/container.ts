@@ -2,7 +2,7 @@ import Docker from 'dockerode'
 import { spawn, type ChildProcess, type SpawnOptions } from 'child_process'
 import { EventEmitter } from 'events'
 import type { Readable } from 'stream'
-import type { ContainerEnvOverride, Service, ServiceStatus } from '../../shared/types'
+import type { ContainerEnvOverride, Service, ServiceStatus, ServiceResourceStats } from '../../shared/types'
 import { NativeProcessManager } from './native-process-manager'
 import { PortManager } from './port-manager'
 import { createLogger } from '../../shared/logger'
@@ -131,10 +131,28 @@ export class ContainerService extends EventEmitter {
   /**
    * Get the status of a service (native or container mode).
    * This is the unified entry point for checking service status.
+   *
+   * For native services: First checks if we're tracking the process directly.
+   * If not, falls back to checking if the service's port is in use (only for
+   * services we actually started - handles cases where the tracked process
+   * spawned child processes and exited).
    */
   async getServiceStatus(service: Service, projectName: string): Promise<ServiceStatus['status']> {
     if (service.mode === 'native') {
-      return this.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
+      if (this.isNativeServiceRunning(service.id)) {
+        return 'running'
+      }
+      // Fallback: check if the service's port is in use
+      // Only for services we started (to avoid false positives from other processes)
+      if (this.nativeProcessManager.wasStarted(service.id)) {
+        const portToCheck = service.hardcodedPort?.value ?? service.port
+        if (portToCheck && await this.portManager.isPortInUse(portToCheck)) {
+          return 'running'
+        }
+        // Port is not in use, service has stopped - clear the started flag
+        this.nativeProcessManager.clearStarted(service.id)
+      }
+      return 'stopped'
     }
     return this.getContainerStatus(this.getContainerName(projectName, service.id))
   }
@@ -321,5 +339,44 @@ export class ContainerService extends EventEmitter {
     return containers
       .filter((c) => c.Names.some((n) => n.includes(prefix)))
       .map((c) => c.Names[0].replace(/^\//, ''))
+  }
+
+  /**
+   * Get resource stats for a running container.
+   * @returns Resource stats or null if container not found/not running
+   */
+  async getContainerStats(containerName: string): Promise<ServiceResourceStats | null> {
+    try {
+      const container = this.docker.getContainer(containerName)
+      const stats = await container.stats({ stream: false })
+
+      // Calculate CPU percentage
+      const cpuDelta = stats.cpu_stats.cpu_usage.total_usage - stats.precpu_stats.cpu_usage.total_usage
+      const systemDelta = stats.cpu_stats.system_cpu_usage - stats.precpu_stats.system_cpu_usage
+      const cpuCount = stats.cpu_stats.online_cpus || 1
+      const cpuPercent = systemDelta > 0 ? Math.round((cpuDelta / systemDelta) * cpuCount * 100 * 10) / 10 : 0
+
+      // Calculate memory
+      const memoryUsage = stats.memory_stats.usage || 0
+      const memoryLimit = stats.memory_stats.limit || 1
+      const memoryMB = Math.round(memoryUsage / 1024 / 1024 * 10) / 10
+      const memoryPercent = Math.round((memoryUsage / memoryLimit) * 100 * 10) / 10
+
+      return { cpuPercent, memoryMB, memoryPercent }
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Get resource stats for a service (native or container mode).
+   */
+  async getServiceStats(service: Service, projectName: string): Promise<ServiceResourceStats | null> {
+    if (service.mode === 'native') {
+      const portToCheck = service.hardcodedPort?.value ?? service.port
+      if (!portToCheck) return null
+      return this.portManager.getProcessStatsForPort(portToCheck)
+    }
+    return this.getContainerStats(this.getContainerName(projectName, service.id))
   }
 }

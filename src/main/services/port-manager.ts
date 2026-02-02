@@ -2,6 +2,7 @@ import { execSync, exec as execCallback } from 'child_process'
 import { promisify } from 'util'
 import { validatePort } from './validation'
 import { createLogger } from '../../shared/logger'
+import type { ServiceResourceStats } from '../../shared/types'
 
 const exec = promisify(execCallback)
 const log = createLogger('PortManager')
@@ -88,5 +89,49 @@ export class PortManager {
       // No process on port or lsof failed
     }
     return false
+  }
+
+  /**
+   * Check if a port is in use (has a process listening on it).
+   * @returns true if a process is listening on the port
+   */
+  async isPortInUse(port: number): Promise<boolean> {
+    validatePort(port)
+
+    try {
+      const { stdout } = await exec(`lsof -ti tcp:${port}`)
+      return stdout.trim().length > 0
+    } catch {
+      // lsof failed or no process on port
+      return false
+    }
+  }
+
+  /**
+   * Get resource stats for a process listening on a port.
+   * Uses ps to get CPU and memory usage.
+   * @returns Resource stats or null if no process found
+   */
+  async getProcessStatsForPort(port: number): Promise<ServiceResourceStats | null> {
+    validatePort(port)
+
+    try {
+      // Get PID of process on port
+      const { stdout: pidOutput } = await exec(`lsof -ti tcp:${port}`)
+      const pid = pidOutput.trim().split('\n')[0]
+      if (!pid) return null
+
+      // Get stats using ps - %cpu and rss (resident set size in KB)
+      const { stdout: psOutput } = await exec(`ps -p ${pid} -o %cpu=,rss=`)
+      const [cpuStr, rssStr] = psOutput.trim().split(/\s+/)
+
+      const cpuPercent = parseFloat(cpuStr) || 0
+      const memoryKB = parseInt(rssStr, 10) || 0
+      const memoryMB = Math.round(memoryKB / 1024 * 10) / 10
+
+      return { cpuPercent, memoryMB }
+    } catch {
+      return null
+    }
   }
 }

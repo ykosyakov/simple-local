@@ -472,26 +472,29 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         </div>
       )}
 
-      {/* Service Cards Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {activeServices.map((service, index) => (
-          <ServiceCard
-            key={service.id}
-            service={service}
-            status={statuses.get(service.id) || 'stopped'}
-            isSelected={selectedServiceId === service.id}
-            isStopping={stoppingServices.has(service.id) || restartingServices.has(service.id)}
-            onSelect={handleSelectService}
-            onStart={handleStart}
-            onStop={handleStop}
-            onRestart={handleRestart}
-            onHide={handleHideService}
-            onModeChange={handleModeChange}
-            onPortToggle={handlePortToggle}
-            onExtractPort={handleExtractPort}
-            index={index}
-          />
-        ))}
+      {/* Service Cards Grid - scrollable */}
+      <div className="min-h-0 flex-shrink overflow-auto rounded-lg p-2" style={{ maxHeight: '45vh' }}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {activeServices.map((service, index) => (
+            <ServiceCard
+              key={service.id}
+              projectId={project.id}
+              service={service}
+              status={statuses.get(service.id) || 'stopped'}
+              isSelected={selectedServiceId === service.id}
+              isStopping={stoppingServices.has(service.id) || restartingServices.has(service.id)}
+              onSelect={handleSelectService}
+              onStart={handleStart}
+              onStop={handleStop}
+              onRestart={handleRestart}
+              onHide={handleHideService}
+              onModeChange={handleModeChange}
+              onPortToggle={handlePortToggle}
+              onExtractPort={handleExtractPort}
+              index={index}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Container Environment Overrides */}
@@ -506,7 +509,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
 
       {/* Log Viewer */}
       {selectedService && (
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1" style={{ minHeight: '250px' }}>
           <LogViewer
             projectId={project.id}
             serviceId={selectedService.id}
