@@ -100,6 +100,7 @@ interface AIServiceOutput {
   dependsOn?: string[]
   framework?: string
   containerEnvOverrides?: { key: string; originalPattern: string; containerValue: string; reason: string; enabled: boolean }[]
+  externalCallbackUrls?: { envVar: string; provider?: string; description?: string }[]
 }
 
 interface AIConnectionOutput {
@@ -494,7 +495,7 @@ export class DiscoveryService {
 
       // Port allocation differs between services and tools
       let allocatedPort: number | undefined
-      let discoveredPort: number | undefined = s.port
+      const discoveredPort: number | undefined = s.port
       let useOriginalPort = false
 
       if (isService) {
@@ -509,7 +510,7 @@ export class DiscoveryService {
 
       // Allocate debug ports from project's debug range (services only)
       let allocatedDebugPort: number | undefined
-      let discoveredDebugPort: number | undefined = s.debugPort
+      const discoveredDebugPort: number | undefined = s.debugPort
 
       if (isService && (s.debugPort || s.debugCommand)) {
         allocatedDebugPort = allocatePort(debugPortBase, usedDebugPorts)
