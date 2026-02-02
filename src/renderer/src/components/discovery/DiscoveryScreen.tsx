@@ -4,6 +4,7 @@ import { DiscoveryProgress } from './DiscoveryProgress'
 import { DiscoveryTerminal } from './DiscoveryTerminal'
 import { ServiceSelection } from './ServiceSelection'
 import { ManualServiceForm } from './ManualServiceForm'
+import { ExternalCallbacksNotice } from './ExternalCallbacksNotice'
 import type { Service, DiscoveryStep } from '../../../../shared/types'
 import type { ServiceFormData } from '../../../../shared/schemas'
 import { createLogger } from '../../../../shared/logger'
@@ -192,6 +193,7 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
               ))}
             </ul>
           </div>
+          <ExternalCallbacksNotice services={discoveredServices} />
           <div className="flex justify-end gap-3">
             <button onClick={onCancel} className="btn btn-ghost">
               Cancel
