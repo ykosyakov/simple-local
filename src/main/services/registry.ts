@@ -17,10 +17,13 @@ const DEBUG_PORT_BASE = 9200
  */
 const DEBUG_PORT_STEP = 10
 
+export const DEFAULT_PORT_START = 4100
+export const DEFAULT_PORT_RANGE_SIZE = 50
+
 const DEFAULT_SETTINGS: GlobalSettings = {
   dockerSocket: 'auto',
-  defaultPortStart: 3000,
-  portRangeSize: 100,
+  defaultPortStart: DEFAULT_PORT_START,
+  portRangeSize: DEFAULT_PORT_RANGE_SIZE,
   minimizeToTray: true,
 }
 

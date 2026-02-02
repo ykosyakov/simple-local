@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { RegistryService } from '../services/registry'
+import { RegistryService, DEFAULT_PORT_START, DEFAULT_PORT_RANGE_SIZE } from '../services/registry'
 import type { Registry } from '../../shared/types'
 
-// Mock electron-store
+// Mock electron-store - uses literal values that must match registry.ts constants
 vi.mock('electron-store', () => {
   return {
     default: class MockStore {
@@ -10,8 +10,8 @@ vi.mock('electron-store', () => {
         projects: [],
         settings: {
           dockerSocket: 'auto',
-          defaultPortStart: 3000,
-          portRangeSize: 100,
+          defaultPortStart: 4100,
+          portRangeSize: 50,
           minimizeToTray: true,
         },
       }
@@ -44,8 +44,8 @@ describe('RegistryService', () => {
 
     it('returns default settings', () => {
       const result = registry.getRegistry()
-      expect(result.settings.defaultPortStart).toBe(3000)
-      expect(result.settings.portRangeSize).toBe(100)
+      expect(result.settings.defaultPortStart).toBe(DEFAULT_PORT_START)
+      expect(result.settings.portRangeSize).toBe(DEFAULT_PORT_RANGE_SIZE)
     })
   })
 
@@ -55,7 +55,7 @@ describe('RegistryService', () => {
 
       expect(project.name).toBe('My Project')
       expect(project.path).toBe('/path/to/project')
-      expect(project.portRange).toEqual([3000, 3099])
+      expect(project.portRange).toEqual([DEFAULT_PORT_START, DEFAULT_PORT_START + DEFAULT_PORT_RANGE_SIZE - 1])
       expect(project.id).toBeDefined()
     })
 
@@ -63,7 +63,7 @@ describe('RegistryService', () => {
       registry.addProject('/path/one', 'Project One')
       const project2 = registry.addProject('/path/two', 'Project Two')
 
-      expect(project2.portRange).toEqual([3100, 3199])
+      expect(project2.portRange).toEqual([DEFAULT_PORT_START + DEFAULT_PORT_RANGE_SIZE, DEFAULT_PORT_START + DEFAULT_PORT_RANGE_SIZE * 2 - 1])
     })
   })
 
@@ -80,21 +80,21 @@ describe('RegistryService', () => {
   describe('getNextPortRange', () => {
     it('returns first range when no projects exist', () => {
       const range = registry.getNextPortRange()
-      expect(range).toEqual([3000, 3099])
+      expect(range).toEqual([DEFAULT_PORT_START, DEFAULT_PORT_START + DEFAULT_PORT_RANGE_SIZE - 1])
     })
 
     it('finds gap in port ranges', () => {
-      // Add project at 3000-3099
+      // Add first project
       registry.addProject('/one', 'One')
-      // Add project at 3100-3199
+      // Add second project
       registry.addProject('/two', 'Two')
       // Remove first project
       const projects = registry.getRegistry().projects
       registry.removeProject(projects[0].id)
 
-      // Should reuse 3000-3099
+      // Should reuse first range
       const range = registry.getNextPortRange()
-      expect(range).toEqual([3000, 3099])
+      expect(range).toEqual([DEFAULT_PORT_START, DEFAULT_PORT_START + DEFAULT_PORT_RANGE_SIZE - 1])
     })
   })
 })

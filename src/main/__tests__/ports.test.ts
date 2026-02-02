@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { PortService } from '../services/ports'
+import { DEFAULT_PORT_START } from '../services/registry'
 
 vi.mock('net', () => ({
   createServer: vi.fn(() => ({
@@ -60,9 +61,9 @@ describe('PortService', () => {
 
     it('uses default baseline port when no ranges exist', () => {
       const suggested = portService.suggestPortRemap(50, [], 100)
-      // With default baseline of 3000, next range starts at 3100 (ceil((3000+1)/100)*100)
-      // Then add offset 50 = 3150
-      expect(suggested).toBe(3150)
+      // Next range starts at ceil((DEFAULT_PORT_START+1)/100)*100, then add offset 50
+      const expectedRangeStart = Math.ceil((DEFAULT_PORT_START + 1) / 100) * 100
+      expect(suggested).toBe(expectedRangeStart + 50)
     })
 
     it('respects custom baseline port', () => {

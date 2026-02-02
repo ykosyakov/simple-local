@@ -1,4 +1,5 @@
 import * as net from 'net'
+import { DEFAULT_PORT_START } from './registry'
 
 interface PortRange {
   portRange: [number, number]
@@ -43,17 +44,11 @@ export class PortService {
     })
   }
 
-  /**
-   * Default baseline port for port suggestions.
-   * Matches the registry's defaultPortStart setting.
-   */
-  static readonly DEFAULT_PORT_BASELINE = 3000
-
   suggestPortRemap(
     originalPort: number,
     existingRanges: PortRange[],
     rangeSize: number,
-    baselinePort: number = PortService.DEFAULT_PORT_BASELINE
+    baselinePort: number = DEFAULT_PORT_START
   ): number {
     // Find highest used port, starting from the baseline
     let maxPort = baselinePort

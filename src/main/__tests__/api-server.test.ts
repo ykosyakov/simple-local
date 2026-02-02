@@ -4,10 +4,10 @@ import { RegistryService } from '../services/registry'
 import { ContainerService } from '../services/container'
 import { ProjectConfigService } from '../services/project-config'
 
-// Mock electron-store for RegistryService (required - no real store in tests)
+// Mock electron-store for RegistryService - uses literal values that must match registry.ts constants
 vi.mock('electron-store', () => ({
   default: class {
-    private data: Record<string, unknown> = { projects: [], settings: { dockerSocket: 'auto', defaultPortStart: 3000, portRangeSize: 100, minimizeToTray: true } }
+    private data: Record<string, unknown> = { projects: [], settings: { dockerSocket: 'auto', defaultPortStart: 4100, portRangeSize: 50, minimizeToTray: true } }
     get(key: string) { return this.data[key] }
     set(key: string, value: unknown) { this.data[key] = value }
   },
