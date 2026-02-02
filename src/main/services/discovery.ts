@@ -543,6 +543,7 @@ export class DiscoveryService {
         mode: isService ? getDefaultMode(s.framework || s.type) : 'native',
         containerEnvOverrides: s.containerEnvOverrides || [],
         hardcodedPort,
+        externalCallbackUrls: s.externalCallbackUrls,
       }
     })
 

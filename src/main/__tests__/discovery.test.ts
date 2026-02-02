@@ -700,3 +700,70 @@ describe('convertToProjectConfig hardcodedPort', () => {
     expect(config.services[0].hardcodedPort).toBeUndefined()
   })
 })
+
+describe('externalCallbackUrls', () => {
+  it('passes through externalCallbackUrls from AI output to service', async () => {
+    const discovery = new DiscoveryService({
+      fileSystem: createMockFileSystem(),
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    const aiOutput = {
+      services: [
+        {
+          id: 'frontend',
+          name: 'Frontend',
+          path: 'apps/web',
+          command: 'npm run dev',
+          port: 3000,
+          env: {},
+          externalCallbackUrls: [
+            {
+              envVar: 'NEXT_PUBLIC_CLERK_CALLBACK',
+              provider: 'Clerk',
+              description: 'OAuth callback URL',
+            },
+          ],
+        },
+      ],
+      connections: [],
+    }
+
+    const result = (discovery as any).convertToProjectConfig(aiOutput, '/test/project', 3000, 9200)
+
+    expect(result.services[0].externalCallbackUrls).toEqual([
+      {
+        envVar: 'NEXT_PUBLIC_CLERK_CALLBACK',
+        provider: 'Clerk',
+        description: 'OAuth callback URL',
+      },
+    ])
+  })
+
+  it('handles missing externalCallbackUrls gracefully', async () => {
+    const discovery = new DiscoveryService({
+      fileSystem: createMockFileSystem(),
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    const aiOutput = {
+      services: [
+        {
+          id: 'backend',
+          name: 'Backend',
+          path: 'apps/api',
+          command: 'npm run dev',
+          port: 4000,
+          env: {},
+        },
+      ],
+      connections: [],
+    }
+
+    const result = (discovery as any).convertToProjectConfig(aiOutput, '/test/project', 3000, 9200)
+
+    expect(result.services[0].externalCallbackUrls).toBeUndefined()
+  })
+})
