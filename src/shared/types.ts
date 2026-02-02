@@ -31,6 +31,7 @@ export interface Service {
   devcontainer?: string
   containerEnvOverrides?: ContainerEnvOverride[]
   hardcodedPort?: HardcodedPort
+  externalCallbackUrls?: ExternalCallbackUrl[]
 }
 
 export interface ContainerEnvOverride {
@@ -45,6 +46,12 @@ export interface HardcodedPort {
   value: number
   source: 'command-flag' | 'config-file' | 'unknown'
   flag?: string  // e.g., "-p", "--port"
+}
+
+export interface ExternalCallbackUrl {
+  envVar: string
+  provider?: string
+  description?: string
 }
 
 export interface PortExtractionChange {
