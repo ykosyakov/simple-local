@@ -109,7 +109,7 @@ export class PortManager {
 
   /**
    * Get resource stats for a process listening on a port.
-   * Uses ps to get CPU and memory usage.
+   * Uses top -l 2 for accurate CPU measurement (takes two samples).
    * @returns Resource stats or null if no process found
    */
   async getProcessStatsForPort(port: number): Promise<ServiceResourceStats | null> {
@@ -121,13 +121,32 @@ export class PortManager {
       const pid = pidOutput.trim().split('\n')[0]
       if (!pid) return null
 
-      // Get stats using ps - %cpu and rss (resident set size in KB)
-      const { stdout: psOutput } = await exec(`ps -p ${pid} -o %cpu=,rss=`)
-      const [cpuStr, rssStr] = psOutput.trim().split(/\s+/)
+      // Use top -l 2 for accurate CPU (takes two samples ~1 second apart)
+      // -stats pid,cpu,rsize gives us just the columns we need
+      // tail -1 gets the last (second) sample which has accurate CPU
+      const { stdout: topOutput } = await exec(
+        `top -l 2 -pid ${pid} -stats pid,cpu,rsize | grep "^${pid}" | tail -1`,
+        { timeout: 5000 }
+      )
 
-      const cpuPercent = parseFloat(cpuStr) || 0
-      const memoryKB = parseInt(rssStr, 10) || 0
-      const memoryMB = Math.round(memoryKB / 1024 * 10) / 10
+      const parts = topOutput.trim().split(/\s+/)
+      if (parts.length < 3) return null
+
+      // Format: PID CPU RSIZE (e.g., "12345 5.2 100M")
+      const cpuPercent = parseFloat(parts[1]) || 0
+      const memoryStr = parts[2] || '0'
+
+      // Parse memory (can be in K, M, G format)
+      let memoryMB = 0
+      const memMatch = memoryStr.match(/^([\d.]+)([KMG])?/)
+      if (memMatch) {
+        const value = parseFloat(memMatch[1])
+        const unit = memMatch[2]
+        if (unit === 'G') memoryMB = Math.round(value * 1024 * 10) / 10
+        else if (unit === 'M') memoryMB = Math.round(value * 10) / 10
+        else if (unit === 'K') memoryMB = Math.round(value / 1024 * 10) / 10
+        else memoryMB = Math.round(value / 1024 / 1024 * 10) / 10 // bytes
+      }
 
       return { cpuPercent, memoryMB }
     } catch {

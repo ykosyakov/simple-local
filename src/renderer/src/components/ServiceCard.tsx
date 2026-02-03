@@ -1,11 +1,12 @@
-import { memo, useState, useRef, useEffect } from 'react'
-import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Info, Cpu, HardDrive, ExternalLink, Copy, Check } from 'lucide-react'
+import { memo, useState } from 'react'
+import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Cpu, HardDrive, ExternalLink, Copy, Check } from 'lucide-react'
 import type { Service, ServiceStatus, ServiceResourceStats } from '../../../shared/types'
 
 interface ServiceCardProps {
   projectId: string
   service: Service
   status: ServiceStatus['status']
+  stats?: ServiceResourceStats | null
   isSelected: boolean
   isStopping?: boolean
   onSelect: (serviceId: string) => void
@@ -48,9 +49,9 @@ const STATUS_CONFIG = {
 }
 
 export const ServiceCard = memo(function ServiceCard({
-  projectId,
   service,
   status,
+  stats,
   isSelected,
   isStopping = false,
   onSelect,
@@ -63,12 +64,7 @@ export const ServiceCard = memo(function ServiceCard({
   onExtractPort,
   index = 0,
 }: ServiceCardProps) {
-  const [showStats, setShowStats] = useState(false)
-  const [stats, setStats] = useState<ServiceResourceStats | null>(null)
-  const [loadingStats, setLoadingStats] = useState(false)
   const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null)
-  const popoverRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const isRunning = status === 'running'
   const isStarting = status === 'starting'
@@ -99,54 +95,6 @@ export const ServiceCard = memo(function ServiceCard({
     const value = service.env[envVar]
     if (!value) return ''
     return value.replace(/\$\{services\.\w+\.port\}/g, String(service.port))
-  }
-
-  // Close popover when clicking outside
-  useEffect(() => {
-    if (!showStats) return
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
-        buttonRef.current && !buttonRef.current.contains(e.target as Node)
-      ) {
-        setShowStats(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showStats])
-
-  // Fetch stats when popover opens
-  useEffect(() => {
-    if (!showStats || !isRunning) return
-
-    let cancelled = false
-    const fetchStats = async () => {
-      setLoadingStats(true)
-      try {
-        const result = await window.api.getServiceStats(projectId, service.id)
-        if (!cancelled) setStats(result)
-      } catch {
-        if (!cancelled) setStats(null)
-      } finally {
-        if (!cancelled) setLoadingStats(false)
-      }
-    }
-
-    fetchStats()
-    const interval = setInterval(fetchStats, 2000)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [showStats, isRunning, projectId, service.id])
-
-  const handleInfoClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setShowStats(!showStats)
   }
 
   const handleOpenInBrowser = (e: React.MouseEvent) => {
@@ -190,76 +138,23 @@ export const ServiceCard = memo(function ServiceCard({
           >
             {config.label}
           </span>
-          {isRunning && (
-            <div className="relative">
-              <button
-                ref={buttonRef}
-                onClick={handleInfoClick}
-                className="btn-icon ml-1 opacity-60 hover:opacity-100"
-                style={{ padding: '2px' }}
-                title="View resource usage"
+          {/* Inline stats display when running */}
+          {isRunning && stats && (
+            <div className="ml-2 flex items-center gap-3">
+              <span
+                className="flex items-center gap-1 text-[11px]"
+                style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
               >
-                <Info className="h-3.5 w-3.5" />
-              </button>
-              {showStats && (
-                <div
-                  ref={popoverRef}
-                  className="absolute left-0 top-full z-50 mt-2 w-40 rounded-lg p-3"
-                  style={{
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border-default)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {loadingStats && !stats ? (
-                    <div className="flex items-center justify-center py-2">
-                      <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--text-muted)' }} />
-                    </div>
-                  ) : stats ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Cpu className="h-3.5 w-3.5" style={{ color: 'var(--accent-primary)' }} />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>CPU</span>
-                        <span
-                          className="ml-auto text-xs font-medium"
-                          style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}
-                        >
-                          {stats.cpuPercent.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <HardDrive className="h-3.5 w-3.5" style={{ color: 'var(--status-starting)' }} />
-                        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Memory</span>
-                        <span
-                          className="ml-auto text-xs font-medium"
-                          style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}
-                        >
-                          {stats.memoryMB} MB
-                        </span>
-                      </div>
-                      {stats.memoryPercent !== undefined && (
-                        <div
-                          className="mt-1 h-1 w-full overflow-hidden rounded-full"
-                          style={{ background: 'var(--bg-deep)' }}
-                        >
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.min(stats.memoryPercent, 100)}%`,
-                              background: stats.memoryPercent > 80 ? 'var(--status-error)' : 'var(--status-starting)',
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-                      No stats available
-                    </div>
-                  )}
-                </div>
-              )}
+                <Cpu className="h-3 w-3" style={{ color: 'var(--accent-primary)' }} />
+                {stats.cpuPercent.toFixed(1)}%
+              </span>
+              <span
+                className="flex items-center gap-1 text-[11px]"
+                style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
+              >
+                <HardDrive className="h-3 w-3" style={{ color: 'var(--status-starting)' }} />
+                {stats.memoryMB}MB
+              </span>
             </div>
           )}
         </div>

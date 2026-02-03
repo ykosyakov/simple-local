@@ -6,7 +6,7 @@ import { ConfigEditorModal } from './ConfigEditorModal'
 import { EnvOverridesPanel } from './EnvOverridesPanel'
 import { PortExtractionModal } from './PortExtractionModal'
 import { Server, Code2, RefreshCw } from 'lucide-react'
-import type { Project, ProjectConfig, ServiceStatus, ContainerEnvOverride, Service } from '../../../shared/types'
+import type { Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ContainerEnvOverride, Service } from '../../../shared/types'
 import { createLogger } from '../../../shared/logger'
 
 const log = createLogger('ProjectView')
@@ -84,6 +84,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [extractingService, setExtractingService] = useState<Service | null>(null)
   const [stoppingServices, setStoppingServices] = useState<Set<string>>(new Set())
   const [restartingServices, setRestartingServices] = useState<Set<string>>(new Set())
+  const [serviceStats, setServiceStats] = useState<Map<string, ServiceResourceStats | null>>(new Map())
 
   const loadConfig = useCallback(async () => {
     try {
@@ -129,8 +130,19 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       }
     })
 
+    const unsubscribeStats = window.api.onStatsUpdate?.((data) => {
+      if (data.projectId === project.id) {
+        setServiceStats((prev) => {
+          const next = new Map(prev)
+          next.set(data.serviceId, data.stats)
+          return next
+        })
+      }
+    })
+
     return () => {
       unsubscribeStatus?.()
+      unsubscribeStats?.()
     }
   }, [loadConfig, refreshStatuses, project.id])
 
@@ -481,6 +493,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
               projectId={project.id}
               service={service}
               status={statuses.get(service.id) || 'stopped'}
+              stats={serviceStats.get(service.id)}
               isSelected={selectedServiceId === service.id}
               isStopping={stoppingServices.has(service.id) || restartingServices.has(service.id)}
               onSelect={handleSelectService}

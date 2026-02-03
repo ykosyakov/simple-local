@@ -4,10 +4,12 @@ import { ContainerService, applyContainerEnvOverrides } from '../services/contai
 import { ProjectConfigService } from '../services/project-config'
 import { RegistryService } from '../services/registry'
 import { LogManager } from '../services/log-manager'
+import { StatsManager } from '../services/stats-manager'
 import { getServiceContext, getProjectContext } from '../services/service-lookup'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
 import { ConfigPaths } from '../services/config-paths'
 import { createLogger } from '../../shared/logger'
+import type { Service } from '../../shared/types'
 
 const log = createLogger('IPC')
 
@@ -42,11 +44,15 @@ interface ServiceStartCallbacks {
 /**
  * Create callbacks for service start operations.
  * Broadcasts events to all windows for UI updates.
+ * Optionally tracks service stats when status becomes 'running'.
  */
 function createServiceCallbacks(
   logManager: LogManager,
   projectId: string,
-  serviceId: string
+  serviceId: string,
+  statsManager?: StatsManager,
+  projectName?: string,
+  service?: Service
 ): ServiceStartCallbacks {
   return {
     sendLog: (data: string) => {
@@ -58,6 +64,10 @@ function createServiceCallbacks(
     sendStatus: (status: string) => {
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('service:status:change', { projectId, serviceId, status })
+      }
+      // Track service for stats polling when it starts running
+      if (status === 'running' && statsManager && projectName && service) {
+        statsManager.trackService(projectId, projectName, service)
       }
     },
   }
@@ -72,12 +82,23 @@ async function startServiceCore(
   container: ContainerService,
   config: ProjectConfigService,
   registry: RegistryService,
+  logManager: LogManager,
+  statsManager: StatsManager,
   projectId: string,
   serviceId: string,
-  callbacks: ServiceStartCallbacks,
   modeOverride?: 'native' | 'container'
 ): Promise<void> {
   const { project, projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
+
+  // Create callbacks with stats tracking
+  const callbacks = createServiceCallbacks(
+    logManager,
+    projectId,
+    serviceId,
+    statsManager,
+    projectConfig.name,
+    service
+  )
 
   const effectiveMode = modeOverride ?? service.mode
   const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
@@ -155,6 +176,7 @@ export interface ServiceHandlersResult {
   startService: (projectId: string, serviceId: string, mode?: 'native' | 'container') => Promise<void>
   stopService: (projectId: string, serviceId: string) => Promise<void>
   cleanupProjectLogs: (projectId: string) => void
+  disposeStatsManager: () => void
 }
 
 /**
@@ -167,15 +189,18 @@ export function setupServiceHandlers(
   registry: RegistryService,
   logManager: LogManager = new LogManager()
 ): ServiceHandlersResult {
+  const statsManager = new StatsManager(container)
 
   ipcMain.handle('service:start', async (_event, projectId: string, serviceId: string) => {
     logManager.clearBuffer(projectId, serviceId)
-    const callbacks = createServiceCallbacks(logManager, projectId, serviceId)
-    await startServiceCore(container, config, registry, projectId, serviceId, callbacks)
+    await startServiceCore(container, config, registry, logManager, statsManager, projectId, serviceId)
   })
 
   ipcMain.handle('service:stop', async (_event, projectId: string, serviceId: string) => {
     const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
+
+    // Untrack from stats polling
+    statsManager.untrackService(projectId, serviceId)
 
     if (service.mode === 'native') {
       await container.stopNativeService(serviceId)
@@ -266,12 +291,14 @@ export function setupServiceHandlers(
 
   const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
     logManager.clearBuffer(projectId, serviceId)
-    const callbacks = createServiceCallbacks(logManager, projectId, serviceId)
-    await startServiceCore(container, config, registry, projectId, serviceId, callbacks, modeOverride)
+    await startServiceCore(container, config, registry, logManager, statsManager, projectId, serviceId, modeOverride)
   }
 
   const stopService = async (projectId: string, serviceId: string): Promise<void> => {
     const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
+
+    // Untrack from stats polling
+    statsManager.untrackService(projectId, serviceId)
 
     if (service.mode === 'native') {
       await container.stopNativeService(serviceId)
@@ -285,5 +312,9 @@ export function setupServiceHandlers(
     logManager.cleanupProject(projectId)
   }
 
-  return { getLogBuffer, startService, stopService, cleanupProjectLogs }
+  const disposeStatsManager = (): void => {
+    statsManager.dispose()
+  }
+
+  return { getLogBuffer, startService, stopService, cleanupProjectLogs, disposeStatsManager }
 }
