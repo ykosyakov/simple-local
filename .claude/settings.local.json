@@ -52,7 +52,9 @@
       "Bash(wc:*)",
       "Bash(git -C /Users/yury/projects/simple-local status)",
       "Bash(git -C /Users/yury/projects/simple-local diff:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ps:*)",
+      "Bash(lsof:*)"
     ]
   }
 }

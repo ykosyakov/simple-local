@@ -68,6 +68,8 @@ Tests use **Vitest**. Prefer lightweight mocking patterns:
 
 Avoid creating full mock classes when `vi.spyOn()` on a real instance suffices.
 
+**Avoid async `vi.mock()` with circular imports** - `vi.mock('foo', async () => { await import('./bar') })` hangs if `bar` imports `foo` (circular dependency at mock resolution). Use literal values in mock factories instead.
+
 ## Additional Documentation (READ ONLY IF IMPLEMENT RELEVANT TASK)
 
 - [Design System](docs/design-system.md) - Colors, typography, CSS classes, and component patterns
