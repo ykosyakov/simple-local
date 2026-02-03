@@ -1,17 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { RegistryService, DEFAULT_PORT_START, DEFAULT_PORT_RANGE_SIZE } from '../services/registry'
+import { RegistryService } from '../services/registry'
+import { DEFAULT_PORT_START, DEFAULT_PORT_RANGE_SIZE } from '../services/constants'
 import type { Registry } from '../../shared/types'
 
-// Mock electron-store - uses literal values that must match registry.ts constants
-vi.mock('electron-store', () => {
+// Mock electron-store - imports constants from dependency-free constants.ts
+vi.mock('electron-store', async () => {
+  const { DEFAULT_PORT_START, DEFAULT_PORT_RANGE_SIZE } = await import('../services/constants')
   return {
     default: class MockStore {
       private data: Registry = {
         projects: [],
         settings: {
           dockerSocket: 'auto',
-          defaultPortStart: 4100,
-          portRangeSize: 50,
+          defaultPortStart: DEFAULT_PORT_START,
+          portRangeSize: DEFAULT_PORT_RANGE_SIZE,
           minimizeToTray: true,
         },
       }

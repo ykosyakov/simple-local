@@ -1,6 +1,7 @@
 import Store from 'electron-store'
 import type { Registry, Project, GlobalSettings } from '../../shared/types'
 import { ConfigPaths } from './config-paths'
+import { DEFAULT_PORT_START, DEFAULT_PORT_RANGE_SIZE } from './constants'
 
 /**
  * Base port number for debug connections.
@@ -16,9 +17,6 @@ const DEBUG_PORT_BASE = 9200
  * This allows multiple debug sessions per project (e.g., main process + workers).
  */
 const DEBUG_PORT_STEP = 10
-
-export const DEFAULT_PORT_START = 4100
-export const DEFAULT_PORT_RANGE_SIZE = 50
 
 const DEFAULT_SETTINGS: GlobalSettings = {
   dockerSocket: 'auto',

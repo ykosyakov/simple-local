@@ -1,0 +1,2 @@
+export const DEFAULT_PORT_START = 4100
+export const DEFAULT_PORT_RANGE_SIZE = 50

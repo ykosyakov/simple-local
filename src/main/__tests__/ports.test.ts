@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { PortService } from '../services/ports'
-import { DEFAULT_PORT_START } from '../services/registry'
+import { DEFAULT_PORT_START } from '../services/constants'
 
 vi.mock('net', () => ({
   createServer: vi.fn(() => ({

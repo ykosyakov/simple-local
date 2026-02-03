@@ -68,7 +68,7 @@ Tests use **Vitest**. Prefer lightweight mocking patterns:
 
 Avoid creating full mock classes when `vi.spyOn()` on a real instance suffices.
 
-**Avoid async `vi.mock()` with circular imports** - `vi.mock('foo', async () => { await import('./bar') })` hangs if `bar` imports `foo` (circular dependency at mock resolution). Use literal values in mock factories instead.
+**Async `vi.mock()` and circular imports** - `vi.mock('foo', async () => { await import('./bar') })` hangs if `bar` imports `foo`. Solution: extract shared constants to a dependency-free file (e.g., `constants.ts`) that both production code and test mocks can safely import.
 
 ## Additional Documentation (READ ONLY IF IMPLEMENT RELEVANT TASK)
 

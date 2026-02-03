@@ -1,5 +1,5 @@
 import * as net from 'net'
-import { DEFAULT_PORT_START } from './registry'
+import { DEFAULT_PORT_START } from './constants'
 
 interface PortRange {
   portRange: [number, number]
