@@ -1,8 +1,7 @@
 import type { AgentEvent } from '../types'
 
-// ANSI escape code stripper that preserves spacing
-// The TUI uses cursor-forward (\x1b[NC) instead of spaces between words.
-// We replace those with spaces before stripping other codes.
+// ANSI escape code stripper that preserves spacing.
+// The TUI uses cursor-forward (\x1b[NC) instead of literal spaces between words.
 export function stripAnsi(str: string): string {
   return (
     str
@@ -25,79 +24,115 @@ const SPINNER_CHARS = '✢✳✶✻✽·⏺◐◑'
 const SPINNER_CHAR_RE = new RegExp(`^[${SPINNER_CHARS}]+$`)
 // Spinner animation: symbol + word ending in "…" (handles hyphens like "Topsy-turvying…")
 const SPINNER_WORD_RE = new RegExp(`^[${SPINNER_CHARS}]?\\s*[\\w-]+…`)
-// Partial spinner render: very short fragment from character-by-character TUI cell updates
-const SPINNER_FRAGMENT_RE = new RegExp(`^[${SPINNER_CHARS}]?[A-Za-z]{0,3}$`)
+// Short lines containing spinner symbols = character-by-character TUI cell updates
+const SPINNER_NOISE_RE = new RegExp(`[${SPINNER_CHARS}]`)
+
+// Content markers: ⏺ = assistant content, ⎿ = sub-item/tool result
+const CONTENT_MARKER = '⏺'
+const SUB_ITEM_MARKER = '⎿'
 
 // Banner art (Claude logo box-drawing)
 const BANNER_RE = /[▐▛▜▌▝▘█]/
-// Horizontal rules
-const RULE_RE = /^[─━═]+$/
-// Footer/status chrome
-const CHROME_TEXT_RE =
-  /^\??\s*for\s*shortcuts$|^esc\s*to\s*interrupt$|^ctrl\+[a-z]\s*to\s*/i
+// Horizontal rules (solid, bold, dashed)
+const RULE_RE = /^[─━═╌]+$/
+// Footer/status chrome — match as substrings since they may share lines with rules
+const CHROME_FOOTER_RE =
+  /\?\s*for\s*shortcuts|esc\s*to\s*(?:interrupt|cancel)|ctrl\+[a-z]\s*to\s*|tab\s*to\s*amend/i
 // Token counter
 const TOKEN_RE = /^\s*\d[\d,.]*\s*tokens?\b/i
+// File stats: "3 files +20 -7"
+const FILE_STATS_RE = /^\d+\s*files?\s*[+-]\d+/
 // Churned/thinking status
 const CHURNED_RE = /[;·]\s*Churned?\s+for\s+\d+s/i
-const THINKING_STATUS_RE = /^\s*(?:thinking|thought)\s+\d+s/i
-// Prompt line (❯ may appear mid-line after ANSI stripping)
+const THINKING_CHROME_RE = /^\s*(?:\(thinking\)|thinking|thought)(?:\s+\d+s)?$/i
+// Stop hook
+const STOP_HOOK_RE = /\(running stop hook\)/
+// Prompt line
 const PROMPT_LINE_RE = /❯/
-// Content marker: ⏺ at start of line indicates assistant content
-const CONTENT_MARKER = '⏺'
+// Leaked ANSI fragments
+const ANSI_LEAK_RE = /^\[[\d;]*[a-zA-Z]?$|^\[<[a-z]$/
+
 // Trailing chrome on content lines (spinner + prompt that share the same TUI row)
-const TRAILING_CHROME_RE = new RegExp(`\\s*[${SPINNER_CHARS}❯].*$`)
+// Match: optional whitespace + spinner char + optional spinner word, OR whitespace + ❯
+const TRAILING_CHROME_RE = new RegExp(
+  `\\s*[${SPINNER_CHARS}]\\s*[\\w-]*….*$|\\s+❯.*$`,
+)
+
+// Lines that are spinner status, not real content (e.g. "(No content)  Swooping…")
+const SPINNER_STATUS_RE = new RegExp(
+  `^\\(?(?:No content|Loading|Waiting)\\)?\\s*[${SPINNER_CHARS}]?\\s*[\\w-]*…`,
+  'i',
+)
 
 export function isTuiChrome(line: string): boolean {
   const t = line.trim()
   if (!t) return true
+
+  // Content markers — never chrome
+  if (t.startsWith(CONTENT_MARKER) && t.length > 1) return false
+  if (t.startsWith(SUB_ITEM_MARKER)) return false
+
+  // Spinner patterns
   if (SPINNER_CHAR_RE.test(t)) return true
-  if (SPINNER_WORD_RE.test(t) && t.length < 40) return true
-  if (SPINNER_FRAGMENT_RE.test(t) && t.length < 5) return true
+  if (SPINNER_WORD_RE.test(t) && t.length < 50) return true
+  // Short lines with spinner chars = cell update noise (but not real content like "4")
+  if (t.length < 20 && SPINNER_NOISE_RE.test(t)) return true
+
+  // Visual chrome
   if (BANNER_RE.test(t)) return true
   if (RULE_RE.test(t)) return true
-  if (CHROME_TEXT_RE.test(t)) return true
+  if (ANSI_LEAK_RE.test(t)) return true
+
+  // Text chrome (matched as substrings since they may share lines)
+  if (CHROME_FOOTER_RE.test(t)) return true
   if (TOKEN_RE.test(t)) return true
+  if (FILE_STATS_RE.test(t)) return true
   if (CHURNED_RE.test(t)) return true
-  if (THINKING_STATUS_RE.test(t)) return true
-  if (PROMPT_LINE_RE.test(line)) return true
-  // Leaked partial ANSI codes (e.g. "[38;2;153;153;1")
-  if (/^\[[\d;]+m?$/.test(t)) return true
-  // The [<u sequence that sometimes leaks
-  if (/^\[<[a-z]$/.test(t)) return true
+  if (THINKING_CHROME_RE.test(t)) return true
+  if (STOP_HOOK_RE.test(t)) return true
+  if (PROMPT_LINE_RE.test(t) && !t.startsWith(CONTENT_MARKER)) return true
+
   return false
 }
 
-// Extract clean content from a raw TUI chunk, stripping all chrome
+// Extract clean content from a raw TUI chunk, stripping all chrome.
+// Only keeps lines that start with content markers (⏺ or ⎿) — this eliminates
+// spinner character-by-character fragments that are indistinguishable from real text.
 export function cleanContent(raw: string): string {
   const stripped = stripAnsi(raw)
   const lines: string[] = []
 
   for (const line of stripped.split('\n')) {
-    if (isTuiChrome(line)) continue
     const trimmed = line.trim()
     if (!trimmed) continue
 
-    // Strip leading ⏺ content marker and trailing chrome (spinner/prompt on same row)
-    const withoutMarker = trimmed.startsWith(CONTENT_MARKER)
-      ? trimmed.slice(CONTENT_MARKER.length).replace(TRAILING_CHROME_RE, '').trim()
-      : trimmed
-
-    if (withoutMarker) {
-      lines.push(withoutMarker)
+    // Only process lines with content markers — everything else is chrome/noise
+    if (trimmed.startsWith(CONTENT_MARKER)) {
+      const content = stripContentCruft(trimmed.slice(CONTENT_MARKER.length))
+      if (content && !SPINNER_STATUS_RE.test(content)) lines.push(content)
+    } else if (trimmed.startsWith(SUB_ITEM_MARKER)) {
+      const content = stripContentCruft(trimmed.slice(SUB_ITEM_MARKER.length))
+      if (content) lines.push(content)
     }
   }
 
   return lines.join('\n').trim()
 }
 
+// Strip trailing spinner/prompt chrome and embedded horizontal rules from content
+function stripContentCruft(raw: string): string {
+  return raw
+    .replace(TRAILING_CHROME_RE, '')
+    .replace(/\s*[─━═╌]{3,}\s*/g, ' ') // inline horizontal rules → space
+    .replace(/\s{2,}/g, ' ') // collapse excessive whitespace from cursor-positioning
+    .trim()
+}
+
 // ── Tool detection ───────────────────────────────────────────────────
 
-// Claude TUI shows tool use as:
-//   ⏺ Read("path") or Read(path)
-//   ⏺ Reading N file… (ctrl+o to expand)
-//   ⏺ Edited N file
 const TOOL_CALL_RE = /^(\w+)\s*\("?([^")]*)"?\)\s*$/
 const TOOL_SUMMARY_RE = /^(Reading|Editing|Writing|Running|Searching)\s+(.+)/i
+const TOOL_RESULT_RE = /^(?:Read|Wrote|Edited|Found|Created|Deleted|Ran)\s+/i
 const TOOL_NAMES = new Set([
   'Read',
   'Write',
@@ -122,11 +157,11 @@ const THINKING_PATTERN = /(?:thinking|thought|churning)\s*(?:for\s*)?(\d+)s?/i
 
 const PERMISSION_PATTERNS = [
   /Allow\s+(\w+)(?:\s+for)?.*\?\s*(?:\[([^\]]+)\])?/i,
-  /Do you want to allow\s+(\w+)/i,
+  /Do you want to (?:allow|create|run|execute|proceed)\b/i,
 ]
 
 export const PERMISSION_KEYS = {
-  YES: 'y',
+  ENTER: '\r', // Default yes (press enter)
   NO: 'n',
   ALWAYS: 'a',
 } as const
@@ -147,7 +182,6 @@ export function parseTuiChunk(raw: string): TuiParseResult {
   let isThinking = false
   let thinkingSeconds: number | undefined
 
-  // Always emit raw output
   events.push({ type: 'output', text: raw })
 
   for (const line of lines) {
@@ -155,33 +189,51 @@ export function parseTuiChunk(raw: string): TuiParseResult {
     if (!trimmed) continue
     if (isTuiChrome(line)) continue
 
-    // Check for content marker and extract tool use from it
+    // ⏺ content marker: tool call, tool summary, or text content
     if (trimmed.startsWith(CONTENT_MARKER)) {
-      // Strip trailing chrome (spinner text, ❯ prompt) that shares the same TUI row
-      const content = trimmed.slice(CONTENT_MARKER.length).replace(TRAILING_CHROME_RE, '').trim()
+      const rawContent = stripContentCruft(trimmed.slice(CONTENT_MARKER.length))
+      if (!rawContent) continue
+      if (SPINNER_STATUS_RE.test(rawContent)) continue
 
-      // Check for tool call: Read("path")
-      const toolMatch = content.match(TOOL_CALL_RE)
-      if (toolMatch && TOOL_NAMES.has(toolMatch[1])) {
-        events.push({ type: 'tool-start', tool: toolMatch[1], input: toolMatch[2] || '' })
-        continue
-      }
+      // TUI may merge tool call + ⎿ result on same line — split them
+      const subItemIdx = rawContent.indexOf(SUB_ITEM_MARKER)
+      const content = subItemIdx >= 0 ? rawContent.slice(0, subItemIdx).trim() : rawContent
+      const subContent =
+        subItemIdx >= 0 ? rawContent.slice(subItemIdx + SUB_ITEM_MARKER.length).trim() : null
 
-      // Check for tool summary: "Reading 1 file…"
-      const summaryMatch = content.match(TOOL_SUMMARY_RE)
-      if (summaryMatch) {
-        events.push({ type: 'tool-start', tool: summaryMatch[1], input: summaryMatch[2] })
-        continue
-      }
-
-      // Otherwise it's content
       if (content) {
-        events.push({ type: 'message', text: content })
+        const toolMatch = content.match(TOOL_CALL_RE)
+        if (toolMatch && TOOL_NAMES.has(toolMatch[1])) {
+          events.push({ type: 'tool-start', tool: toolMatch[1], input: toolMatch[2] || '' })
+        } else {
+          const summaryMatch = content.match(TOOL_SUMMARY_RE)
+          if (summaryMatch) {
+            events.push({ type: 'tool-start', tool: summaryMatch[1], input: summaryMatch[2] })
+          } else {
+            events.push({ type: 'message', text: content })
+          }
+        }
+      }
+
+      // Process the ⎿ sub-item if it was merged on the same line
+      if (subContent && TOOL_RESULT_RE.test(subContent)) {
+        events.push({ type: 'tool-end', tool: 'unknown', output: subContent })
       }
       continue
     }
 
-    // Check for thinking status
+    // ⎿ sub-item: tool result summary
+    if (trimmed.startsWith(SUB_ITEM_MARKER)) {
+      const content = stripContentCruft(trimmed.slice(SUB_ITEM_MARKER.length))
+      if (!content) continue
+
+      if (TOOL_RESULT_RE.test(content)) {
+        events.push({ type: 'tool-end', tool: 'unknown', output: content })
+      }
+      continue
+    }
+
+    // Thinking status
     const thinkingMatch = trimmed.match(THINKING_PATTERN)
     if (thinkingMatch) {
       isThinking = true
@@ -189,7 +241,7 @@ export function parseTuiChunk(raw: string): TuiParseResult {
       events.push({ type: 'thinking', text: `Thinking for ${thinkingSeconds}s` })
     }
 
-    // Check for permission requests
+    // Permission requests
     for (const pattern of PERMISSION_PATTERNS) {
       const permMatch = trimmed.match(pattern)
       if (permMatch) {
@@ -198,8 +250,13 @@ export function parseTuiChunk(raw: string): TuiParseResult {
       }
     }
 
-    // Check for questions (not permissions, not shortcuts)
-    if (trimmed.endsWith('?') && !trimmed.includes('Allow') && !trimmed.includes('shortcuts')) {
+    // Questions (not permissions, not chrome)
+    if (
+      trimmed.endsWith('?') &&
+      !trimmed.includes('Allow') &&
+      !trimmed.includes('shortcuts') &&
+      !trimmed.includes('want to')
+    ) {
       events.push({ type: 'question', text: trimmed })
     }
   }
@@ -213,41 +270,66 @@ export type TuiParserState = 'initializing' | 'ready' | 'processing' | 'idle'
 
 export interface StatefulTuiParser {
   parse(chunk: string): AgentEvent[]
+  /** Call periodically (e.g. every 500ms) to handle timeout-based state transitions */
+  tick(): AgentEvent[]
   getState(): TuiParserState
   getBuffer(): string
   clear(): void
 }
 
-// The TUI layout always has ❯ on screen (the input prompt area).
-// During processing: ❯ + "esc to interrupt" in the footer
-// When idle:         ❯ + "? for shortcuts" in the footer
-// We use these footer signals to distinguish real idle from mid-processing redraws.
-const IDLE_FOOTER_RE = /\?\s*(for)?\s*shortcuts/
+// Footer signals for state detection (see docs/claude-tui-behaviors.md)
+const IDLE_FOOTER_RE = /\?\s*(?:for\s*)?shortcuts/
 const PROCESSING_FOOTER_RE = /esc\s*to\s*interrupt/
+const PERMISSION_FOOTER_RE = /esc\s*to\s*cancel/i
+// Timeout: if no "esc to interrupt" for this long while in processing, assume idle
+const IDLE_TIMEOUT_MS = 5000
 
 export function createTuiParser(): StatefulTuiParser {
   let buffer = ''
   let state: TuiParserState = 'initializing'
-  // Track idle/processing footer across chunk boundaries
-  // (TUI output can split "❯" and "? for shortcuts" into separate chunks)
-  // Track signals across chunk boundaries since the TUI can split
-  // "❯" and "? for shortcuts" into separate chunks
-  let lastFooterSignal: 'idle' | 'processing' | null = null
+  // Track signals across chunk boundaries (TUI can split them)
+  let lastFooterSignal: 'idle' | 'processing' | 'permission' | null = null
   let promptSeenSinceLastProcessing = false
+  let lastProcessingFooterTs = 0
 
   function hasPromptIndicator(clean: string): boolean {
-    // After ANSI stripping, ❯ may appear mid-line (after rules or content)
-    // since the TUI uses cursor positioning, not newlines, for layout.
-    // We look for ❯ anywhere — the footer signal prevents false positives.
     return clean.includes('❯')
   }
 
   function updateFooterSignal(clean: string): void {
-    if (PROCESSING_FOOTER_RE.test(clean)) {
+    if (PERMISSION_FOOTER_RE.test(clean)) {
+      // Permission prompt — agent is waiting for user input, NOT idle
+      lastFooterSignal = 'permission'
+    } else if (PROCESSING_FOOTER_RE.test(clean)) {
       lastFooterSignal = 'processing'
       promptSeenSinceLastProcessing = false
+      lastProcessingFooterTs = Date.now()
     } else if (IDLE_FOOTER_RE.test(clean)) {
       lastFooterSignal = 'idle'
+    }
+  }
+
+  function tryIdleTransition(stateEvents: AgentEvent[]): void {
+    // Never transition to idle during permission prompts
+    if (lastFooterSignal === 'permission') return
+
+    // Primary: both prompt + idle footer detected
+    if (promptSeenSinceLastProcessing && lastFooterSignal === 'idle') {
+      state = 'idle'
+      stateEvents.push({ type: 'task-complete' })
+      promptSeenSinceLastProcessing = false
+      return
+    }
+    // Fallback: timeout — if no "esc to interrupt" for IDLE_TIMEOUT_MS,
+    // the TUI may have sent a minimal update that we missed
+    if (
+      lastProcessingFooterTs > 0 &&
+      Date.now() - lastProcessingFooterTs > IDLE_TIMEOUT_MS &&
+      promptSeenSinceLastProcessing
+    ) {
+      state = 'idle'
+      stateEvents.push({ type: 'task-complete' })
+      promptSeenSinceLastProcessing = false
     }
   }
 
@@ -265,7 +347,6 @@ export function createTuiParser(): StatefulTuiParser {
 
       switch (state) {
         case 'initializing':
-          // First ❯ appearance = TUI is ready for input
           if (promptDetected) {
             state = 'ready'
             stateEvents.push({ type: 'ready' })
@@ -274,10 +355,10 @@ export function createTuiParser(): StatefulTuiParser {
 
         case 'ready':
         case 'idle':
-          // "esc to interrupt" footer → processing
           if (lastFooterSignal === 'processing') {
             state = 'processing'
             promptSeenSinceLastProcessing = false
+            lastProcessingFooterTs = Date.now()
           } else if (
             events.some(
               (e) =>
@@ -290,19 +371,18 @@ export function createTuiParser(): StatefulTuiParser {
           break
 
         case 'processing':
-          // Transition to idle when we have BOTH:
-          // 1. ❯ prompt seen (in this chunk or recent chunk)
-          // 2. Footer is "? for shortcuts" (not "esc to interrupt")
-          // These may arrive in separate chunks due to TUI splitting
-          if (promptSeenSinceLastProcessing && lastFooterSignal === 'idle') {
-            state = 'idle'
-            stateEvents.push({ type: 'task-complete' })
-            promptSeenSinceLastProcessing = false
-          }
+          tryIdleTransition(stateEvents)
           break
       }
 
       return [...events, ...stateEvents]
+    },
+
+    tick(): AgentEvent[] {
+      if (state !== 'processing') return []
+      const stateEvents: AgentEvent[] = []
+      tryIdleTransition(stateEvents)
+      return stateEvents
     },
 
     getState(): TuiParserState {

@@ -43,7 +43,8 @@ describe('isTuiChrome', () => {
 
 describe('cleanOutput', () => {
   it('strips ANSI codes and removes TUI chrome', () => {
-    const raw = '\x1B[1mHello world\x1B[0m\n  500 tokens\n❯ \nGoodbye'
+    // Real TUI output: content has ⏺ markers, chrome has token counts and prompts
+    const raw = '\x1B[1m⏺ Hello world\x1B[0m\n  500 tokens\n❯ \n⏺ Goodbye'
     const result = cleanOutput(raw)
     expect(result).toBe('Hello world\nGoodbye')
   })
@@ -54,7 +55,7 @@ describe('cleanOutput', () => {
   })
 
   it('preserves multi-line answer text', () => {
-    const raw = 'Line one\nLine two\nLine three'
+    const raw = '⏺ Line one\n⏺ Line two\n⏺ Line three'
     expect(cleanOutput(raw)).toBe('Line one\nLine two\nLine three')
   })
 })
@@ -70,8 +71,8 @@ describe('createAnswerStream', () => {
 
     // Start processing (tool-start triggers processing)
     subject.next({ type: 'tool-start', tool: 'Read', input: 'file.ts' })
-    // Emit output during processing
-    subject.next({ type: 'output', text: 'Hello from Claude' })
+    // Emit output during processing — uses ⏺ marker like real TUI
+    subject.next({ type: 'output', text: '⏺ Hello from Claude' })
 
     expect(results).toEqual(['Hello from Claude'])
   })
@@ -85,9 +86,9 @@ describe('createAnswerStream', () => {
     })
 
     subject.next({ type: 'tool-start', tool: 'Read', input: 'file.ts' })
-    subject.next({ type: 'output', text: 'Answer text' })
+    subject.next({ type: 'output', text: '⏺ Answer text' })
     subject.next({ type: 'task-complete' })
-    subject.next({ type: 'output', text: 'Should not appear' })
+    subject.next({ type: 'output', text: '⏺ Should not appear' })
 
     // The second output has non-empty clean text so it triggers processing again
     // But the behavior is: task-complete resets processing to false,
@@ -118,8 +119,8 @@ describe('createAnswerStream', () => {
       results.push(text)
     })
 
-    // Output with real text should auto-start processing
-    subject.next({ type: 'output', text: 'Direct answer text' })
+    // Output with ⏺ marker should auto-start processing
+    subject.next({ type: 'output', text: '⏺ Direct answer text' })
 
     expect(results).toEqual(['Direct answer text'])
   })
@@ -133,10 +134,10 @@ describe('createAnswerStream', () => {
     })
 
     subject.next({ type: 'tool-start', tool: 'Read', input: '' })
-    subject.next({ type: 'output', text: 'Some text' })
+    subject.next({ type: 'output', text: '⏺ Some text' })
     subject.next({ type: 'ready' })
     // After ready, output with clean text auto-starts processing
-    subject.next({ type: 'output', text: 'New answer' })
+    subject.next({ type: 'output', text: '⏺ New answer' })
 
     expect(results).toEqual(['Some text', 'New answer'])
   })
