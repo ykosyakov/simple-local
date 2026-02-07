@@ -169,6 +169,57 @@ describe('extractContentBlocks', () => {
     expect(blocks).toHaveLength(2)
     expect(blocks[0].text).toBe('Read("file.ts") Contents of file.ts: function hello() {}')
   })
+
+  it('skips empty lines between marker and continuation', () => {
+    const screen = [
+      '⏺ Read("file.ts")',
+      '',
+      '  Contents of file.ts:',
+      '⎿ Read 5 lines',
+      '',
+    ]
+    const blocks = extractContentBlocks(screen, noWrap, 4)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('Read("file.ts") Contents of file.ts:')
+  })
+
+  it('closes block on non-indented line', () => {
+    const screen = [
+      '⏺ Hello world',
+      'not indented at all',
+      '⏺ Second block',
+      '',
+    ]
+    const blocks = extractContentBlocks(screen, noWrap, 3)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('Hello world')
+    expect(blocks[1].text).toBe('Second block')
+  })
+
+  it('treats exactly 2-space indentation as continuation', () => {
+    const screen = [
+      '⏺ Bash("npm test")',
+      '  PASS src/test.ts',
+      '  3 tests passed',
+      '',
+    ]
+    const blocks = extractContentBlocks(screen, noWrap, 3)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].text).toBe('Bash("npm test") PASS src/test.ts 3 tests passed')
+  })
+
+  it('treats 1-space indentation as block-closing', () => {
+    const screen = [
+      '⏺ Hello',
+      ' x',
+      '⏺ World',
+      '',
+    ]
+    const blocks = extractContentBlocks(screen, noWrap, 3)
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0].text).toBe('Hello')
+    expect(blocks[1].text).toBe('World')
+  })
 })
 
 // ── blockToEvent ─────────────────────────────────────────────────────
@@ -212,6 +263,41 @@ describe('blockToEvent', () => {
   it('returns message for sub-item non-result text', () => {
     const event = blockToEvent({ marker: '⎿', text: 'Some additional info', startRow: 0 })
     expect(event).toEqual({ type: 'message', text: 'Some additional info' })
+  })
+
+  it('detects collapsed tool result with ctrl+o suffix', () => {
+    const event = blockToEvent({
+      marker: '⏺',
+      text: 'Read 1 file (ctrl+o to expand)',
+      startRow: 0,
+    })
+    expect(event).toEqual({ type: 'tool-end', tool: 'unknown', output: 'Read 1 file (ctrl+o to expand)' })
+  })
+
+  it('does not treat "Found them." as tool-end without ctrl+o', () => {
+    const event = blockToEvent({
+      marker: '⏺',
+      text: 'Found them. There are 29 test files across the project.',
+      startRow: 0,
+    })
+    expect(event).toEqual({
+      type: 'message',
+      text: 'Found them. There are 29 test files across the project.',
+    })
+  })
+
+  it('filters tips rendered with ⏺ marker', () => {
+    expect(blockToEvent({ marker: '⏺', text: 'Tip: Use /agents to manage subagents', startRow: 0 })).toBeNull()
+    expect(blockToEvent({ marker: '⏺', text: 'Did you know you can use /compact?', startRow: 0 })).toBeNull()
+  })
+
+  it('detects Searched tool result', () => {
+    const event = blockToEvent({
+      marker: '⎿',
+      text: 'Searched for "TODO" in 50 files',
+      startRow: 0,
+    })
+    expect(event).toEqual({ type: 'tool-end', tool: 'unknown', output: 'Searched for "TODO" in 50 files' })
   })
 })
 

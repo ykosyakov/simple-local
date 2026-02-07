@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { XtermTuiParser } from '../adapters/xterm-tui-parser'
 
 // Helper: build ANSI-positioned screen content.
@@ -116,6 +116,107 @@ describe('XtermTuiParser', () => {
       // Should stay in processing, not transition to idle
       expect(parser.getState()).toBe('processing')
     })
+
+    it('does not emit task-complete without prior processing footer (seenProcessingFooter guard)', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+      expect(parser.getState()).toBe('ready')
+
+      // Simulate going to processing via some other trigger, but the
+      // "esc to interrupt" footer was never actually seen. We manually
+      // force the state to test the guard. Instead, we test the real
+      // scenario: the parser sees an idle footer with prompt while still
+      // in ready state — should NOT produce task-complete.
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Some answer' +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Still in ready (not processing), so no task-complete
+      expect(parser.getState()).toBe('ready')
+      expect(events.some((e) => e.type === 'task-complete')).toBe(false)
+    })
+
+    it('requires seenProcessingFooter before idle transition', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Go to processing with esc to interrupt
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+      expect(parser.getState()).toBe('processing')
+
+      // Now show idle footer + prompt → should transition
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Done.' +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+      expect(parser.getState()).toBe('idle')
+      expect(events.some((e) => e.type === 'task-complete')).toBe(true)
+    })
+
+    it('transitions via tick() timeout', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+      expect(parser.getState()).toBe('processing')
+
+      // Show prompt (but no idle footer change — footer still says "esc to interrupt"
+      // from stale render; readFooter sees full screen so we give it idle footer)
+      // Actually, to trigger timeout we need: promptSeenSinceProcessing=true + time elapsed
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Answer here' +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+
+      // Advance time past IDLE_TIMEOUT_MS (3000ms)
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5000)
+
+      // Feed idle footer after timeout
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Answer here' +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      expect(parser.getState()).toBe('idle')
+      expect(events.some((e) => e.type === 'task-complete')).toBe(true)
+      vi.restoreAllMocks()
+    })
   })
 
   describe('content extraction', () => {
@@ -190,6 +291,98 @@ describe('XtermTuiParser', () => {
       expect(outputs).toHaveLength(1)
       expect((outputs[0] as { type: 'output'; text: string }).text).toBe('hello')
     })
+
+    it('captures final content on processing→idle transition frame (wasProcessing)', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+
+      // Final answer + idle footer in single frame
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ The answer is 42.' +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Should get both the message AND the task-complete
+      const messages = events.filter((e) => e.type === 'message')
+      expect(messages).toHaveLength(1)
+      expect((messages[0] as { type: 'message'; text: string }).text).toBe('The answer is 42.')
+      expect(events.some((e) => e.type === 'task-complete')).toBe(true)
+    })
+
+    it('emits multiple new content blocks from single feed', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Processing with multiple blocks at once
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Read("file.ts")' +
+        moveTo(2, 1) + '⎿ Read 150 lines from file.ts' +
+        moveTo(3, 1) + '⏺ The file contains a function.' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+
+      const toolStarts = events.filter((e) => e.type === 'tool-start')
+      const toolEnds = events.filter((e) => e.type === 'tool-end')
+      const messages = events.filter((e) => e.type === 'message')
+      expect(toolStarts).toHaveLength(1)
+      expect(toolEnds).toHaveLength(1)
+      expect(messages).toHaveLength(1)
+    })
+
+    it('extracts content from scrollback when viewport overflows', async () => {
+      // Small viewport: 80x8 — content region is ~5 rows (footer takes 3)
+      parser = new XtermTuiParser(80, 8)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(7, 1) + '❯ ' +
+        moveTo(8, 1) + '? for shortcuts',
+      )
+
+      // Processing — use newlines to push content into scrollback naturally
+      // Write enough ⏺ lines that the first ones scroll off the 8-row viewport
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + 'esc to interrupt',
+      )
+      expect(parser.getState()).toBe('processing')
+
+      // Now push 10 content lines via newlines — in an 8-row terminal, first
+      // lines will scroll into scrollback (baseY > 0)
+      let content = moveTo(1, 1)
+      for (let i = 1; i <= 10; i++) {
+        content += `⏺ Line ${i}\r\n`
+      }
+      const events = await parser.feed(content)
+
+      // The parser reads getFullBuffer() which includes scrollback,
+      // so even lines that scrolled off should be found
+      const messages = events.filter((e) => e.type === 'message')
+      expect(messages.length).toBeGreaterThan(5)
+    })
   })
 
   describe('deduplication', () => {
@@ -216,6 +409,65 @@ describe('XtermTuiParser', () => {
       const events2 = await parser.feed(screen)
       const messages2 = events2.filter((e) => e.type === 'message')
       expect(messages2).toHaveLength(0)
+    })
+
+    it('does not re-emit after screen clear + redraw (no pruning)', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Processing with content
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Hello world' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+
+      // Clear screen (separate chunk — TUI sends clear and redraw separately)
+      await parser.feed(clearScreen())
+
+      // Redraw same content
+      const events = await parser.feed(
+        moveTo(1, 1) + '⏺ Hello world' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+
+      // Should NOT re-emit "Hello world" because seenBlockKeys was not pruned
+      const messages = events.filter((e) => e.type === 'message')
+      expect(messages).toHaveLength(0)
+    })
+
+    it('does not re-emit when content reflows to different rows', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts',
+      )
+
+      // Content at row 1
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ First message' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+
+      // Same content reflowed to row 3 (e.g., banner appeared above)
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(3, 1) + '⏺ First message' +
+        moveTo(10, 1) + 'esc to interrupt',
+      )
+
+      const messages = events.filter((e) => e.type === 'message')
+      expect(messages).toHaveLength(0)
     })
 
     it('emits only new content when screen grows', async () => {
