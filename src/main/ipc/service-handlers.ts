@@ -244,7 +244,10 @@ export function setupServiceHandlers(
 
   ipcMain.handle('service:logs:start', async (event, projectId: string, serviceId: string) => {
     try {
-      const { projectConfig } = await getProjectContext(registry, config, projectId)
+      const { projectConfig, service } = await getServiceContext(registry, config, projectId, serviceId)
+
+      // Native services get logs via sendLog callback — no Docker stream needed
+      if (service.mode === 'native') return
 
       const containerName = container.getContainerName(projectConfig.name, serviceId)
 

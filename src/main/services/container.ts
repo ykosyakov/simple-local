@@ -323,7 +323,7 @@ export class ContainerService extends EventEmitter {
       follow: true,
       stdout: true,
       stderr: true,
-      tail: 100,
+      tail: 0,
     })
 
     const handleData = (chunk: Buffer) => {

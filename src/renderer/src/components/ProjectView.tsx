@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo, type MouseEvent as ReactMouseEvent } from 'react'
 import { ServiceCard } from './ServiceCard'
 import { LogViewer } from './LogViewer'
 import { HiddenServices } from './project/HiddenServices'
@@ -85,6 +85,8 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [stoppingServices, setStoppingServices] = useState<Set<string>>(new Set())
   const [restartingServices, setRestartingServices] = useState<Set<string>>(new Set())
   const [serviceStats, setServiceStats] = useState<Map<string, ServiceResourceStats | null>>(new Map())
+  const [logHeight, setLogHeight] = useState(350)
+  const resizeRef = useRef({ active: false, startY: 0, startHeight: 0 })
 
   const loadConfig = useCallback(async () => {
     try {
@@ -352,6 +354,32 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     }
   }, [config?.services])
 
+  const handleResizeStart = useCallback((e: ReactMouseEvent) => {
+    const ref = resizeRef.current
+    ref.active = true
+    ref.startY = e.clientY
+    ref.startHeight = logHeight
+
+    const handleMouseMove = (ev: globalThis.MouseEvent) => {
+      if (!resizeRef.current.active) return
+      const delta = ev.clientY - resizeRef.current.startY
+      setLogHeight(Math.max(150, resizeRef.current.startHeight + delta))
+    }
+
+    const handleMouseUp = () => {
+      resizeRef.current.active = false
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+  }, [logHeight])
+
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
 
   if (configError) {
@@ -418,7 +446,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const totalCount = activeServices.length
 
   return (
-    <div className="flex h-full flex-col gap-6">
+    <div className="flex flex-col gap-6">
       {/* Status Summary */}
       <div
         className="flex items-center gap-4 rounded-lg px-4 py-3"
@@ -484,8 +512,8 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         </div>
       )}
 
-      {/* Service Cards Grid - scrollable */}
-      <div className="min-h-0 flex-shrink overflow-auto rounded-lg p-2" style={{ maxHeight: '45vh' }}>
+      {/* Service Cards Grid */}
+      <div className="rounded-lg p-2">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {activeServices.map((service, index) => (
             <ServiceCard
@@ -520,13 +548,18 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         />
       )}
 
-      {/* Log Viewer */}
+      {/* Log Viewer - drag bottom edge to resize */}
       {selectedService && (
-        <div className="min-h-0 flex-1" style={{ minHeight: '250px' }}>
+        <div className="relative" style={{ height: logHeight }}>
           <LogViewer
             projectId={project.id}
             serviceId={selectedService.id}
             serviceName={selectedService.name}
+          />
+          <div
+            className="absolute bottom-0 left-0 right-0 z-10 cursor-row-resize"
+            style={{ height: 6 }}
+            onMouseDown={handleResizeStart}
           />
         </div>
       )}
