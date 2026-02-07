@@ -54,7 +54,13 @@
       "Bash(git -C /Users/yury/projects/simple-local diff:*)",
       "Bash(find:*)",
       "Bash(ps:*)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(top:*)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:news.ycombinator.com)",
+      "Bash(docker info:*)",
+      "Bash(docker context inspect:*)",
+      "Bash(curl:*)"
     ]
   }
 }

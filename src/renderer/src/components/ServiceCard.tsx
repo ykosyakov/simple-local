@@ -138,25 +138,6 @@ export const ServiceCard = memo(function ServiceCard({
           >
             {config.label}
           </span>
-          {/* Inline stats display when running */}
-          {isRunning && stats && (
-            <div className="ml-2 flex items-center gap-3">
-              <span
-                className="flex items-center gap-1 text-[11px]"
-                style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
-              >
-                <Cpu className="h-3 w-3" style={{ color: 'var(--accent-primary)' }} />
-                {stats.cpuPercent.toFixed(1)}%
-              </span>
-              <span
-                className="flex items-center gap-1 text-[11px]"
-                style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
-              >
-                <HardDrive className="h-3 w-3" style={{ color: 'var(--status-starting)' }} />
-                {stats.memoryMB}MB
-              </span>
-            </div>
-          )}
         </div>
         <div className="flex items-center gap-2">
           {isTool && (
@@ -238,18 +219,38 @@ export const ServiceCard = memo(function ServiceCard({
 
       {/* Content area - grows to fill space */}
       <div className="flex-1">
-        {/* Service name */}
-        <h3
-          className="mb-1 flex items-center gap-2 text-sm font-semibold leading-tight"
-          style={{
-            fontFamily: 'var(--font-display)',
-            color: 'var(--text-primary)',
-          }}
-          title={service.name}
-        >
-          {isTool && <Wrench className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />}
-          {service.name}
-        </h3>
+        {/* Service name + stats */}
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <h3
+            className="flex items-center gap-2 text-sm font-semibold leading-tight"
+            style={{
+              fontFamily: 'var(--font-display)',
+              color: 'var(--text-primary)',
+            }}
+            title={service.name}
+          >
+            {isTool && <Wrench className="h-3.5 w-3.5" style={{ color: 'var(--text-muted)' }} />}
+            {service.name}
+          </h3>
+          {isRunning && stats && (
+            <div className="flex items-center gap-3">
+              <span
+                className="flex items-center gap-1 text-[11px]"
+                style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
+              >
+                <Cpu className="h-3 w-3" style={{ color: 'var(--accent-primary)' }} />
+                {stats.cpuPercent.toFixed(1)}%
+              </span>
+              <span
+                className="flex items-center gap-1 text-[11px]"
+                style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
+              >
+                <HardDrive className="h-3 w-3" style={{ color: 'var(--status-starting)' }} />
+                {stats.memoryMB}MB
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* Debug port if exists */}
         {service.debugPort && (
