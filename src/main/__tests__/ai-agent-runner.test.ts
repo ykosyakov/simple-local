@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { NEVER, Subject } from 'rxjs'
 import { AIAgentRunner, type AIAgentRunnerDeps } from '../services/ai-agent-runner'
 import type { FileSystemOperations, AgentTerminalFactory, CommandChecker } from '../services/discovery'
-import type { AgentTerminal } from '@agent-flow/agent-terminal'
+import type { AgentTerminal } from '../modules/agent-terminal'
 
 // Factory functions for creating mocks
 function createMockFileSystem(overrides: Partial<FileSystemOperations> = {}): FileSystemOperations {
@@ -15,12 +16,14 @@ function createMockFileSystem(overrides: Partial<FileSystemOperations> = {}): Fi
 }
 
 function createMockSession() {
+  const events$ = new Subject()
   return {
     id: 'test-session-id',
-    raw$: { subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) },
-    events$: { subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) },
-    pty: { exit$: { pipe: vi.fn().mockReturnValue({}) } },
+    events$: events$ as typeof events$ & { subscribe: ReturnType<typeof vi.fn> },
+    pty: { exit$: NEVER },
     kill: vi.fn(),
+    // Keep reference for tests that need to emit events
+    _eventsSubject: events$,
   }
 }
 
@@ -149,21 +152,52 @@ describe('AIAgentRunner', () => {
       expect(onProgress).toHaveBeenCalled()
     })
 
-    it('subscribes to raw$ and events$ streams', async () => {
+    it('subscribes to events$ for progress reporting', async () => {
+      const subscribeSpy = vi.spyOn(mockSession.events$, 'subscribe')
       await runner.run(baseConfig)
 
-      expect(mockSession.raw$.subscribe).toHaveBeenCalled()
-      expect(mockSession.events$.subscribe).toHaveBeenCalled()
+      expect(subscribeSpy).toHaveBeenCalled()
     })
 
-    it('unsubscribes from streams on completion', async () => {
-      const unsubscribeFn = vi.fn()
-      vi.mocked(mockSession.raw$.subscribe).mockReturnValue({ unsubscribe: unsubscribeFn })
-      vi.mocked(mockSession.events$.subscribe).mockReturnValue({ unsubscribe: unsubscribeFn })
+    it('forwards structured events to onProgress', async () => {
+      const { firstValueFrom } = await import('rxjs')
+      const onProgress = vi.fn()
 
-      await runner.run(baseConfig)
+      // Control when firstValueFrom resolves so we can emit events before completion
+      let resolveCompletion: () => void
+      const completionGate = new Promise<void>((r) => { resolveCompletion = r })
+      vi.mocked(firstValueFrom).mockImplementationOnce(() => completionGate)
 
-      expect(unsubscribeFn).toHaveBeenCalled()
+      const customSession = createMockSession()
+      const customTerminal = {
+        spawn: vi.fn().mockReturnValue(customSession),
+        dispose: vi.fn(),
+      } as unknown as AgentTerminal
+      const customFactory: AgentTerminalFactory = {
+        create: vi.fn().mockReturnValue(customTerminal),
+      }
+
+      const customRunner = new AIAgentRunner({
+        fileSystem: mockFs,
+        agentTerminalFactory: customFactory,
+        commandChecker: mockCommandChecker,
+      })
+
+      const runPromise = customRunner.run({ ...baseConfig, onProgress })
+
+      // Let the async function proceed past awaits to reach subscribe
+      await new Promise((r) => setTimeout(r, 0))
+
+      // Simulate events via the subject
+      customSession._eventsSubject.next({ type: 'tool-start', tool: 'Read', input: '/path/to/file' })
+      expect(onProgress).toHaveBeenCalledWith('Using Read...', '> Read(/path/to/file)')
+
+      customSession._eventsSubject.next({ type: 'thinking', text: 'analyzing...' })
+      expect(onProgress).toHaveBeenCalledWith('Thinking...', undefined)
+
+      // Let the runner complete (simulates task-complete or exit)
+      resolveCompletion!()
+      await runPromise
     })
   })
 })

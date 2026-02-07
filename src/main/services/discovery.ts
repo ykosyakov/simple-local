@@ -3,8 +3,8 @@ import * as path from 'path'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import type { ProjectConfig, Service, DiscoveryProgress, ContainerEnvOverride, HardcodedPort } from '../../shared/types'
-import { AgentTerminal } from '@agent-flow/agent-terminal'
-import type { AiAgentId } from '@agent-flow/agent-terminal'
+import { AgentTerminal } from '../modules/agent-terminal'
+import type { AiAgentId } from '../modules/agent-terminal'
 import { createLogger } from '../../shared/logger'
 import {
   buildDiscoveryPrompt as buildDiscoveryPromptFromTemplate,

@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
-import { AgentTerminal } from '@agent-flow/agent-terminal'
-import type { AiAgentId, AgentEvent, AgentSessionInfo } from '@agent-flow/agent-terminal'
+import { AgentTerminal } from '../modules/agent-terminal'
+import type { AiAgentId, AgentEvent, AgentSessionInfo } from '../modules/agent-terminal'
 
 export function setupAgentTerminalHandlers(agentTerminal: AgentTerminal): void {
   ipcMain.handle(

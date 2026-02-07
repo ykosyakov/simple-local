@@ -6,7 +6,7 @@ import { DiscoveryService } from '../services/discovery'
 import { PrerequisitesService } from '../services/prerequisites'
 import { SettingsService } from '../services/settings'
 import { PortExtractionService } from '../services/port-extraction'
-import { AgentTerminal } from '@agent-flow/agent-terminal'
+import { AgentTerminal } from '../modules/agent-terminal'
 import { setupRegistryHandlers } from './registry-handlers'
 import { setupServiceHandlers } from './service-handlers'
 import { setupDiscoveryHandlers } from './discovery-handlers'
@@ -42,7 +42,7 @@ export function setupIpcHandlers(): {
     config,
     registry
   )
-  setupDiscoveryHandlers(config, discovery, registry)
+  setupDiscoveryHandlers(config, discovery, registry, settings)
   setupRegistryHandlers(registry, {
     onProjectRemoved: cleanupProjectLogs,
   })

@@ -53,10 +53,10 @@ const api = {
     ipcRenderer.invoke('discovery:save', projectPath, config),
 
   // Discovery (runs AI analysis)
-  analyzeProject: (projectPath: string): Promise<ProjectConfig> =>
-    ipcRenderer.invoke('discovery:analyze', projectPath),
-  reanalyzeServiceEnv: (projectId: string, serviceId: string): Promise<ContainerEnvOverride[]> =>
-    ipcRenderer.invoke('service:reanalyze-env', projectId, serviceId),
+  analyzeProject: (projectPath: string, agentId?: AiAgentId): Promise<ProjectConfig> =>
+    ipcRenderer.invoke('discovery:analyze', projectPath, agentId),
+  reanalyzeServiceEnv: (projectId: string, serviceId: string, agentId?: AiAgentId): Promise<ContainerEnvOverride[]> =>
+    ipcRenderer.invoke('service:reanalyze-env', projectId, serviceId, agentId),
   onDiscoveryProgress: (callback: (progress: DiscoveryProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: DiscoveryProgress) => callback(progress)
     ipcRenderer.on('discovery:progress', handler)

@@ -7,18 +7,52 @@
  */
 
 import * as path from 'path'
-import { firstValueFrom, timeout } from 'rxjs'
-import type { AiAgentId } from '@agent-flow/agent-terminal'
+import { firstValueFrom, merge, filter, first, timeout } from 'rxjs'
+import type { AiAgentId, AgentEvent } from '../modules/agent-terminal'
 import { createLogger } from '../../shared/logger'
 import type { FileSystemOperations, AgentTerminalFactory, CommandChecker } from './discovery'
 
 const log = createLogger('AIAgentRunner')
 const AI_AGENT_TIMEOUT = 120000 // 2 minutes for AI analysis
 
-// Strip ANSI escape codes for clean log output
+// Strip ANSI escape codes for clean log output (used for output events from adapters like Codex)
 function stripAnsi(str: string): string {
   // eslint-disable-next-line no-control-regex
   return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+}
+
+function formatEventLog(event: AgentEvent): string | null {
+  switch (event.type) {
+    case 'tool-start': {
+      const input = typeof event.input === 'string' ? event.input : JSON.stringify(event.input)
+      const truncated = input.length > 120 ? input.slice(0, 120) + '…' : input
+      return `> ${event.tool}(${truncated})`
+    }
+    case 'tool-end': {
+      const output = typeof event.output === 'string' ? event.output : JSON.stringify(event.output)
+      const truncated = output.length > 200 ? output.slice(0, 200) + '…' : output
+      return truncated
+    }
+    case 'error':
+      return `Error: ${event.text}`
+    case 'output': {
+      const clean = stripAnsi(event.text).trim()
+      return clean || null
+    }
+    default:
+      return null
+  }
+}
+
+function formatEventStatus(event: AgentEvent): string | null {
+  switch (event.type) {
+    case 'tool-start':
+      return `Using ${event.tool}...`
+    case 'thinking':
+      return 'Thinking...'
+    default:
+      return null
+  }
 }
 
 /**
@@ -119,38 +153,34 @@ export class AIAgentRunner {
 
       log.info(`Session ID: ${session.id}`)
 
-      // Subscribe to raw output for logging
-      subscriptions.push(
-        session.raw$.subscribe({
-          next: (text) => {
-            const cleanText = stripAnsi(text)
-            if (cleanText.trim()) {
-              onProgress?.('Running AI analysis...', cleanText)
-            }
-          },
-        })
-      )
-
-      // Subscribe to parsed events for status updates
+      // Subscribe to structured events for progress reporting
       subscriptions.push(
         session.events$.subscribe({
           next: (event) => {
-            if (event.type === 'tool-start') {
-              onProgress?.(`Using ${event.tool}...`)
+            log.info(`Event [${event.type}]`, 'tool' in event ? event.tool : '', 'text' in event ? event.text?.slice(0, 100) : '')
+            const logLine = formatEventLog(event)
+            const status = formatEventStatus(event)
+            if (status || logLine) {
+              onProgress?.(status ?? 'Running AI analysis...', logLine ?? undefined)
             }
           },
         })
       )
 
-      // Wait for session to complete with timeout
-      await firstValueFrom(
-        session.pty.exit$.pipe(timeout(AI_AGENT_TIMEOUT))
-      ).catch(() => {
+      // Wait for task-complete (TUI mode) or exit (CLI mode), whichever comes first
+      const completion$ = merge(
+        session.events$.pipe(filter((e) => e.type === 'task-complete')),
+        session.pty.exit$
+      ).pipe(first(), timeout(AI_AGENT_TIMEOUT))
+
+      await firstValueFrom(completion$).catch(() => {
         log.info('Session timed out or errored')
         session.kill()
         throw new Error('AI analysis timed out')
       })
 
+      // Kill the session (safe no-op if already exited via exit$)
+      session.kill()
       log.info('Session completed')
       onProgress?.('Processing results...')
 

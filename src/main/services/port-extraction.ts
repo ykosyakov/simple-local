@@ -14,7 +14,7 @@ import { createLogger } from '../../shared/logger'
 import type { FileSystemOperations, AgentTerminalFactory, CommandChecker } from './discovery'
 import { AIAgentRunner } from './ai-agent-runner'
 import { buildPortExtractionPrompt } from './discovery-prompts'
-import { AgentTerminal } from '@agent-flow/agent-terminal'
+import { AgentTerminal } from '../modules/agent-terminal'
 
 const execAsync = promisify(exec)
 const log = createLogger('PortExtraction')

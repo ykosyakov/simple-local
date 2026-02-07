@@ -2,8 +2,9 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { ProjectConfigService } from '../services/project-config'
 import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
+import { SettingsService } from '../services/settings'
 import { getServiceContext } from '../services/service-lookup'
-import type { DiscoveryProgress } from '../../shared/types'
+import type { DiscoveryProgress, AiAgentId } from '../../shared/types'
 import { createLogger } from '../../shared/logger'
 
 const log = createLogger('IPC')
@@ -15,9 +16,10 @@ const log = createLogger('IPC')
 export function setupDiscoveryHandlers(
   config: ProjectConfigService,
   discovery: DiscoveryService,
-  registry: RegistryService
+  registry: RegistryService,
+  settings: SettingsService
 ): void {
-  ipcMain.handle('discovery:analyze', async (event, projectPath: string) => {
+  ipcMain.handle('discovery:analyze', async (event, projectPath: string, agentId?: AiAgentId) => {
     log.info('discovery:analyze called for:', projectPath)
 
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -39,8 +41,9 @@ export function setupDiscoveryHandlers(
     log.info('Using base port:', basePort, 'debug port base:', debugPortBase, existingProject ? '(existing project)' : '(new project)')
 
     // Try AI discovery first, fall back to basic
-    log.info('Attempting AI discovery...')
-    let result = await discovery.runAIDiscovery(projectPath, 'claude', sendProgress, basePort, debugPortBase)
+    const selectedAgent: AiAgentId = agentId ?? settings.getSettings()?.aiAgent.selected ?? 'claude'
+    log.info('Attempting AI discovery with agent:', selectedAgent)
+    let result = await discovery.runAIDiscovery(projectPath, selectedAgent, sendProgress, basePort, debugPortBase)
 
     if (!result) {
       log.info('AI discovery failed or timed out, falling back to basic discovery')
@@ -82,7 +85,7 @@ export function setupDiscoveryHandlers(
     log.info('All devcontainer files saved')
   })
 
-  ipcMain.handle('service:reanalyze-env', async (event, projectId: string, serviceId: string) => {
+  ipcMain.handle('service:reanalyze-env', async (event, projectId: string, serviceId: string, agentId?: AiAgentId) => {
     log.info('service:reanalyze-env called for:', projectId, serviceId)
 
     const { project, service } = await getServiceContext(registry, config, projectId, serviceId)
@@ -92,10 +95,11 @@ export function setupDiscoveryHandlers(
       win?.webContents.send('discovery:progress', progress)
     }
 
+    const selectedAgent: AiAgentId = agentId ?? settings.getSettings()?.aiAgent.selected ?? 'claude'
     const overrides = await discovery.runEnvAnalysis(
       project.path,
       service,
-      'claude',
+      selectedAgent,
       sendProgress
     )
 

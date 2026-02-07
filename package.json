@@ -20,6 +20,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
+    "dev:debug": "electron-vite dev --inspect=5858",
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps && chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper 2>/dev/null || true",
     "build:unpack": "npm run build && electron-builder --dir",

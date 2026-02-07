@@ -169,6 +169,6 @@ export interface AppSettings {
   setupCompletedAt: string
 }
 
-// Agent Terminal Types - re-exported from @agent-flow/agent-terminal for use in preload/renderer
-export type { SessionState, AgentEvent, AgentSessionInfo } from '@agent-flow/agent-terminal'
+// Agent Terminal Types - re-exported for use in preload/renderer
+export type { SessionState, AgentEvent, AgentSessionInfo } from '../main/modules/agent-terminal'
 

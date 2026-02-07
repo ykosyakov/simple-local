@@ -48,18 +48,26 @@ export function DiscoveryTerminal({ logs }: DiscoveryTerminalProps) {
             Waiting for output...
           </span>
         ) : (
-          logs.map((line, i) => (
-            <div
-              key={i}
-              className="text-xs whitespace-pre-wrap"
-              style={{
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              {line}
-            </div>
-          ))
+          logs.map((line, i) => {
+            const isToolLine = line.startsWith('> ')
+            const isErrorLine = line.startsWith('Error: ')
+            return (
+              <div
+                key={i}
+                className="text-xs whitespace-pre-wrap"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: isToolLine
+                    ? 'var(--accent-primary)'
+                    : isErrorLine
+                      ? 'var(--danger)'
+                      : 'var(--text-secondary)',
+                }}
+              >
+                {line}
+              </div>
+            )
+          })
         )}
       </div>
     </div>

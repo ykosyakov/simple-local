@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { NEVER, Subject } from 'rxjs'
 import {
   DiscoveryService,
   type FileSystemOperations,
@@ -9,7 +10,7 @@ import {
   allocatePort,
   detectHardcodedPort,
 } from '../services/discovery'
-import type { AgentTerminal } from '@agent-flow/agent-terminal'
+import type { AgentTerminal } from '../modules/agent-terminal'
 
 // Test fixtures
 const testService = {
@@ -35,11 +36,12 @@ function createMockFileSystem(overrides: Partial<FileSystemOperations> = {}): Fi
 }
 
 function createMockSession() {
+  const events$ = new Subject()
   return {
     id: 'test-session-id',
     raw$: { subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) },
-    events$: { subscribe: vi.fn(() => ({ unsubscribe: vi.fn() })) },
-    pty: { exit$: { pipe: vi.fn().mockReturnValue({}) } },
+    events$,
+    pty: { exit$: NEVER },
     kill: vi.fn(),
   }
 }
