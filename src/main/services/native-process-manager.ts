@@ -1,19 +1,25 @@
 import { spawn, type ChildProcess } from 'child_process'
 import type { ServiceStatus } from '../../shared/types'
 
+interface ProcessGroup {
+  pgid: number
+  childProcess: ChildProcess
+}
+
 /**
- * Manages native (non-Docker) service processes.
- * Extracted from ContainerService to follow Single Responsibility Principle.
+ * Manages native (non-Docker) service processes using process groups.
+ * Uses detached: true to create process groups, allowing us to track
+ * the entire process tree (e.g., npm spawning child processes).
  */
 export class NativeProcessManager {
-  private processes = new Map<string, ChildProcess>()
-  /** Services that were started and may have child processes still running */
-  private startedServices = new Set<string>()
+  private processGroups = new Map<string, ProcessGroup>()
   /** Timeout in ms before escalating from SIGTERM to SIGKILL */
   private readonly KILL_TIMEOUT_MS = 5000
+  /** Polling interval for checking if process group is alive */
+  private readonly POLL_INTERVAL_MS = 100
 
   /**
-   * Start a native service process.
+   * Start a native service process in a new process group.
    * @param serviceId - Unique identifier for the service
    * @param command - Command to run (will be split by spaces)
    * @param cwd - Working directory for the process
@@ -36,10 +42,11 @@ export class NativeProcessManager {
       cwd,
       env: { ...process.env, ...env },
       shell: true,
+      detached: true,
     })
 
-    this.processes.set(serviceId, proc)
-    this.startedServices.add(serviceId)
+    const pgid = proc.pid!
+    this.processGroups.set(serviceId, { pgid, childProcess: proc })
 
     proc.stdout?.on('data', (data) => onLog(data.toString()))
     proc.stderr?.on('data', (data) => onLog(data.toString()))
@@ -50,90 +57,114 @@ export class NativeProcessManager {
       onLog(`Error: ${err.message}`)
     })
     proc.on('close', (code) => {
-      this.processes.delete(serviceId)
-      if (code !== 0 && code !== null) {
-        onStatusChange('error')
-        onLog(`Process exited with code ${code}`)
+      if (!this.isProcessGroupAlive(pgid)) {
+        this.processGroups.delete(serviceId)
+        if (code !== 0 && code !== null) {
+          onStatusChange('error')
+          onLog(`Process exited with code ${code}`)
+        } else {
+          onStatusChange('stopped')
+        }
       } else {
-        onStatusChange('stopped')
+        onLog(`Parent exited, child processes still running\n`)
       }
     })
   }
 
   /**
-   * Stop a native service process with graceful shutdown.
-   * Sends SIGTERM first, then SIGKILL after timeout if process doesn't exit.
-   * @returns true if the process was found and stop was initiated, false otherwise
+   * Stop a native service process group with graceful shutdown.
+   * Sends SIGTERM to the entire process group first, then SIGKILL after timeout.
+   * @returns true if the process group was found and stop was initiated, false otherwise
    */
   async stopService(serviceId: string): Promise<boolean> {
-    const proc = this.processes.get(serviceId)
-    if (!proc) return false
+    const group = this.processGroups.get(serviceId)
+    if (!group) return false
 
-    // Try graceful shutdown first
-    proc.kill('SIGTERM')
+    const { pgid } = group
 
-    // Wait for process to exit or timeout
-    const exited = await this.waitForExit(proc, this.KILL_TIMEOUT_MS)
-
-    if (!exited) {
-      // Force kill if graceful shutdown failed
-      proc.kill('SIGKILL')
+    try {
+      process.kill(-pgid, 'SIGTERM')
+    } catch {
+      // Group may have already exited
     }
 
-    // Process cleanup happens in the 'close' event handler registered in startService.
-    // But if the process is somehow stuck, ensure we clean up the map.
-    // The 'close' handler will be a no-op if already deleted.
-    this.processes.delete(serviceId)
-    this.startedServices.delete(serviceId)
+    const exited = await this.waitForGroupExit(pgid, this.KILL_TIMEOUT_MS)
+
+    if (!exited) {
+      try {
+        process.kill(-pgid, 'SIGKILL')
+      } catch {
+        // Group may have already exited
+      }
+    }
+
+    this.processGroups.delete(serviceId)
     return true
   }
 
   /**
-   * Wait for a process to exit within the given timeout.
-   * @returns true if process exited, false if timeout was reached
+   * Check if a process group is still alive.
+   * Uses kill with signal 0 to check without actually sending a signal.
    */
-  private waitForExit(proc: ChildProcess, timeoutMs: number): Promise<boolean> {
+  isProcessGroupAlive(pgid: number): boolean {
+    try {
+      process.kill(-pgid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Wait for a process group to exit within the given timeout.
+   * @returns true if group exited, false if timeout was reached
+   */
+  private waitForGroupExit(pgid: number, timeoutMs: number): Promise<boolean> {
     return new Promise((resolve) => {
-      let resolved = false
+      const startTime = Date.now()
 
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true
-          resolve(false)
-        }
-      }, timeoutMs)
-
-      const onClose = () => {
-        if (!resolved) {
-          resolved = true
-          clearTimeout(timeout)
+      const check = () => {
+        if (!this.isProcessGroupAlive(pgid)) {
           resolve(true)
+          return
         }
+
+        if (Date.now() - startTime >= timeoutMs) {
+          resolve(false)
+          return
+        }
+
+        setTimeout(check, this.POLL_INTERVAL_MS)
       }
 
-      proc.once('close', onClose)
+      check()
     })
   }
 
   /**
    * Check if a native service is currently running.
+   * Checks if the process group is still alive, not just the parent process.
    */
   isRunning(serviceId: string): boolean {
-    return this.processes.has(serviceId)
+    const group = this.processGroups.get(serviceId)
+    if (!group) return false
+    return this.isProcessGroupAlive(group.pgid)
   }
 
   /**
-   * Check if a service was started by us (may have child processes still running).
-   * Used for port-based fallback status checking.
+   * Get the process group ID for a service.
+   * @returns The PGID or undefined if service is not running
    */
-  wasStarted(serviceId: string): boolean {
-    return this.startedServices.has(serviceId)
+  getProcessGroupId(serviceId: string): number | undefined {
+    return this.processGroups.get(serviceId)?.pgid
   }
 
   /**
-   * Clear the started flag for a service (e.g., when port-based check shows it's stopped).
+   * Kill all tracked process groups.
+   * Used during app shutdown to clean up any running processes.
    */
-  clearStarted(serviceId: string): void {
-    this.startedServices.delete(serviceId)
+  async killAllProcessGroups(): Promise<void> {
+    const serviceIds = Array.from(this.processGroups.keys())
+    await Promise.all(serviceIds.map((id) => this.stopService(id)))
   }
 }

@@ -513,41 +513,45 @@ describe('ContainerService', () => {
   describe('stopNativeService', () => {
     it('stops a running native service', async () => {
       const { spawn } = await import('child_process')
-      const mockKill = vi.fn().mockReturnValue(true)
-      // Track close handlers to simulate process exit
-      let closeOnceHandler: (() => void) | undefined
       const mockProcess = {
         stdout: { on: vi.fn() },
         stderr: { on: vi.fn() },
         on: vi.fn(),
-        once: vi.fn((event: string, handler: () => void) => {
-          if (event === 'close') closeOnceHandler = handler
-        }),
-        kill: mockKill,
+        kill: vi.fn().mockReturnValue(true),
         pid: 12345,
       }
-       
+
       vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
-      // Start a service first
-      containerService.startNativeService(
-        'test-service',
-        'npm run dev',
-        '/path',
-        {},
-        vi.fn(),
-        vi.fn()
-      )
+      // Mock process.kill for process group operations
+      const originalProcessKill = process.kill
+      const processKillMock = vi.fn().mockImplementation((_pid: number, signal?: string | number) => {
+        // Process group exits immediately after SIGTERM
+        if (signal === 0) throw new Error('ESRCH')
+        return true
+      })
+      process.kill = processKillMock as typeof process.kill
 
-      // Start the stop operation (async)
-      const stopPromise = containerService.stopNativeService('test-service')
+      try {
+        // Start a service first
+        containerService.startNativeService(
+          'test-service',
+          'npm run dev',
+          '/path',
+          {},
+          vi.fn(),
+          vi.fn()
+        )
 
-      // Simulate process exiting after SIGTERM
-      expect(mockKill).toHaveBeenCalledWith('SIGTERM')
-      closeOnceHandler?.()
+        // Stop the service
+        const result = await containerService.stopNativeService('test-service')
 
-      const result = await stopPromise
-      expect(result).toBe(true)
+        // Should send SIGTERM to the process group (negative pid)
+        expect(processKillMock).toHaveBeenCalledWith(-12345, 'SIGTERM')
+        expect(result).toBe(true)
+      } finally {
+        process.kill = originalProcessKill
+      }
     })
 
     it('returns false if no process found', async () => {
@@ -870,29 +874,40 @@ describe('ContainerService', () => {
       const mockProcess = createMockProcess()
       vi.mocked(spawn).mockReturnValue(mockProcess as unknown as ChildProcess)
 
-      // Start a native service first
-      containerService.startNativeService(
-        'test-service',
-        'npm run dev',
-        '/path',
-        {},
-        vi.fn(),
-        vi.fn()
-      )
+      // Mock process.kill to indicate process group is alive
+      const originalProcessKill = process.kill
+      process.kill = vi.fn().mockImplementation((pid: number, signal?: string | number) => {
+        if (pid === -12345 && signal === 0) return true // Group is alive
+        throw new Error('ESRCH')
+      }) as typeof process.kill
 
-      const service = {
-        id: 'test-service',
-        name: 'Test Service',
-        mode: 'native' as const,
-        command: 'npm run dev',
-        path: '.',
-        port: 3000,
-        env: {},
-        active: true,
+      try {
+        // Start a native service first
+        containerService.startNativeService(
+          'test-service',
+          'npm run dev',
+          '/path',
+          {},
+          vi.fn(),
+          vi.fn()
+        )
+
+        const service = {
+          id: 'test-service',
+          name: 'Test Service',
+          mode: 'native' as const,
+          command: 'npm run dev',
+          path: '.',
+          port: 3000,
+          env: {},
+          active: true,
+        }
+
+        const status = await containerService.getServiceStatus(service, 'test-project')
+        expect(status).toBe('running')
+      } finally {
+        process.kill = originalProcessKill
       }
-
-      const status = await containerService.getServiceStatus(service, 'test-project')
-      expect(status).toBe('running')
     })
 
     it('returns stopped for native service when process is not running', async () => {

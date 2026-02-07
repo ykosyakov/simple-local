@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { ContainerEnvOverride, Service } from '../../shared/types'
-import { applyContainerEnvOverrides } from '../services/container'
+import { applyContainerEnvOverrides, rewriteLocalhostForContainer } from '../services/container'
 
 describe('ContainerEnvOverride type', () => {
   it('has required fields', () => {
@@ -141,5 +141,127 @@ describe('applyContainerEnvOverrides', () => {
 
     expect(result).not.toBe(env)
     expect(env.DATABASE_URL).toBe('postgresql://localhost:54322/db')
+  })
+})
+
+describe('rewriteLocalhostForContainer', () => {
+  const makeService = (overrides: Partial<Service> = {}): Service => ({
+    id: 'backend',
+    name: 'Backend',
+    path: 'packages/backend',
+    command: 'npm run dev',
+    env: {},
+    active: true,
+    mode: 'native',
+    ...overrides,
+  })
+
+  it('rewrites localhost:PORT for a known service port', () => {
+    const env = { API_URL: 'http://localhost:3000/api' }
+    const services = [makeService({ port: 3000 })]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.API_URL).toBe('http://host.docker.internal:3000/api')
+  })
+
+  it('rewrites 127.0.0.1:PORT for a known service port', () => {
+    const env = { API_URL: 'http://127.0.0.1:3000/api' }
+    const services = [makeService({ port: 3000 })]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.API_URL).toBe('http://host.docker.internal:3000/api')
+  })
+
+  it('does NOT rewrite unknown ports', () => {
+    const env = { DATABASE_URL: 'postgresql://localhost:5432/db' }
+    const services = [makeService({ port: 3000 })]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.DATABASE_URL).toBe('postgresql://localhost:5432/db')
+  })
+
+  it('rewrites across multiple env vars, only matching known ports', () => {
+    const env = {
+      BACKEND_URL: 'http://localhost:3000',
+      FRONTEND_URL: 'http://localhost:3001',
+      REDIS_URL: 'redis://localhost:6379',
+    }
+    const services = [
+      makeService({ id: 'backend', port: 3000 }),
+      makeService({ id: 'frontend', port: 3001 }),
+    ]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.BACKEND_URL).toBe('http://host.docker.internal:3000')
+    expect(result.FRONTEND_URL).toBe('http://host.docker.internal:3001')
+    expect(result.REDIS_URL).toBe('redis://localhost:6379')
+  })
+
+  it('rewrites multiple localhost refs in a single value', () => {
+    const env = {
+      SERVICES: 'http://localhost:3000,http://localhost:3001',
+    }
+    const services = [
+      makeService({ id: 'backend', port: 3000 }),
+      makeService({ id: 'frontend', port: 3001 }),
+    ]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.SERVICES).toBe(
+      'http://host.docker.internal:3000,http://host.docker.internal:3001'
+    )
+  })
+
+  it('rewrites debugPort references too', () => {
+    const env = { DEBUG_URL: 'http://localhost:9229' }
+    const services = [makeService({ port: 3000, debugPort: 9229 })]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.DEBUG_URL).toBe('http://host.docker.internal:9229')
+  })
+
+  it('returns copy, does not mutate original', () => {
+    const env = { API_URL: 'http://localhost:3000' }
+    const services = [makeService({ port: 3000 })]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result).not.toBe(env)
+    expect(env.API_URL).toBe('http://localhost:3000')
+  })
+
+  it('handles services with undefined port', () => {
+    const env = { API_URL: 'http://localhost:3000' }
+    const services = [
+      makeService({ id: 'tool', port: undefined }),
+      makeService({ id: 'backend', port: 3000 }),
+    ]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.API_URL).toBe('http://host.docker.internal:3000')
+  })
+
+  it('returns env unchanged when no services have ports', () => {
+    const env = { API_URL: 'http://localhost:3000' }
+    const services = [makeService({ port: undefined })]
+
+    const result = rewriteLocalhostForContainer(env, services)
+
+    expect(result.API_URL).toBe('http://localhost:3000')
+  })
+
+  it('handles empty env', () => {
+    const services = [makeService({ port: 3000 })]
+
+    const result = rewriteLocalhostForContainer({}, services)
+
+    expect(result).toEqual({})
   })
 })

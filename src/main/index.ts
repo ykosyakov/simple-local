@@ -10,6 +10,7 @@ import './electron-types'
 const log = createLogger('Main')
 
 let apiServer: ApiServer | null = null
+let cleanupNativeProcesses: (() => Promise<void>) | null = null
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -49,7 +50,9 @@ app.whenReady().then(async () => {
   })
 
   // Setup IPC handlers and get services
-  const { registry, container, config, getLogBuffer, startService, stopService } = setupIpcHandlers()
+  const ipcHandlers = setupIpcHandlers()
+  const { registry, container, config, getLogBuffer, startService, stopService } = ipcHandlers
+  cleanupNativeProcesses = ipcHandlers.cleanupNativeProcesses
 
   // Create main window
   const mainWindow = createWindow()
@@ -80,6 +83,9 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', async () => {
   app.isQuitting = true
+  if (cleanupNativeProcesses) {
+    await cleanupNativeProcesses()
+  }
   if (apiServer) {
     await apiServer.close()
   }

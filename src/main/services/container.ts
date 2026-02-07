@@ -44,6 +44,30 @@ export function applyContainerEnvOverrides(
   return result
 }
 
+export function rewriteLocalhostForContainer(
+  env: Record<string, string>,
+  services: Service[]
+): Record<string, string> {
+  const knownPorts = new Set<number>()
+  for (const service of services) {
+    if (service.port !== undefined) knownPorts.add(service.port)
+    if (service.debugPort !== undefined) knownPorts.add(service.debugPort)
+  }
+  if (knownPorts.size === 0) return { ...env }
+
+  const result: Record<string, string> = {}
+  for (const [key, value] of Object.entries(env)) {
+    result[key] = value.replace(
+      /(?:localhost|127\.0\.0\.1):(\d+)/g,
+      (match, portStr) => {
+        const port = parseInt(portStr, 10)
+        return knownPorts.has(port) ? `host.docker.internal:${port}` : match
+      }
+    )
+  }
+  return result
+}
+
 export class ContainerService extends EventEmitter {
   private docker: Docker
   private statusCache: { containers: Docker.ContainerInfo[]; timestamp: number } | null = null
@@ -132,27 +156,12 @@ export class ContainerService extends EventEmitter {
    * Get the status of a service (native or container mode).
    * This is the unified entry point for checking service status.
    *
-   * For native services: First checks if we're tracking the process directly.
-   * If not, falls back to checking if the service's port is in use (only for
-   * services we actually started - handles cases where the tracked process
-   * spawned child processes and exited).
+   * For native services: Uses process group tracking to detect if the service
+   * (including any child processes) is still running.
    */
   async getServiceStatus(service: Service, projectName: string): Promise<ServiceStatus['status']> {
     if (service.mode === 'native') {
-      if (this.isNativeServiceRunning(service.id)) {
-        return 'running'
-      }
-      // Fallback: check if the service's port is in use
-      // Only for services we started (to avoid false positives from other processes)
-      if (this.nativeProcessManager.wasStarted(service.id)) {
-        const portToCheck = service.hardcodedPort?.value ?? service.port
-        if (portToCheck && await this.portManager.isPortInUse(portToCheck)) {
-          return 'running'
-        }
-        // Port is not in use, service has stopped - clear the started flag
-        this.nativeProcessManager.clearStarted(service.id)
-      }
-      return 'stopped'
+      return this.isNativeServiceRunning(service.id) ? 'running' : 'stopped'
     }
     return this.getContainerStatus(this.getContainerName(projectName, service.id))
   }
@@ -373,10 +382,18 @@ export class ContainerService extends EventEmitter {
    */
   async getServiceStats(service: Service, projectName: string): Promise<ServiceResourceStats | null> {
     if (service.mode === 'native') {
-      const portToCheck = service.hardcodedPort?.value ?? service.port
-      if (!portToCheck) return null
-      return this.portManager.getProcessStatsForPort(portToCheck)
+      const pgid = this.nativeProcessManager.getProcessGroupId(service.id)
+      if (!pgid) return null
+      return this.portManager.getProcessGroupStats(pgid)
     }
     return this.getContainerStats(this.getContainerName(projectName, service.id))
+  }
+
+  /**
+   * Kill all tracked native process groups.
+   * Used during app shutdown to clean up any running processes.
+   */
+  async killAllNativeProcessGroups(): Promise<void> {
+    return this.nativeProcessManager.killAllProcessGroups()
   }
 }

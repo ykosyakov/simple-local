@@ -23,6 +23,7 @@ vi.mock('electron', () => ({
 vi.mock('../services/container', () => ({
   ContainerService: vi.fn(),
   applyContainerEnvOverrides: vi.fn((env) => env),
+  rewriteLocalhostForContainer: vi.fn((env) => env),
 }))
 
 // Mock project-config service
@@ -404,6 +405,112 @@ describe('setupServiceHandlers', () => {
       const logs = handlers.getLogBuffer('proj1', 'svc1')
       expect(logs.some(log => log.includes('port 3001'))).toBe(true)
       expect(logs.some(log => log.includes('port 3000'))).toBe(false)
+    })
+  })
+
+  describe('localhost rewriting for container mode', () => {
+    it('calls rewriteLocalhostForContainer when mode is container', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      const { rewriteLocalhostForContainer } = await import('../services/container')
+      const services = [
+        {
+          id: 'backend',
+          name: 'Backend',
+          command: 'npm run dev',
+          path: 'packages/backend',
+          mode: 'container' as const,
+          env: {},
+          port: 3000,
+          active: true,
+        },
+      ]
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services },
+        service: services[0],
+      })
+      vi.mocked(mockConfig.interpolateEnv!).mockReturnValue({
+        env: { API_URL: 'http://localhost:3000' },
+        errors: [],
+      })
+      vi.mocked(mockContainer.buildContainer!).mockResolvedValue(undefined)
+      vi.mocked(mockContainer.startService!).mockResolvedValue(undefined)
+
+      await handlers.startService('proj1', 'backend', 'container')
+
+      expect(rewriteLocalhostForContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ API_URL: 'http://localhost:3000' }),
+        services
+      )
+    })
+
+    it('does NOT call rewriteLocalhostForContainer when mode is native', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      const { rewriteLocalhostForContainer } = await import('../services/container')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          path: '.',
+          mode: 'native',
+          env: {},
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(rewriteLocalhostForContainer).not.toHaveBeenCalled()
+    })
+
+    it('calls rewrite BEFORE applyContainerEnvOverrides', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      const { rewriteLocalhostForContainer, applyContainerEnvOverrides } = await import('../services/container')
+
+      const callOrder: string[] = []
+      vi.mocked(rewriteLocalhostForContainer).mockImplementation((env) => {
+        callOrder.push('rewrite')
+        return { ...env, REWRITTEN: 'true' }
+      })
+      vi.mocked(applyContainerEnvOverrides).mockImplementation((env) => {
+        callOrder.push('overrides')
+        return env
+      })
+
+      const services = [
+        {
+          id: 'backend',
+          name: 'Backend',
+          command: 'npm run dev',
+          path: 'packages/backend',
+          mode: 'container' as const,
+          env: {},
+          port: 3000,
+          active: true,
+          containerEnvOverrides: [
+            { key: 'DB', originalPattern: 'x', containerValue: 'y', reason: 'test', enabled: true },
+          ],
+        },
+      ]
+
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services },
+        service: services[0],
+      })
+      vi.mocked(mockConfig.interpolateEnv!).mockReturnValue({
+        env: { API_URL: 'http://localhost:3000' },
+        errors: [],
+      })
+      vi.mocked(mockContainer.buildContainer!).mockResolvedValue(undefined)
+      vi.mocked(mockContainer.startService!).mockResolvedValue(undefined)
+
+      await handlers.startService('proj1', 'backend', 'container')
+
+      expect(callOrder).toEqual(['rewrite', 'overrides'])
     })
   })
 

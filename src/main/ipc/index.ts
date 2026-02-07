@@ -25,6 +25,7 @@ export function setupIpcHandlers(): {
   getLogBuffer: (projectId: string, serviceId: string) => string[]
   startService: (projectId: string, serviceId: string) => Promise<void>
   stopService: (projectId: string, serviceId: string) => Promise<void>
+  cleanupNativeProcesses: () => Promise<void>
 } {
   const registry = new RegistryService()
   const settings = new SettingsService()
@@ -57,5 +58,7 @@ export function setupIpcHandlers(): {
     return result.canceled ? null : result.filePaths[0]
   })
 
-  return { registry, container, config, discovery, prerequisites, settings, agentTerminal, getLogBuffer, startService, stopService }
+  const cleanupNativeProcesses = () => container.killAllNativeProcessGroups()
+
+  return { registry, container, config, discovery, prerequisites, settings, agentTerminal, getLogBuffer, startService, stopService, cleanupNativeProcesses }
 }

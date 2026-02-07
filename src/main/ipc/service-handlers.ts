@@ -1,6 +1,6 @@
 import path from 'path'
 import { ipcMain, BrowserWindow } from 'electron'
-import { ContainerService, applyContainerEnvOverrides } from '../services/container'
+import { ContainerService, applyContainerEnvOverrides, rewriteLocalhostForContainer } from '../services/container'
 import { ProjectConfigService } from '../services/project-config'
 import { RegistryService } from '../services/registry'
 import { LogManager } from '../services/log-manager'
@@ -102,11 +102,15 @@ async function startServiceCore(
 
   const effectiveMode = modeOverride ?? service.mode
   const { env: resolvedEnv, errors: interpolationErrors } = config.interpolateEnv(service.env, projectConfig.services)
-  // Apply container env overrides if in container mode, then inject PORT/DEBUG_PORT
-  const finalEnv = {
-    ...(effectiveMode === 'container' && service.containerEnvOverrides
-      ? applyContainerEnvOverrides(resolvedEnv, service.containerEnvOverrides)
-      : resolvedEnv),
+
+  let finalEnv: Record<string, string>
+  if (effectiveMode === 'container') {
+    const rewrittenEnv = rewriteLocalhostForContainer(resolvedEnv, projectConfig.services)
+    finalEnv = service.containerEnvOverrides
+      ? applyContainerEnvOverrides(rewrittenEnv, service.containerEnvOverrides)
+      : rewrittenEnv
+  } else {
+    finalEnv = { ...resolvedEnv }
   }
 
   // Inject PORT and DEBUG_PORT environment variables

@@ -153,4 +153,40 @@ export class PortManager {
       return null
     }
   }
+
+  /**
+   * Get aggregated resource stats for all processes in a process group.
+   * Sums CPU and memory across all processes in the group.
+   * @param pgid - Process group ID
+   * @returns Aggregated resource stats or null if no processes found
+   */
+  async getProcessGroupStats(pgid: number): Promise<ServiceResourceStats | null> {
+    try {
+      // Get aggregated stats for all processes in the group
+      // ps -g {pgid} gets processes in that group
+      // -o %cpu=,rss= gives CPU% and RSS in KB without headers
+      const { stdout } = await exec(`ps -g ${pgid} -o %cpu=,rss=`)
+      const lines = stdout.trim().split('\n').filter(Boolean)
+
+      if (lines.length === 0) return null
+
+      let totalCpu = 0
+      let totalMemoryKB = 0
+
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/)
+        if (parts.length >= 2) {
+          totalCpu += parseFloat(parts[0]) || 0
+          totalMemoryKB += parseInt(parts[1], 10) || 0
+        }
+      }
+
+      return {
+        cpuPercent: Math.round(totalCpu * 10) / 10,
+        memoryMB: Math.round(totalMemoryKB / 1024 * 10) / 10,
+      }
+    } catch {
+      return null
+    }
+  }
 }

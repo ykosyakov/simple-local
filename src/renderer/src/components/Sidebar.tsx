@@ -27,7 +27,7 @@ export function Sidebar({
       }}
     >
       {/* App Header */}
-      <div className="flex items-center gap-3 p-5">
+      <div className="flex h-14 items-center gap-3 px-5">
         <div
           className="flex h-9 w-9 items-center justify-center rounded-lg"
           style={{
