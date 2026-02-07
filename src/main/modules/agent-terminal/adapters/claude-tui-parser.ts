@@ -1,4 +1,35 @@
 import type { AgentEvent } from '../types'
+import {
+  CONTENT_MARKER,
+  SUB_ITEM_MARKER,
+  SPINNER_CHAR_RE,
+  SPINNER_WORD_RE,
+  SPINNER_NOISE_RE,
+  SPINNER_STATUS_RE,
+  BANNER_RE,
+  RULE_RE,
+  CHROME_FOOTER_RE,
+  TOKEN_RE,
+  FILE_STATS_RE,
+  CHURNED_RE,
+  THINKING_CHROME_RE,
+  STOP_HOOK_RE,
+  PROMPT_LINE_RE,
+  ANSI_LEAK_RE,
+  TRAILING_CHROME_RE,
+  TOOL_CALL_RE,
+  TOOL_SUMMARY_RE,
+  TOOL_RESULT_RE,
+  TOOL_NAMES,
+  THINKING_PATTERN,
+  PERMISSION_PATTERNS,
+  IDLE_FOOTER_RE,
+  PROCESSING_FOOTER_RE,
+  PERMISSION_FOOTER_RE,
+} from './tui-patterns'
+
+// Re-export for backward compatibility
+export { PERMISSION_KEYS } from './tui-patterns'
 
 // ANSI escape code stripper that preserves spacing.
 // The TUI uses cursor-forward (\x1b[NC) instead of literal spaces between words.
@@ -16,53 +47,6 @@ export function stripAnsi(str: string): string {
       )
   )
 }
-
-// ── TUI chrome detection ─────────────────────────────────────────────
-
-// Spinner symbols used by Claude TUI
-const SPINNER_CHARS = '✢✳✶✻✽·⏺◐◑'
-const SPINNER_CHAR_RE = new RegExp(`^[${SPINNER_CHARS}]+$`)
-// Spinner animation: symbol + word ending in "…" (handles hyphens like "Topsy-turvying…")
-const SPINNER_WORD_RE = new RegExp(`^[${SPINNER_CHARS}]?\\s*[\\w-]+…`)
-// Short lines containing spinner symbols = character-by-character TUI cell updates
-const SPINNER_NOISE_RE = new RegExp(`[${SPINNER_CHARS}]`)
-
-// Content markers: ⏺ = assistant content, ⎿ = sub-item/tool result
-const CONTENT_MARKER = '⏺'
-const SUB_ITEM_MARKER = '⎿'
-
-// Banner art (Claude logo box-drawing)
-const BANNER_RE = /[▐▛▜▌▝▘█]/
-// Horizontal rules (solid, bold, dashed)
-const RULE_RE = /^[─━═╌]+$/
-// Footer/status chrome — match as substrings since they may share lines with rules
-const CHROME_FOOTER_RE =
-  /\?\s*for\s*shortcuts|esc\s*to\s*(?:interrupt|cancel)|ctrl\+[a-z]\s*to\s*|tab\s*to\s*amend/i
-// Token counter
-const TOKEN_RE = /^\s*\d[\d,.]*\s*tokens?\b/i
-// File stats: "3 files +20 -7"
-const FILE_STATS_RE = /^\d+\s*files?\s*[+-]\d+/
-// Churned/thinking status
-const CHURNED_RE = /[;·]\s*Churned?\s+for\s+\d+s/i
-const THINKING_CHROME_RE = /^\s*(?:\(thinking\)|thinking|thought)(?:\s+\d+s)?$/i
-// Stop hook
-const STOP_HOOK_RE = /\(running stop hook\)/
-// Prompt line
-const PROMPT_LINE_RE = /❯/
-// Leaked ANSI fragments
-const ANSI_LEAK_RE = /^\[[\d;]*[a-zA-Z]?$|^\[<[a-z]$/
-
-// Trailing chrome on content lines (spinner + prompt that share the same TUI row)
-// Match: optional whitespace + spinner char + optional spinner word, OR whitespace + ❯
-const TRAILING_CHROME_RE = new RegExp(
-  `\\s*[${SPINNER_CHARS}]\\s*[\\w-]*….*$|\\s+❯.*$`,
-)
-
-// Lines that are spinner status, not real content (e.g. "(No content)  Swooping…")
-const SPINNER_STATUS_RE = new RegExp(
-  `^\\(?(?:No content|Loading|Waiting)\\)?\\s*[${SPINNER_CHARS}]?\\s*[\\w-]*…`,
-  'i',
-)
 
 export function isTuiChrome(line: string): boolean {
   const t = line.trim()
@@ -127,44 +111,6 @@ function stripContentCruft(raw: string): string {
     .replace(/\s{2,}/g, ' ') // collapse excessive whitespace from cursor-positioning
     .trim()
 }
-
-// ── Tool detection ───────────────────────────────────────────────────
-
-const TOOL_CALL_RE = /^(\w+)\s*\("?([^")]*)"?\)\s*$/
-const TOOL_SUMMARY_RE = /^(Reading|Editing|Writing|Running|Searching)\s+(.+)/i
-const TOOL_RESULT_RE = /^(?:Read|Wrote|Edited|Found|Created|Deleted|Ran)\s+/i
-const TOOL_NAMES = new Set([
-  'Read',
-  'Write',
-  'Edit',
-  'Bash',
-  'Glob',
-  'Grep',
-  'WebSearch',
-  'WebFetch',
-  'Task',
-  'AskUserQuestion',
-  'TodoWrite',
-  'LSP',
-  'NotebookEdit',
-])
-
-// ── Thinking/Churning detection ──────────────────────────────────────
-
-const THINKING_PATTERN = /(?:thinking|thought|churning)\s*(?:for\s*)?(\d+)s?/i
-
-// ── Permission detection ─────────────────────────────────────────────
-
-const PERMISSION_PATTERNS = [
-  /Allow\s+(\w+)(?:\s+for)?.*\?\s*(?:\[([^\]]+)\])?/i,
-  /Do you want to (?:allow|create|run|execute|proceed)\b/i,
-]
-
-export const PERMISSION_KEYS = {
-  ENTER: '\r', // Default yes (press enter)
-  NO: 'n',
-  ALWAYS: 'a',
-} as const
 
 // ── Chunk parser ─────────────────────────────────────────────────────
 
@@ -277,10 +223,6 @@ export interface StatefulTuiParser {
   clear(): void
 }
 
-// Footer signals for state detection (see docs/claude-tui-behaviors.md)
-const IDLE_FOOTER_RE = /\?\s*(?:for\s*)?shortcuts/
-const PROCESSING_FOOTER_RE = /esc\s*to\s*interrupt/
-const PERMISSION_FOOTER_RE = /esc\s*to\s*cancel/i
 // Timeout: if no "esc to interrupt" for this long while in processing, assume idle
 const IDLE_TIMEOUT_MS = 5000
 

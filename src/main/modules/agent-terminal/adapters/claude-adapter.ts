@@ -1,11 +1,20 @@
-import { Observable, mergeMap, of } from 'rxjs'
+import { Observable, mergeMap, of, from } from 'rxjs'
 import type { AgentAdapter, AdapterOptions } from './types'
 import type { AgentEvent, AiAgentId } from '../types'
 import { createTuiParser } from './claude-tui-parser'
+import { XtermTuiParser } from './xterm-tui-parser'
+
+export type TuiParserType = 'xterm' | 'legacy'
 
 export class ClaudeAdapter implements AgentAdapter {
   readonly agentId: AiAgentId = 'claude'
   readonly interactivePrompt = true
+
+  private parserType: TuiParserType
+
+  constructor(parserType: TuiParserType = 'xterm') {
+    this.parserType = parserType
+  }
 
   buildCommand(): string {
     return 'claude'
@@ -32,12 +41,23 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   parse(raw$: Observable<string>): Observable<AgentEvent> {
+    if (this.parserType === 'xterm') {
+      const parser = new XtermTuiParser(80, 30)
+      return raw$.pipe(
+        mergeMap((chunk) =>
+          from(parser.feed(chunk)),
+        ),
+        mergeMap((events) => from(events)),
+      )
+    }
+
+    // Legacy parser
     const parser = createTuiParser()
     return raw$.pipe(
       mergeMap((chunk) => {
         const events = parser.parse(chunk)
         return of(...events)
-      })
+      }),
     )
   }
 }
