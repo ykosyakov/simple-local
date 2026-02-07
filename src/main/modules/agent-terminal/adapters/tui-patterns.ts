@@ -81,3 +81,12 @@ export const PERMISSION_KEYS = {
 export const IDLE_FOOTER_RE = /\?\s*(?:for\s*)?shortcuts/
 export const PROCESSING_FOOTER_RE = /esc\s*to\s*interrupt/
 export const PERMISSION_FOOTER_RE = /esc\s*to\s*cancel/i
+export const INTERACTIVE_MENU_FOOTER_RE = /Enter\s+to\s+select/i
+export const PLAN_EDIT_FOOTER_RE = /ctrl[-+]g\s+to\s+edit/i
+
+// ── Subagent noise detection ────────────────────────────────────────
+
+export const SUBAGENT_TREE_RE = /[├└│]/
+export const SUBAGENT_STATUS_RE = /(?:Running|Ran)\s+\d+\s+\w+\s+agents?/i
+export const SUBAGENT_FINISHED_RE = /\d+\s+\w+\s+agents?\s+finished/i
+export const BACKGROUND_HINT_RE = /ctrl\+b\s+to\s+run\s+in\s+background/i

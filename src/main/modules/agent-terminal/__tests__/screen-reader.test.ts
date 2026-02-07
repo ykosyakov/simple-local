@@ -63,6 +63,34 @@ describe('readFooter', () => {
     ])
     expect(result.signal).toBe('permission')
   })
+
+  it('detects AskUserQuestion interactive menu footer', () => {
+    const result = readFooter([
+      '',
+      'Enter to select · ↑/↓ to navigate · Esc to cancel',
+      '',
+    ])
+    expect(result.signal).toBe('interactive-menu')
+  })
+
+  it('detects plan edit footer', () => {
+    const result = readFooter([
+      '',
+      'ctrl-g to edit in Vim · ~/.claude/plans/my-plan.md',
+      '',
+    ])
+    expect(result.signal).toBe('interactive-menu')
+  })
+
+  it('interactive-menu takes priority over permission when both present', () => {
+    // AskUserQuestion footer has both "Enter to select" and "Esc to cancel"
+    const result = readFooter([
+      'Enter to select · ↑/↓ to navigate',
+      'Esc to cancel',
+      '',
+    ])
+    expect(result.signal).toBe('interactive-menu')
+  })
 })
 
 // ── findFooterStart ──────────────────────────────────────────────────

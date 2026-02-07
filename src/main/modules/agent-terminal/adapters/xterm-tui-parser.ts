@@ -16,8 +16,34 @@ import {
   findFooterStart,
   type FooterState,
 } from './screen-reader'
+import {
+  SUBAGENT_TREE_RE,
+  BACKGROUND_HINT_RE,
+} from './tui-patterns'
 
 const IDLE_TIMEOUT_MS = 3000
+
+/**
+ * Normalize block text by stripping subagent tree noise and status patterns.
+ * Returns null if the entire block is noise (pure tree content).
+ */
+export function normalizeBlockText(text: string): string | null {
+  let result = text
+
+  // Strip from first tree-drawing char to end of text
+  const treeIdx = result.search(SUBAGENT_TREE_RE)
+  if (treeIdx === 0) return null // Pure tree line → skip entirely
+  if (treeIdx > 0) result = result.slice(0, treeIdx)
+
+  // Strip subagent status patterns at end of text
+  result = result
+    .replace(/\s*(?:Running|Ran)\s+\d+\s+\w+\s+agents?…?\s*(?:\(ctrl\+o[^)]*\))?\s*$/i, '')
+    .replace(/\s*\d+\s+\w+\s+agents?\s+finished\s*(?:\(ctrl\+o[^)]*\))?\s*$/i, '')
+    .replace(BACKGROUND_HINT_RE, '')
+    .trim()
+
+  return result || null // null = skip block entirely
+}
 
 export class XtermTuiParser {
   private vt: VirtualTerminal
@@ -27,6 +53,7 @@ export class XtermTuiParser {
   private lastProcessingTs = 0
   private promptSeenSinceProcessing = false
   private seenProcessingFooter = false
+  private inInteractiveMenu = false
 
   // Accumulated events for sync wrapper
   private pendingEvents: AgentEvent[] = []
@@ -100,6 +127,12 @@ export class XtermTuiParser {
         break
 
       case 'processing':
+        if (footer.signal === 'interactive-menu' && !this.inInteractiveMenu) {
+          this.inInteractiveMenu = true
+          events.push({ type: 'question', text: '' })
+        } else if (footer.signal !== 'interactive-menu') {
+          this.inInteractiveMenu = false
+        }
         events.push(...this.tryIdleTransition())
         break
     }
@@ -111,6 +144,7 @@ export class XtermTuiParser {
   private tryIdleTransition(): AgentEvent[] {
     if (this.state !== 'processing') return []
     if (this.lastFooterState.signal === 'permission') return []
+    if (this.lastFooterState.signal === 'interactive-menu') return []
 
     // Require that we've actually seen "esc to interrupt" at least once
     // during this processing run. Without this, stale idle footers from
@@ -162,12 +196,15 @@ export class XtermTuiParser {
     const events: AgentEvent[] = []
 
     for (const block of blocks) {
-      const key = `${block.marker}|${block.text}`
+      const normalizedText = normalizeBlockText(block.text)
+      if (normalizedText === null) continue // Pure subagent noise
+
+      const key = `${block.marker}|${normalizedText}`
 
       if (this.seenBlockKeys.has(key)) continue
       this.seenBlockKeys.add(key)
 
-      const event = blockToEvent(block)
+      const event = blockToEvent({ ...block, text: normalizedText })
       if (event) events.push(event)
     }
 

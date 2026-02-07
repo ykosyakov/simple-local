@@ -13,6 +13,8 @@ import {
   IDLE_FOOTER_RE,
   PROCESSING_FOOTER_RE,
   PERMISSION_FOOTER_RE,
+  INTERACTIVE_MENU_FOOTER_RE,
+  PLAN_EDIT_FOOTER_RE,
   TOOL_CALL_RE,
   TOOL_SUMMARY_RE,
   TOOL_RESULT_RE,
@@ -29,7 +31,7 @@ import {
 // ── Footer state ─────────────────────────────────────────────────────
 
 export interface FooterState {
-  signal: 'idle' | 'processing' | 'permission' | 'unknown'
+  signal: 'idle' | 'processing' | 'permission' | 'interactive-menu' | 'unknown'
   hasPrompt: boolean
 }
 
@@ -41,7 +43,9 @@ export function readFooter(footerRows: string[]): FooterState {
   const joined = footerRows.join(' ')
 
   let signal: FooterState['signal'] = 'unknown'
-  if (PERMISSION_FOOTER_RE.test(joined)) {
+  if (INTERACTIVE_MENU_FOOTER_RE.test(joined) || PLAN_EDIT_FOOTER_RE.test(joined)) {
+    signal = 'interactive-menu'
+  } else if (PERMISSION_FOOTER_RE.test(joined)) {
     signal = 'permission'
   } else if (PROCESSING_FOOTER_RE.test(joined)) {
     signal = 'processing'

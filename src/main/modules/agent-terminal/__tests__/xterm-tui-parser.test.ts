@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { XtermTuiParser } from '../adapters/xterm-tui-parser'
+import { XtermTuiParser, normalizeBlockText } from '../adapters/xterm-tui-parser'
 
 // Helper: build ANSI-positioned screen content.
 // For these tests we write plain text with newlines — xterm processes them
@@ -519,6 +519,214 @@ describe('XtermTuiParser', () => {
     })
   })
 
+  describe('interactive menu', () => {
+    it('does not transition to idle during interactive menu footer', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready → processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts'
+      )
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+      expect(parser.getState()).toBe('processing')
+
+      // Interactive menu footer (AskUserQuestion)
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Which option?' +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + 'Enter to select · ↑/↓ to navigate · Esc to cancel'
+      )
+      expect(parser.getState()).toBe('processing')
+    })
+
+    it('emits question event when interactive menu first appears during processing', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready → processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts'
+      )
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+
+      // Interactive menu appears
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Which option?' +
+        moveTo(10, 1) + 'Enter to select · ↑/↓ to navigate'
+      )
+
+      const questions = events.filter((e) => e.type === 'question')
+      expect(questions).toHaveLength(1)
+      expect((questions[0] as { type: 'question'; text: string }).text).toBe('')
+    })
+
+    it('does not re-emit question for subsequent interactive-menu feeds', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready → processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts'
+      )
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+
+      // First interactive menu → question emitted
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Which option?' +
+        moveTo(10, 1) + 'Enter to select · ↑/↓ to navigate'
+      )
+
+      // Second feed with same interactive menu → no duplicate question
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Which option?' +
+        moveTo(10, 1) + 'Enter to select · ↑/↓ to navigate'
+      )
+
+      const questions = events.filter((e) => e.type === 'question')
+      expect(questions).toHaveLength(0)
+    })
+
+    it('blocks idle transition for plan edit footer (ctrl-g)', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready → processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts'
+      )
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Here is my plan...' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+      expect(parser.getState()).toBe('processing')
+
+      // Plan approval prompt with ctrl-g footer
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Here is my plan...' +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + 'ctrl-g to edit in Vim · ~/.claude/plans/plan.md'
+      )
+
+      expect(parser.getState()).toBe('processing')
+      expect(events.some((e) => e.type === 'task-complete')).toBe(false)
+      expect(events.some((e) => e.type === 'question')).toBe(true)
+    })
+  })
+
+  describe('subagent noise suppression', () => {
+    it('deduplicates subagent progress updates (same message, different tree)', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready → processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts'
+      )
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+
+      // First: message with subagent tree
+      const events1 = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ I\'ll explore the codebase. Running 2 Explore agents… ├─ Agent · 5 tool uses · 13.9k tokens' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+      const msgs1 = events1.filter((e) => e.type === 'message')
+      expect(msgs1).toHaveLength(1)
+      expect((msgs1[0] as { type: 'message'; text: string }).text).toBe("I'll explore the codebase.")
+
+      // Second: same message with updated tree counters → should dedup
+      const events2 = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ I\'ll explore the codebase. Running 2 Explore agents… ├─ Agent · 7 tool uses · 14.6k tokens' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+      const msgs2 = events2.filter((e) => e.type === 'message')
+      expect(msgs2).toHaveLength(0)
+    })
+
+    it('skips pure subagent tree blocks', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready → processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts'
+      )
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+
+      // Pure tree content
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ ├─ Explore service list UI · 26 tool uses · 80.5k tokens' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+
+      const msgs = events.filter((e) => e.type === 'message')
+      expect(msgs).toHaveLength(0)
+    })
+
+    it('still emits Done completion messages', async () => {
+      parser = new XtermTuiParser(80, 10)
+
+      // Ready → processing
+      await parser.feed(
+        clearScreen() +
+        moveTo(8, 1) + '❯ ' +
+        moveTo(10, 1) + '? for shortcuts'
+      )
+      await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Working...' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+
+      const events = await parser.feed(
+        clearScreen() +
+        moveTo(1, 1) + '⏺ Done (23 tool uses · 80.5k tokens · 1m 55s)' +
+        moveTo(10, 1) + 'esc to interrupt'
+      )
+
+      const msgs = events.filter((e) => e.type === 'message')
+      expect(msgs).toHaveLength(1)
+      expect((msgs[0] as { type: 'message'; text: string }).text).toBe(
+        'Done (23 tool uses · 80.5k tokens · 1m 55s)',
+      )
+    })
+  })
+
   describe('sync wrapper', () => {
     it('provides StatefulTuiParser interface', () => {
       const syncParser = XtermTuiParser.createSyncWrapper(80, 10)
@@ -542,5 +750,48 @@ describe('XtermTuiParser', () => {
       syncParser.clear()
       expect(syncParser.getBuffer()).toBe('')
     })
+  })
+})
+
+// ── normalizeBlockText ────────────────────────────────────────────────
+
+describe('normalizeBlockText', () => {
+  it('strips tree chars and following text', () => {
+    expect(normalizeBlockText("I'll explore the codebase. ├─ Agent · 5 tool uses"))
+      .toBe("I'll explore the codebase.")
+  })
+
+  it('strips "Running N agents…" pattern', () => {
+    expect(normalizeBlockText("I'll explore the codebase. Running 2 Explore agents…"))
+      .toBe("I'll explore the codebase.")
+  })
+
+  it('strips "N agents finished (ctrl+o...)" pattern', () => {
+    expect(normalizeBlockText('Results ready. 2 Explore agents finished (ctrl+o to expand)'))
+      .toBe('Results ready.')
+  })
+
+  it('returns null for pure tree content', () => {
+    expect(normalizeBlockText('├─ Explore service list UI · 26 tool uses · 80.5k tokens'))
+      .toBeNull()
+  })
+
+  it('preserves clean message text', () => {
+    expect(normalizeBlockText('The capital of France is Paris.'))
+      .toBe('The capital of France is Paris.')
+  })
+
+  it('strips "ctrl+b to run in background"', () => {
+    expect(normalizeBlockText('Initializing… ctrl+b to run in background'))
+      .toBe('Initializing…')
+  })
+
+  it('returns null when stripping leaves empty string', () => {
+    expect(normalizeBlockText('Running 1 Explore agent…')).toBeNull()
+  })
+
+  it('strips "Ran N agents" pattern', () => {
+    expect(normalizeBlockText('Done. Ran 2 Explore agents'))
+      .toBe('Done.')
   })
 })
