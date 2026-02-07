@@ -250,16 +250,17 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
       const newUseOriginalPort = !service.useOriginalPort
       const newPort = newUseOriginalPort ? service.discoveredPort : service.allocatedPort
 
-      // Find services that depend on this service's port
-      const dependentServices = findDependentServices(currentConfig.services, serviceId)
-      const runningDependents = dependentServices.filter(s => statuses.get(s.id) === 'running')
       const isServiceRunning = statuses.get(serviceId) === 'running'
 
-      // Build list of services that need restart
-      const servicesToRestart = [
-        ...(isServiceRunning ? [service] : []),
-        ...runningDependents
-      ]
+      // Only consider restarts when the target service is running.
+      // If stopped, dependents will pick up the new port on next start.
+      const servicesToRestart: typeof currentConfig.services = []
+      if (isServiceRunning) {
+        servicesToRestart.push(service)
+        const dependentServices = findDependentServices(currentConfig.services, serviceId)
+        const runningDependents = dependentServices.filter(s => statuses.get(s.id) === 'running')
+        servicesToRestart.push(...runningDependents)
+      }
 
       // If there are running services affected, prompt user
       if (servicesToRestart.length > 0) {
