@@ -3,6 +3,7 @@ import { promisify } from "util";
 import { existsSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import Docker from "dockerode";
 import type {
   RuntimeCheck,
   AgentCheck,
@@ -24,6 +25,20 @@ const RUNTIME_CONFIGS = [
     id: "colima" as const,
     name: "Colima",
     socketPaths: [join(homedir(), ".colima/default/docker.sock")],
+  },
+  {
+    id: "podman" as const,
+    name: "Podman",
+    socketPaths: [
+      join(
+        homedir(),
+        ".local/share/containers/podman/machine/podman-machine-default/podman.sock",
+      ),
+      join(
+        homedir(),
+        ".local/share/containers/podman/machine/podman.sock",
+      ),
+    ],
   },
 ];
 
@@ -77,9 +92,8 @@ export class PrerequisitesService {
 
   private async checkDaemonRunning(socketPath: string): Promise<boolean> {
     try {
-      await execAsync(`DOCKER_HOST=unix://${socketPath} docker info`, {
-        timeout: 5000,
-      });
+      const docker = new Docker({ socketPath });
+      await docker.ping();
       return true;
     } catch {
       return false;

@@ -135,7 +135,7 @@ export interface DiscoveryProgress {
 
 // Prerequisites check types
 
-export type ContainerRuntimeId = 'docker-desktop' | 'colima'
+export type ContainerRuntimeId = 'docker-desktop' | 'colima' | 'podman'
 export type AiAgentId = 'claude' | 'codex'
 
 export interface RuntimeCheck {

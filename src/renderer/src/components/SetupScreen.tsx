@@ -66,7 +66,7 @@ export function SetupScreen({
   return (
     <div className="flex h-screen items-center justify-center gradient-mesh noise">
       <div
-        className="w-full max-w-lg rounded-xl p-8"
+        className="w-full max-w-3xl rounded-xl p-8"
         style={{
           background: "var(--bg-surface)",
           border: "1px solid var(--border-subtle)",
@@ -102,7 +102,7 @@ export function SetupScreen({
           >
             Container Runtime
           </h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {prerequisites.runtimes.map((runtime) => (
               <RuntimeCard
                 key={runtime.id}
@@ -155,6 +155,10 @@ export function SetupScreen({
             <InstallLink
               href="https://github.com/abiosoft/colima"
               label="Colima"
+            />
+            <InstallLink
+              href="https://podman.io/"
+              label="Podman"
             />
             <InstallLink
               href="https://docs.anthropic.com/en/docs/claude-code"
@@ -263,6 +267,14 @@ function RuntimeCard({
             Open Docker Desktop
           </p>
         )}
+      {runtime.available && !runtime.running && runtime.id === "podman" && (
+        <p
+          className="mt-1 text-xs"
+          style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}
+        >
+          podman machine start
+        </p>
+      )}
     </button>
   );
 }
