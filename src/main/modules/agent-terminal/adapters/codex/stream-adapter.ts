@@ -11,7 +11,15 @@ export class CodexStreamAdapter implements AgentAdapter {
   }
 
   buildArgs(options: AdapterOptions): string[] {
-    const args: string[] = ['exec', '--json', '--full-auto']
+    const args: string[] = [
+      'exec',
+      '--json',
+      '--full-auto',
+      '-m',
+      'gpt-5.3-codex',
+      '--config',
+      'model_reasoning_effort=high',
+    ]
 
     if (options.args) {
       args.push(...options.args)

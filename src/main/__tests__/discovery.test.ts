@@ -13,6 +13,7 @@ import {
   extractScriptName,
 } from '../services/discovery'
 import type { AgentTerminal } from '../modules/agent-terminal'
+import type { ProjectConfig } from '../../shared/types'
 
 // Test fixtures
 const testService = {
@@ -437,8 +438,9 @@ describe('DiscoveryService', () => {
 
       expect(result.services).toHaveLength(1)
       const service = result.services[0]
-      // Allocated port should be used as the active port
-      expect(service.port).toBe(3100)
+      // Hardcoded port defaults to original (discovered) port
+      expect(service.port).toBe(5173)
+      expect(service.useOriginalPort).toBe(true)
       expect(service.allocatedPort).toBe(3100)
       // Discovered port should be preserved from package.json
       expect(service.discoveredPort).toBe(5173)
@@ -679,6 +681,32 @@ describe('convertToProjectConfig hardcodedPort', () => {
     })
   })
 
+  it('sets useOriginalPort=true when command has hardcoded port flag', async () => {
+    const discovery = new DiscoveryService({
+      fileSystem: createMockFileSystem(),
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    const config = (discovery as any).convertToProjectConfig(
+      {
+        services: [{
+          id: 'web',
+          name: 'Web',
+          path: '.',
+          command: 'next dev -p 3001',
+          port: 3001,
+        }],
+      },
+      '/project',
+      3000,
+      9200
+    )
+
+    expect(config.services[0].useOriginalPort).toBe(true)
+    expect(config.services[0].port).toBe(3001)
+  })
+
   it('does not set hardcodedPort when using env var', async () => {
     const discovery = new DiscoveryService({
       fileSystem: createMockFileSystem(),
@@ -702,6 +730,88 @@ describe('convertToProjectConfig hardcodedPort', () => {
     )
 
     expect(config.services[0].hardcodedPort).toBeUndefined()
+  })
+})
+
+describe('resolveHardcodedPorts', () => {
+  it('sets useOriginalPort=true and updates port when script has hardcoded port', async () => {
+    const mockFs = createMockFileSystem({
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({
+        scripts: { dev: 'next dev -p 4000' },
+      })),
+    })
+    const discovery = new DiscoveryService({
+      fileSystem: mockFs,
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    const config: ProjectConfig = {
+      name: 'test',
+      services: [{
+        id: 'web',
+        name: 'Web',
+        type: 'service',
+        path: '.',
+        command: 'npm run dev',
+        port: 3000,
+        discoveredPort: 4000,
+        allocatedPort: 3000,
+        useOriginalPort: false,
+        env: {},
+        active: true,
+        mode: 'native',
+        containerEnvOverrides: [],
+      }],
+    }
+
+    await (discovery as any).resolveHardcodedPorts(config, '/project')
+
+    expect(config.services[0].hardcodedPort).toEqual({
+      value: 4000,
+      source: 'command-flag',
+      flag: '-p',
+    })
+    expect(config.services[0].useOriginalPort).toBe(true)
+    expect(config.services[0].port).toBe(4000)
+  })
+
+  it('does not change useOriginalPort when script has no hardcoded port', async () => {
+    const mockFs = createMockFileSystem({
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({
+        scripts: { dev: 'next dev' },
+      })),
+    })
+    const discovery = new DiscoveryService({
+      fileSystem: mockFs,
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    const config: ProjectConfig = {
+      name: 'test',
+      services: [{
+        id: 'web',
+        name: 'Web',
+        type: 'service',
+        path: '.',
+        command: 'npm run dev',
+        port: 3000,
+        discoveredPort: 4000,
+        allocatedPort: 3000,
+        useOriginalPort: false,
+        env: {},
+        active: true,
+        mode: 'native',
+        containerEnvOverrides: [],
+      }],
+    }
+
+    await (discovery as any).resolveHardcodedPorts(config, '/project')
+
+    expect(config.services[0].hardcodedPort).toBeUndefined()
+    expect(config.services[0].useOriginalPort).toBe(false)
+    expect(config.services[0].port).toBe(3000)
   })
 })
 

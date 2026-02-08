@@ -11,7 +11,7 @@ export class CodexTuiAdapter implements AgentAdapter {
   }
 
   buildArgs(options: AdapterOptions): string[] {
-    const args: string[] = []
+    const args: string[] = ['-m', 'gpt-5.3-codex', '--config', 'model_reasoning_effort=high']
 
     if (options.args) {
       args.push(...options.args)

@@ -157,7 +157,11 @@ export const ServiceCard = memo(function ServiceCard({
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  onPortToggle(service.id)
+                  if (service.hardcodedPort && isUsingOriginalPort && onExtractPort) {
+                    onExtractPort(service.id)
+                  } else {
+                    onPortToggle(service.id)
+                  }
                 }}
                 className="port-display"
                 style={{
@@ -166,7 +170,11 @@ export const ServiceCard = memo(function ServiceCard({
                   border: 'none',
                   padding: 0,
                 }}
-                title={`Click to switch to port ${inactivePort}`}
+                title={
+                  service.hardcodedPort && isUsingOriginalPort
+                    ? `Port ${service.hardcodedPort.value} is hardcoded. Make configurable to switch.`
+                    : `Click to switch to port ${inactivePort}`
+                }
               >
                 :{activePort}
                 <span style={{ color: 'var(--text-muted)', opacity: 0.5 }}> ← {inactivePort}</span>

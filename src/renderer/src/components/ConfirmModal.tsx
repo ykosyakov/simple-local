@@ -3,7 +3,7 @@ import { X, AlertTriangle } from 'lucide-react'
 interface ConfirmModalProps {
   isOpen: boolean
   title: string
-  message: string
+  message: React.ReactNode
   confirmLabel?: string
   onConfirm: () => void
   onCancel: () => void

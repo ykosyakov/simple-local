@@ -5,6 +5,7 @@ import { HiddenServices } from './project/HiddenServices'
 import { ConfigEditorModal } from './ConfigEditorModal'
 import { EnvOverridesPanel } from './EnvOverridesPanel'
 import { PortExtractionModal } from './PortExtractionModal'
+import { ConfirmModal } from './ConfirmModal'
 import { Server, Code2, RefreshCw } from 'lucide-react'
 import type { Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ContainerEnvOverride, Service } from '../../../shared/types'
 import { createLogger } from '../../../shared/logger'
@@ -85,6 +86,12 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [stoppingServices, setStoppingServices] = useState<Set<string>>(new Set())
   const [restartingServices, setRestartingServices] = useState<Set<string>>(new Set())
   const [serviceStats, setServiceStats] = useState<Map<string, ServiceResourceStats | null>>(new Map())
+  const [restartConfirm, setRestartConfirm] = useState<{
+    servicesToRestart: ProjectConfig['services']
+    serviceId: string
+    newUseOriginalPort: boolean
+    newPort: number
+  } | null>(null)
   const [logHeight, setLogHeight] = useState(350)
   const resizeRef = useRef({ active: false, startY: 0, startHeight: 0 })
 
@@ -246,6 +253,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
 
       const service = currentConfig.services.find(s => s.id === serviceId)
       if (!service || !service.discoveredPort || !service.allocatedPort) return
+      if (service.hardcodedPort && service.useOriginalPort) return
 
       const newUseOriginalPort = !service.useOriginalPort
       const newPort = newUseOriginalPort ? service.discoveredPort : service.allocatedPort
@@ -262,42 +270,59 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         servicesToRestart.push(...runningDependents)
       }
 
-      // If there are running services affected, prompt user
+      // If there are running services affected, prompt user via modal
       if (servicesToRestart.length > 0) {
-        const serviceNames = servicesToRestart.map(s => s.name).join(', ')
-        const confirmed = window.confirm(
-          `Changing port will affect running services:\n${serviceNames}\n\nRestart them now?`
-        )
-        if (!confirmed) return
+        setRestartConfirm({ servicesToRestart, serviceId, newUseOriginalPort, newPort })
+        return
       }
 
+      // No running services affected — apply immediately
       try {
         setActionError(null)
-
-        // Update config with new port setting
         const updatedServices = currentConfig.services.map((s) =>
           s.id === serviceId ? { ...s, useOriginalPort: newUseOriginalPort, port: newPort } : s
         )
         const updatedConfig = { ...currentConfig, services: updatedServices }
         await window.api.saveProjectConfig(project.path, updatedConfig)
-
-        // Reload config to reflect changes
         await loadConfig()
-
-        // Restart affected services
-        for (const s of servicesToRestart) {
-          await window.api.stopService(project.id, s.id)
-          await window.api.startService(project.id, s.id)
-        }
-
-        await refreshStatuses()
       } catch (err) {
         log.error('Failed to toggle port:', err)
         setActionError(`Failed to toggle port: ${err instanceof Error ? err.message : 'Unknown error'}`)
       }
     },
-    [project.path, project.id, statuses, loadConfig, refreshStatuses]
+    [project.path, statuses, loadConfig]
   )
+
+  const confirmPortToggle = useCallback(async () => {
+    if (!restartConfirm) return
+    const { servicesToRestart, serviceId, newUseOriginalPort, newPort } = restartConfirm
+    setRestartConfirm(null)
+
+    const currentConfig = configRef.current
+    if (!currentConfig) return
+
+    try {
+      setActionError(null)
+
+      const updatedServices = currentConfig.services.map((s) =>
+        s.id === serviceId ? { ...s, useOriginalPort: newUseOriginalPort, port: newPort } : s
+      )
+      const updatedConfig = { ...currentConfig, services: updatedServices }
+      await window.api.saveProjectConfig(project.path, updatedConfig)
+
+      await loadConfig()
+
+      for (const s of servicesToRestart) {
+        await window.api.stopService(project.id, s.id)
+        await window.api.startService(project.id, s.id)
+      }
+
+      await refreshStatuses()
+    } catch (err) {
+      log.error('Failed to toggle port:', err)
+      setActionError(`Failed to toggle port: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    }
+  }, [restartConfirm, project.path, project.id, loadConfig, refreshStatuses])
 
   const handleSaveConfig = async (updatedConfig: ProjectConfig) => {
     try {
@@ -590,6 +615,28 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
           }}
         />
       )}
+
+      {/* Restart Confirmation Modal */}
+      <ConfirmModal
+        isOpen={restartConfirm !== null}
+        title="Restart Services"
+        message={
+          restartConfirm && (
+            <>
+              Changing port will affect running services:
+              <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                {restartConfirm.servicesToRestart.map(s => (
+                  <li key={s.id}>{s.name}</li>
+                ))}
+              </ul>
+              Restart them now?
+            </>
+          )
+        }
+        confirmLabel="Restart"
+        onConfirm={confirmPortToggle}
+        onCancel={() => setRestartConfirm(null)}
+      />
     </div>
   )
 }

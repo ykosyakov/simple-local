@@ -160,7 +160,7 @@ Use the Write tool to create the file with this JSON:
 Read each package.json to find:
 - Run commands: "dev", "start", "serve" scripts
 - Debug commands: "debug", "dev:debug", or scripts with --inspect
-- Ports from scripts or config
+- Ports from scripts, config, or .env files (look for PORT=NNNN in .env, .env.local, .env.development, .env.example)
 - Service dependencies
 
 ## Step 2: Discover 3rd Party Tools

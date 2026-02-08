@@ -74,7 +74,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:xtermjs.org)",
       "WebFetch(domain:snyk.io)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "WebFetch(domain:developers.openai.com)",
+      "Bash(./scripts/debug-discovery.sh:*)"
     ]
   }
 }

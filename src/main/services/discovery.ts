@@ -545,11 +545,16 @@ export class DiscoveryService {
         usedDebugPorts.add(allocatedDebugPort)
       }
 
-      // For tools, use discovered port directly; for services, use allocated port
-      const effectivePort = useOriginalPort ? discoveredPort : allocatedPort
-
       // Detect hardcoded port in command
       const hardcodedPort = detectHardcodedPort(s.command)
+
+      // Hardcoded port means service can't use a remapped port
+      if (hardcodedPort && discoveredPort) {
+        useOriginalPort = true
+      }
+
+      // For tools, use discovered port directly; for services, use allocated port
+      const effectivePort = useOriginalPort ? discoveredPort : allocatedPort
 
       return {
         id: serviceId,
@@ -629,6 +634,10 @@ export class DiscoveryService {
         const detected = detectHardcodedPort(scriptContent)
         if (detected) {
           service.hardcodedPort = detected
+          if (service.discoveredPort) {
+            service.useOriginalPort = true
+            service.port = service.discoveredPort
+          }
         }
       } catch {
         log.debug(`Could not resolve script for ${service.id}: file missing or parse error`)
