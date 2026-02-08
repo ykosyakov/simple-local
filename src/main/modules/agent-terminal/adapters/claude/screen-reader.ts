@@ -6,7 +6,7 @@
  * easy to unit test with synthetic screen content.
  */
 
-import type { AgentEvent } from '../types'
+import type { AgentEvent } from '../../types'
 import {
   CONTENT_MARKER,
   SUB_ITEM_MARKER,

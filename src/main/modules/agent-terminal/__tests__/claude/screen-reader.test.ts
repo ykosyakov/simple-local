@@ -5,7 +5,7 @@ import {
   blockToEvent,
   findFooterStart,
   extractPermission,
-} from '../adapters/screen-reader'
+} from '../../adapters/claude/screen-reader'
 
 // ── readFooter ───────────────────────────────────────────────────────
 

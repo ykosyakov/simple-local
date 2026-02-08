@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { XtermTuiParser, normalizeBlockText } from '../adapters/xterm-tui-parser'
+import { XtermTuiParser, normalizeBlockText } from '../../adapters/claude/xterm-parser'
 
 // Helper: build ANSI-positioned screen content.
 // For these tests we write plain text with newlines — xterm processes them

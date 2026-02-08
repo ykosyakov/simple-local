@@ -1,8 +1,8 @@
 import { Observable, mergeMap, of, from } from 'rxjs'
-import type { AgentAdapter, AdapterOptions } from './types'
-import type { AgentEvent, AiAgentId } from '../types'
-import { createTuiParser } from './claude-tui-parser'
-import { XtermTuiParser } from './xterm-tui-parser'
+import type { AgentAdapter, AdapterOptions } from '../types'
+import type { AgentEvent, AiAgentId } from '../../types'
+import { createTuiParser } from './tui-parser'
+import { XtermTuiParser } from './xterm-parser'
 
 export type TuiParserType = 'xterm' | 'legacy'
 

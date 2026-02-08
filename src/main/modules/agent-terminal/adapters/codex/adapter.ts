@@ -1,6 +1,6 @@
 import { Observable, map } from 'rxjs'
-import type { AgentAdapter, AdapterOptions } from './types'
-import type { AgentEvent, AiAgentId } from '../types'
+import type { AgentAdapter, AdapterOptions } from '../types'
+import type { AgentEvent, AiAgentId } from '../../types'
 
 export class CodexAdapter implements AgentAdapter {
   readonly agentId: AiAgentId = 'codex'

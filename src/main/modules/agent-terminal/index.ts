@@ -16,10 +16,10 @@ export type { SpawnOptions, AgentSession } from './agent-terminal'
 
 // Adapters
 export type { AgentAdapter, AdapterOptions } from './adapters/types'
-export { ClaudeAdapter } from './adapters/claude-adapter'
-export { CodexAdapter } from './adapters/codex-adapter'
-export { parseTuiChunk, createTuiParser, PERMISSION_KEYS, stripAnsi } from './adapters/claude-tui-parser'
-export type { TuiParseResult, TuiParserState, StatefulTuiParser } from './adapters/claude-tui-parser'
+export { ClaudeAdapter } from './adapters/claude'
+export { CodexAdapter } from './adapters/codex'
+export { parseTuiChunk, createTuiParser, PERMISSION_KEYS, stripAnsi } from './adapters/claude'
+export type { TuiParseResult, TuiParserState, StatefulTuiParser } from './adapters/claude'
 
 // Output modes
 export { cleanOutput, isTuiChrome, createAnswerStream } from './output-modes'

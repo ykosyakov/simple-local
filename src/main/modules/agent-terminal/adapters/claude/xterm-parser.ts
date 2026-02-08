@@ -6,9 +6,9 @@
  * Architecture: PTY bytes → VirtualTerminal → ScreenReader → Events
  */
 
-import type { AgentEvent } from '../types'
-import type { TuiParserState, StatefulTuiParser } from './claude-tui-parser'
-import { VirtualTerminal } from './virtual-terminal'
+import type { AgentEvent } from '../../types'
+import type { TuiParserState, StatefulTuiParser } from './tui-parser'
+import { VirtualTerminal } from '../virtual-terminal'
 import {
   readFooter,
   extractContentBlocks,

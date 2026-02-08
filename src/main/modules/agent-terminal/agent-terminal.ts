@@ -1,7 +1,7 @@
 import { Observable, map, share, filter, first, race, timer, Subscription } from 'rxjs'
 import { createPtySession, PtySession } from './pty-session'
-import { ClaudeAdapter } from './adapters/claude-adapter'
-import { CodexAdapter } from './adapters/codex-adapter'
+import { ClaudeAdapter } from './adapters/claude'
+import { CodexAdapter } from './adapters/codex'
 import type { AgentAdapter } from './adapters/types'
 import type { AgentEvent, AiAgentId, SessionState } from './types'
 

@@ -1,5 +1,5 @@
 import { Observable, scan, filter, map } from 'rxjs'
-import { isTuiChrome, cleanContent } from './adapters/claude-tui-parser'
+import { isTuiChrome, cleanContent } from './adapters/claude'
 import type { AgentEvent } from './types'
 
 export type OutputMode = 'raw' | 'conversation' | 'answers'

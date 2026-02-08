@@ -1,5 +1,4 @@
 export type { AgentAdapter, AdapterOptions } from './types'
-export { ClaudeAdapter } from './claude-adapter'
-export { CodexAdapter } from './codex-adapter'
-export { parseTuiChunk, createTuiParser, PERMISSION_KEYS } from './claude-tui-parser'
-export type { TuiParseResult } from './claude-tui-parser'
+export { VirtualTerminal } from './virtual-terminal'
+export * from './claude'
+export * from './codex'
