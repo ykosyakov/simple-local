@@ -38,3 +38,9 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Local scripts
+scripts/
+
+# Docs (private)
+docs/
