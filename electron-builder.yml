@@ -20,12 +20,10 @@ nsis:
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist
+  identity: null
   target:
-    - target: dmg
-      arch: universal
-    - target: zip
-      arch: universal
-  x64ArchFiles: "Contents/Resources/app.asar.unpacked/node_modules/**"
+    - dmg
+    - zip
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
@@ -33,7 +31,7 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage
