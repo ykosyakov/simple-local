@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import fixPath from 'fix-path'
 import { setupIpcHandlers } from './ipc'
-import { setupAutoUpdater } from './updater'
+import { setupUpdaterIpc } from './updater'
 import { setupTray } from './tray'
 import { createApiServer, ApiServer } from './services/api-server'
 import { createLogger } from '../shared/logger'
@@ -64,10 +64,8 @@ app.whenReady().then(async () => {
   // Setup tray
   setupTray(mainWindow)
 
-  // Setup auto-updater (production only)
-  if (!is.dev) {
-    setupAutoUpdater(mainWindow)
-  }
+  // Setup updater IPC handlers (always) and auto-updater (production only)
+  setupUpdaterIpc(mainWindow, !is.dev)
 
   // Start API server
   try {

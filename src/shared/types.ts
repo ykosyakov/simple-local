@@ -172,3 +172,25 @@ export interface AppSettings {
 // Agent Terminal Types - re-exported for use in preload/renderer
 export type { SessionState, AgentEvent, AgentSessionInfo } from '../main/modules/agent-terminal'
 
+// Auto-updater types
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+
+export interface UpdateInfo {
+  version: string
+  releaseDate?: string
+}
+
+export interface UpdateProgress {
+  percent: number
+  bytesPerSecond: number
+  transferred: number
+  total: number
+}
+
+export interface UpdateState {
+  status: UpdateStatus
+  info?: UpdateInfo
+  progress?: UpdateProgress
+  error?: string
+}
+

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, ServiceResourceStats, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride, PortExtractionResult } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, ServiceResourceStats, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride, PortExtractionResult, UpdateState } from '../shared/types'
 
 const api = {
   // Registry
@@ -127,6 +127,21 @@ const api = {
       const handler = (_event: Electron.IpcRendererEvent, sessionId: string) => callback(sessionId)
       ipcRenderer.on('agent-terminal:closed', handler)
       return () => ipcRenderer.removeListener('agent-terminal:closed', handler)
+    },
+  },
+
+  // Updater
+  updater: {
+    getVersion: (): Promise<string> => ipcRenderer.invoke('updater:get-version'),
+    getState: (): Promise<UpdateState> => ipcRenderer.invoke('updater:get-state'),
+    check: (): Promise<void> => ipcRenderer.invoke('updater:check'),
+    download: (): Promise<void> => ipcRenderer.invoke('updater:download'),
+    install: (): Promise<void> => ipcRenderer.invoke('updater:install'),
+    dismiss: (): Promise<void> => ipcRenderer.invoke('updater:dismiss'),
+    onStateChange: (callback: (state: UpdateState) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: UpdateState) => callback(state)
+      ipcRenderer.on('updater:state-change', handler)
+      return () => ipcRenderer.removeListener('updater:state-change', handler)
     },
   },
 }

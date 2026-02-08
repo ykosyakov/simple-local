@@ -1,5 +1,6 @@
 import { FolderPlus, Settings, Loader2, Trash2, Zap } from "lucide-react";
-import type { Project } from "../../../shared/types";
+import type { Project, UpdateState } from "../../../shared/types";
+import { VersionIndicator } from "./VersionIndicator";
 
 interface SidebarProps {
   projects: Project[];
@@ -8,6 +9,9 @@ interface SidebarProps {
   onAddProject: () => void;
   onOpenSettings: () => void;
   onDeleteProject: (project: Project) => void;
+  version: string;
+  updateState: UpdateState;
+  onVersionClick: () => void;
 }
 
 export function Sidebar({
@@ -17,6 +21,9 @@ export function Sidebar({
   onAddProject,
   onOpenSettings,
   onDeleteProject,
+  version,
+  updateState,
+  onVersionClick,
 }: SidebarProps) {
   return (
     <aside
@@ -129,14 +136,21 @@ export function Sidebar({
         className="p-3"
         style={{ borderTop: "1px solid var(--border-subtle)" }}
       >
-        <button
-          onClick={onOpenSettings}
-          className="project-item w-full"
-          style={{ color: "var(--text-muted)" }}
-        >
-          <Settings className="h-4 w-4" />
-          <span className="text-sm">Settings</span>
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={onOpenSettings}
+            className="project-item flex-1"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <Settings className="h-4 w-4" />
+            <span className="text-sm">Settings</span>
+          </button>
+          <VersionIndicator
+            version={version}
+            state={updateState}
+            onClick={onVersionClick}
+          />
+        </div>
       </div>
     </aside>
   );

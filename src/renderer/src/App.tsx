@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { ProjectView } from "./components/ProjectView";
 import { ConfirmModal } from "./components/ConfirmModal";
+import { UpdateModal } from "./components/UpdateModal";
 import { DiscoveryScreen } from "./components/discovery";
 import { SetupScreen } from "./components/SetupScreen";
 import { Layers } from "lucide-react";
@@ -14,6 +15,7 @@ import type {
 } from "../../shared/types";
 import { createLogger } from "../../shared/logger";
 import { useAppSetup } from "./hooks/useAppSetup";
+import { useUpdater } from "./hooks/useUpdater";
 
 const log = createLogger("Renderer");
 
@@ -29,6 +31,38 @@ function App() {
     openSettings,
     cancelSettings,
   } = useAppSetup();
+
+  // Updater state
+  const {
+    version,
+    updateState,
+    checkForUpdates,
+    downloadUpdate,
+    installUpdate,
+    dismissUpdate,
+  } = useUpdater();
+
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+
+  // Auto-show modal when update is available or ready
+  useEffect(() => {
+    if (updateState.status === 'available' || updateState.status === 'ready') {
+      setShowUpdateModal(true);
+    }
+  }, [updateState.status]);
+
+  const handleVersionClick = useCallback(() => {
+    if (updateState.status === 'available' || updateState.status === 'ready' || updateState.status === 'error') {
+      setShowUpdateModal(true);
+    } else if (updateState.status === 'idle') {
+      checkForUpdates();
+    }
+  }, [updateState.status, checkForUpdates]);
+
+  const handleDismissUpdate = useCallback(() => {
+    setShowUpdateModal(false);
+    dismissUpdate();
+  }, [dismissUpdate]);
 
   // Project state
   const [registry, setRegistry] = useState<Registry | null>(null);
@@ -236,6 +270,9 @@ function App() {
         onAddProject={handleAddProject}
         onOpenSettings={openSettings}
         onDeleteProject={setProjectToDelete}
+        version={version}
+        updateState={updateState}
+        onVersionClick={handleVersionClick}
       />
 
       <ConfirmModal
@@ -245,6 +282,15 @@ function App() {
         onConfirm={handleDeleteProject}
         onCancel={() => setProjectToDelete(null)}
       />
+
+      {showUpdateModal && (
+        <UpdateModal
+          state={updateState}
+          onDownload={downloadUpdate}
+          onInstall={installUpdate}
+          onDismiss={handleDismissUpdate}
+        />
+      )}
 
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header
