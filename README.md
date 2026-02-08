@@ -1,8 +1,15 @@
 # Simple Local
 
-Simple Local is a desktop app for running multi-service projects locally without the hassle. Point it at a project folder, and it uses AI to discover your services — start commands, ports, dependencies, environment variables — then gives you a single dashboard to start, stop, and monitor everything. It auto-allocates ports so services don't collide, handles container vs. native environment differences, and keeps all your logs in one place instead of spread across a dozen terminal tabs.
+A desktop app for running multi-service projects locally without the hassle.
 
-It also ships with a built-in MCP server, so any AI coding agent (Claude Code, Cursor, etc.) can start/stop services, check statuses, and read logs without leaving the conversation.
+Point it at a project folder and it uses AI to discover your services — start commands, ports, dependencies, environment variables — then gives you a single dashboard to manage everything.
+
+- **One-click start/stop** for all your services
+- **AI-powered discovery** — no manual config needed
+- **Auto port allocation** so services don't collide
+- **Container or native** — run each service your way
+- **Unified logs** — no more dozen terminal tabs
+- **Built-in MCP server** — AI agents (Claude Code, Cursor, etc.) can manage services without leaving the conversation
 
 ## Install
 
