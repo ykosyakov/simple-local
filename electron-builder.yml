@@ -22,8 +22,14 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   identity: null
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
@@ -40,7 +46,7 @@ linux:
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
-npmRebuild: true
+npmRebuild: false
 publish:
   provider: github
   releaseType: draft
