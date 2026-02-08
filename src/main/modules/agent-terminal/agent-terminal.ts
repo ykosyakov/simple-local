@@ -1,12 +1,13 @@
 import { Observable, map, share, filter, first, race, timer, Subscription } from 'rxjs'
 import { createPtySession, PtySession } from './pty-session'
-import { ClaudeAdapter } from './adapters/claude'
-import { CodexAdapter } from './adapters/codex'
+import { ClaudeStreamAdapter, ClaudeTuiAdapter } from './adapters/claude'
+import { CodexStreamAdapter, CodexTuiAdapter } from './adapters/codex'
 import type { AgentAdapter } from './adapters/types'
-import type { AgentEvent, AiAgentId, SessionState } from './types'
+import type { AgentEvent, AgentMode, AiAgentId, SessionState } from './types'
 
 export interface SpawnOptions {
   agent: AiAgentId
+  mode?: AgentMode
   cwd: string
   prompt?: string
   args?: string[]
@@ -42,20 +43,24 @@ function delay(ms: number): Promise<void> {
 
 export class AgentTerminal {
   private sessions = new Map<string, AgentSession>()
-  private adapters: Map<AiAgentId, AgentAdapter>
+  private adapters: Map<string, AgentAdapter>
   private promptSubscriptions = new Map<string, Subscription>()
 
   constructor() {
     this.adapters = new Map([
-      ['claude', new ClaudeAdapter()],
-      ['codex', new CodexAdapter()],
+      ['claude:stream', new ClaudeStreamAdapter()],
+      ['claude:tui', new ClaudeTuiAdapter()],
+      ['codex:stream', new CodexStreamAdapter()],
+      ['codex:tui', new CodexTuiAdapter()],
     ])
   }
 
   spawn(options: SpawnOptions): AgentSession {
-    const adapter = this.adapters.get(options.agent)
+    const mode = options.mode ?? 'stream'
+    const key = `${options.agent}:${mode}`
+    const adapter = this.adapters.get(key)
     if (!adapter) {
-      throw new Error(`Unknown agent: ${options.agent}`)
+      throw new Error(`Unknown agent/mode: ${key}`)
     }
 
     const command = adapter.buildCommand()

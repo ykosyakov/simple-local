@@ -3,6 +3,7 @@
     "allow": [
       "WebSearch",
       "Bash(git add:*)",
+      "Bash(git *)",
       "Bash(git commit:*)",
       "Bash(npm create:*)",
       "Bash(npm install:*)",
@@ -60,7 +61,20 @@
       "WebFetch(domain:news.ycombinator.com)",
       "Bash(docker info:*)",
       "Bash(docker context inspect:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git log:*)",
+      "Bash(npx electron-vite build:*)",
+      "Bash(node scripts/capture-claude-tui.mjs:*)",
+      "Bash(git -C /Users/yury/projects/simple-local log --oneline -5)",
+      "Bash(echo:*)",
+      "Bash(kill:*)",
+      "Bash(chmod:*)",
+      "Bash(./scripts/ad-read.sh:*)",
+      "Bash(./scripts/ad-send.sh:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:xtermjs.org)",
+      "WebFetch(domain:snyk.io)",
+      "Bash(python3:*)"
     ]
   }
 }

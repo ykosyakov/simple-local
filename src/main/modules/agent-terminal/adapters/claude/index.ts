@@ -1,5 +1,8 @@
-export { ClaudeAdapter } from './adapter'
-export type { TuiParserType } from './adapter'
+export { ClaudeTuiAdapter } from './tui-adapter'
+export type { TuiParserType } from './tui-adapter'
+export { ClaudeStreamAdapter } from './stream-adapter'
+export { mapClaudeStreamEvent } from './stream-json-parser'
+export type { ClaudeStreamEvent, ClaudeContentBlock, ClaudeMessage } from './stream-json-parser'
 export { XtermTuiParser, normalizeBlockText } from './xterm-parser'
 export {
   parseTuiChunk,

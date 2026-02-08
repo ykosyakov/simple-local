@@ -1,24 +1,20 @@
 import type { Observable } from 'rxjs'
 import type { AgentAdapter, AdapterOptions } from '../types'
 import type { AgentEvent, AiAgentId } from '../../types'
-import { parseCodexJsonLines } from './json-lines-parser'
 
-export class CodexAdapter implements AgentAdapter {
+export class CodexTuiAdapter implements AgentAdapter {
   readonly agentId: AiAgentId = 'codex'
+  readonly interactivePrompt = true
 
   buildCommand(): string {
     return 'codex'
   }
 
   buildArgs(options: AdapterOptions): string[] {
-    const args: string[] = ['exec', '--json', '--full-auto']
+    const args: string[] = []
 
     if (options.args) {
       args.push(...options.args)
-    }
-
-    if (options.prompt) {
-      args.push(options.prompt)
     }
 
     return args
@@ -28,7 +24,7 @@ export class CodexAdapter implements AgentAdapter {
     return {}
   }
 
-  parse(raw$: Observable<string>): Observable<AgentEvent> {
-    return parseCodexJsonLines(raw$)
+  parse(_raw$: Observable<string>): Observable<AgentEvent> {
+    throw new Error('CodexTuiAdapter.parse() is not implemented')
   }
 }

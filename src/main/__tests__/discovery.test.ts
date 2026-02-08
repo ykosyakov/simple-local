@@ -9,6 +9,8 @@ import {
   makeUniqueId,
   allocatePort,
   detectHardcodedPort,
+  detectPackageManager,
+  extractScriptName,
 } from '../services/discovery'
 import type { AgentTerminal } from '../modules/agent-terminal'
 
@@ -21,7 +23,7 @@ const testService = {
   port: 3500,
   env: {},
   active: true,
-  mode: 'container' as const,
+  mode: 'native' as const,
 }
 
 // Factory functions for creating mocks
@@ -767,5 +769,184 @@ describe('externalCallbackUrls', () => {
     const result = (discovery as any).convertToProjectConfig(aiOutput, '/test/project', 3000, 9200)
 
     expect(result.services[0].externalCallbackUrls).toBeUndefined()
+  })
+})
+
+describe('extractScriptName', () => {
+  it('extracts from "npm run dev"', () => {
+    expect(extractScriptName('npm run dev')).toBe('dev')
+  })
+
+  it('extracts from "pnpm run dev"', () => {
+    expect(extractScriptName('pnpm run dev')).toBe('dev')
+  })
+
+  it('extracts from "pnpm dev" (implicit run)', () => {
+    expect(extractScriptName('pnpm dev')).toBe('dev')
+  })
+
+  it('extracts from "yarn run start"', () => {
+    expect(extractScriptName('yarn run start')).toBe('start')
+  })
+
+  it('extracts from "yarn dev" (implicit run)', () => {
+    expect(extractScriptName('yarn dev')).toBe('dev')
+  })
+
+  it('extracts from "bun run dev"', () => {
+    expect(extractScriptName('bun run dev')).toBe('dev')
+  })
+
+  it('extracts from "bun dev" (implicit run)', () => {
+    expect(extractScriptName('bun dev')).toBe('dev')
+  })
+
+  it('returns undefined for raw commands', () => {
+    expect(extractScriptName('next dev --turbopack')).toBeUndefined()
+  })
+
+  it('returns undefined for empty string', () => {
+    expect(extractScriptName('')).toBeUndefined()
+  })
+})
+
+describe('detectPackageManager', () => {
+  it('detects pnpm from pnpm-lock.yaml', async () => {
+    const fs = createMockFileSystem({
+      readdir: vi.fn().mockResolvedValue([
+        { name: 'pnpm-lock.yaml', isFile: () => true, isDirectory: () => false },
+        { name: 'package.json', isFile: () => true, isDirectory: () => false },
+      ]),
+    })
+    expect(await detectPackageManager('/project', fs)).toBe('pnpm')
+  })
+
+  it('detects yarn from yarn.lock', async () => {
+    const fs = createMockFileSystem({
+      readdir: vi.fn().mockResolvedValue([
+        { name: 'yarn.lock', isFile: () => true, isDirectory: () => false },
+      ]),
+    })
+    expect(await detectPackageManager('/project', fs)).toBe('yarn')
+  })
+
+  it('detects bun from bun.lockb', async () => {
+    const fs = createMockFileSystem({
+      readdir: vi.fn().mockResolvedValue([
+        { name: 'bun.lockb', isFile: () => true, isDirectory: () => false },
+      ]),
+    })
+    expect(await detectPackageManager('/project', fs)).toBe('bun')
+  })
+
+  it('detects npm from package-lock.json', async () => {
+    const fs = createMockFileSystem({
+      readdir: vi.fn().mockResolvedValue([
+        { name: 'package-lock.json', isFile: () => true, isDirectory: () => false },
+      ]),
+    })
+    expect(await detectPackageManager('/project', fs)).toBe('npm')
+  })
+
+  it('returns undefined when no lockfile found', async () => {
+    const fs = createMockFileSystem({
+      readdir: vi.fn().mockResolvedValue([
+        { name: 'package.json', isFile: () => true, isDirectory: () => false },
+      ]),
+    })
+    expect(await detectPackageManager('/project', fs)).toBeUndefined()
+  })
+
+  it('prefers pnpm over npm when both lockfiles exist', async () => {
+    const fs = createMockFileSystem({
+      readdir: vi.fn().mockResolvedValue([
+        { name: 'pnpm-lock.yaml', isFile: () => true, isDirectory: () => false },
+        { name: 'package-lock.json', isFile: () => true, isDirectory: () => false },
+      ]),
+    })
+    expect(await detectPackageManager('/project', fs)).toBe('pnpm')
+  })
+})
+
+describe('basicDiscovery with package manager', () => {
+  let discovery: DiscoveryService
+  let mockFs: FileSystemOperations
+
+  beforeEach(() => {
+    mockFs = createMockFileSystem()
+    discovery = new DiscoveryService({
+      fileSystem: mockFs,
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('uses detected package manager in command', async () => {
+    vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+      if (dirPath === '/project') {
+        return [
+          { name: 'package.json', isDirectory: () => false, isFile: () => true },
+          { name: 'pnpm-lock.yaml', isDirectory: () => false, isFile: () => true },
+        ]
+      }
+      return []
+    })
+    vi.mocked(mockFs.readFile).mockResolvedValue(JSON.stringify({
+      name: 'my-app',
+      scripts: { dev: 'next dev' },
+      dependencies: { next: '^14.0.0' },
+    }))
+
+    const result = await discovery.basicDiscovery('/project')
+
+    expect(result.services[0].command).toBe('pnpm run dev')
+  })
+
+  it('detects hardcoded port from resolved script content', async () => {
+    vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+      if (dirPath === '/project') {
+        return [
+          { name: 'package.json', isDirectory: () => false, isFile: () => true },
+        ]
+      }
+      return []
+    })
+    vi.mocked(mockFs.readFile).mockResolvedValue(JSON.stringify({
+      name: 'my-app',
+      scripts: { dev: 'next dev --turbopack --port 3501' },
+      dependencies: { next: '^14.0.0' },
+    }))
+
+    const result = await discovery.basicDiscovery('/project')
+
+    expect(result.services[0].hardcodedPort).toEqual({
+      value: 3501,
+      source: 'command-flag',
+      flag: '--port',
+    })
+  })
+
+  it('does not set hardcodedPort when script uses $PORT', async () => {
+    vi.mocked(mockFs.readdir).mockImplementation(async (dirPath) => {
+      if (dirPath === '/project') {
+        return [
+          { name: 'package.json', isDirectory: () => false, isFile: () => true },
+        ]
+      }
+      return []
+    })
+    vi.mocked(mockFs.readFile).mockResolvedValue(JSON.stringify({
+      name: 'my-app',
+      scripts: { dev: 'next dev --port $PORT' },
+      dependencies: { next: '^14.0.0' },
+    }))
+
+    const result = await discovery.basicDiscovery('/project')
+
+    expect(result.services[0].hardcodedPort).toBeUndefined()
   })
 })

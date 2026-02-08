@@ -119,6 +119,10 @@ Makefile locations:
 Tool config files (Inngest, Temporal, Trigger.dev, etc.):
 {{TOOL_CONFIGS}}
 
+Package manager: {{PACKAGE_MANAGER}}
+
+IMPORTANT: Use "{{PACKAGE_MANAGER}}" in all commands instead of "npm". For example: "{{PACKAGE_MANAGER}} run dev", not "npm run dev".
+
 IMPORTANT: Write your result to this exact file: {{RESULT_FILE}}
 
 Use the Write tool to create the file with this JSON:
@@ -300,6 +304,7 @@ export interface ScanResult {
   envFiles: string[]
   makefilePaths: string[]
   toolConfigPaths: string[]
+  packageManager?: 'npm' | 'pnpm' | 'yarn' | 'bun'
 }
 
 export interface EnvAnalysisOptions {
@@ -336,6 +341,7 @@ export function buildDiscoveryPrompt(options: DiscoveryPromptOptions): string {
     .replace('{{ENV_FILES}}', formatPathList(scanResult.envFiles))
     .replace('{{MAKEFILES}}', formatPathList(scanResult.makefilePaths))
     .replace('{{TOOL_CONFIGS}}', formatPathList(scanResult.toolConfigPaths))
+    .replace(/\{\{PACKAGE_MANAGER\}\}/g, scanResult.packageManager ?? 'npm')
     .replace('{{RESULT_FILE}}', sanitizePath(resultFilePath))
 }
 

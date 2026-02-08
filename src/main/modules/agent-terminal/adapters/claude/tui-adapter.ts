@@ -6,7 +6,7 @@ import { XtermTuiParser } from './xterm-parser'
 
 export type TuiParserType = 'xterm' | 'legacy'
 
-export class ClaudeAdapter implements AgentAdapter {
+export class ClaudeTuiAdapter implements AgentAdapter {
   readonly agentId: AiAgentId = 'claude'
   readonly interactivePrompt = true
 

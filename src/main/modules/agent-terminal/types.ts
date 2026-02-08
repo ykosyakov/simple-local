@@ -1,5 +1,7 @@
 export type AiAgentId = 'claude' | 'codex'
 
+export type AgentMode = 'stream' | 'tui'
+
 export type SessionState = 'idle' | 'running' | 'exited'
 
 export type AgentEvent =

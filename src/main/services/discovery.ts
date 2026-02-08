@@ -244,14 +244,39 @@ export function detectHardcodedPort(command: string): HardcodedPort | undefined 
   return undefined
 }
 
-const FRONTEND_FRAMEWORKS = new Set(['next', 'react', 'vue', 'vite', 'webpack', 'parcel'])
-const BACKEND_FRAMEWORKS = new Set(['express', 'fastify', 'nest', 'django', 'flask', 'rails', 'spring'])
+/**
+ * Detects the package manager used in a project by checking for lockfiles.
+ * @internal Exported for testing
+ */
+export async function detectPackageManager(
+  projectPath: string,
+  fsOps: Pick<FileSystemOperations, 'readdir'>
+): Promise<ScanResult['packageManager']> {
+  const lockfiles: [string, NonNullable<ScanResult['packageManager']>][] = [
+    ['pnpm-lock.yaml', 'pnpm'],
+    ['yarn.lock', 'yarn'],
+    ['bun.lockb', 'bun'],
+    ['package-lock.json', 'npm'],
+  ]
+  try {
+    const entries = await fsOps.readdir(projectPath, { withFileTypes: true })
+    for (const [filename, pm] of lockfiles) {
+      if (entries.some(e => e.isFile() && e.name === filename)) return pm
+    }
+  } catch { /* ignore */ }
+  return undefined
+}
 
-function getDefaultMode(framework?: string): 'native' | 'container' {
-  if (!framework) return 'native'
-  if (FRONTEND_FRAMEWORKS.has(framework.toLowerCase())) return 'native'
-  if (BACKEND_FRAMEWORKS.has(framework.toLowerCase())) return 'container'
-  return 'native'
+/**
+ * Extracts the script name from a package manager run command.
+ * e.g., "npm run dev" → "dev", "pnpm dev" → "dev"
+ * @internal Exported for testing
+ */
+export function extractScriptName(command: string): string | undefined {
+  const match = command.match(
+    /^(?:npm\s+run|pnpm(?:\s+run)?|yarn(?:\s+run)?|bun(?:\s+run)?)\s+(\S+)/
+  )
+  return match?.[1]
 }
 
 export class DiscoveryService {
@@ -328,6 +353,7 @@ export class DiscoveryService {
     }
 
     await scan(projectPath, 0)
+    result.packageManager = await detectPackageManager(projectPath, this.fs)
     return result
   }
 
@@ -455,7 +481,9 @@ export class DiscoveryService {
     if (result.success && result.data) {
       log.info('Parsed result:', JSON.stringify(result.data, null, 2))
       onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
-      return this.convertToProjectConfig(result.data, projectPath, basePort, debugPortBase)
+      const config = this.convertToProjectConfig(result.data, projectPath, basePort, debugPortBase)
+      await this.resolveHardcodedPorts(config, projectPath)
+      return config
     } else {
       log.error('AI discovery failed:', result.error)
       onProgress?.({ projectPath, step: 'error', message: result.error || 'AI discovery failed' })
@@ -541,7 +569,7 @@ export class DiscoveryService {
         dependsOn: s.dependsOn,
         devcontainer: isService ? `.simple-local/devcontainers/${serviceId}/devcontainer.json` : undefined,
         active: true,
-        mode: isService ? getDefaultMode(s.framework || s.type) : 'native',
+        mode: 'native',
         containerEnvOverrides: s.containerEnvOverrides || [],
         hardcodedPort,
         externalCallbackUrls: s.externalCallbackUrls,
@@ -577,6 +605,34 @@ export class DiscoveryService {
     return {
       name: projectName,
       services,
+    }
+  }
+
+  /**
+   * For services without hardcodedPort, resolves the actual script content
+   * from package.json and checks for hardcoded ports there.
+   */
+  private async resolveHardcodedPorts(config: ProjectConfig, projectPath: string): Promise<void> {
+    for (const service of config.services) {
+      if (service.hardcodedPort) continue
+
+      const scriptName = extractScriptName(service.command)
+      if (!scriptName) continue
+
+      try {
+        const pkgJsonPath = path.join(projectPath, service.path, 'package.json')
+        const content = await this.fs.readFile(pkgJsonPath, 'utf-8')
+        const pkg = JSON.parse(content)
+        const scriptContent = pkg.scripts?.[scriptName]
+        if (!scriptContent) continue
+
+        const detected = detectHardcodedPort(scriptContent)
+        if (detected) {
+          service.hardcodedPort = detected
+        }
+      } catch {
+        log.debug(`Could not resolve script for ${service.id}: file missing or parse error`)
+      }
     }
   }
 
@@ -617,7 +673,7 @@ export class DiscoveryService {
             id: serviceId,
             name: info.name,
             path: relativePath || '.',
-            command: info.devScript.includes('bun') ? `bun run dev` : `npm run dev`,
+            command: `${scanResult.packageManager ?? 'npm'} run dev`,
             port: allocatedPort,
             debugPort: allocatedDebugPort,
             discoveredPort: info.port,       // Original port from package.json
@@ -628,7 +684,7 @@ export class DiscoveryService {
             env: {},
             devcontainer: `.simple-local/devcontainers/${serviceId}/devcontainer.json`,
             active: true,
-            mode: getDefaultMode(info.framework),
+            mode: 'native' as const,
           })
         }
       } catch (err) {
@@ -641,6 +697,7 @@ export class DiscoveryService {
       services,
     }
 
+    await this.resolveHardcodedPorts(config, projectPath)
     log.info('Basic discovery result:', JSON.stringify(config, null, 2))
     return config
   }

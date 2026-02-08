@@ -1,6 +1,7 @@
 // Types
 export type {
   AiAgentId,
+  AgentMode,
   SessionState,
   AgentEvent,
   AgentSessionInfo,
@@ -16,8 +17,8 @@ export type { SpawnOptions, AgentSession } from './agent-terminal'
 
 // Adapters
 export type { AgentAdapter, AdapterOptions } from './adapters/types'
-export { ClaudeAdapter } from './adapters/claude'
-export { CodexAdapter } from './adapters/codex'
+export { ClaudeTuiAdapter, ClaudeStreamAdapter } from './adapters/claude'
+export { CodexStreamAdapter, CodexTuiAdapter } from './adapters/codex'
 export { parseTuiChunk, createTuiParser, PERMISSION_KEYS, stripAnsi } from './adapters/claude'
 export type { TuiParseResult, TuiParserState, StatefulTuiParser } from './adapters/claude'
 

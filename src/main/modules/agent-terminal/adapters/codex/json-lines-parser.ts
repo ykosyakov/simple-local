@@ -1,5 +1,6 @@
 import { Observable, mergeMap, from } from 'rxjs'
 import type { AgentEvent } from '../../types'
+import { JsonLinesParser } from '../shared/json-lines-parser'
 
 // ── Codex JSON Lines types ──────────────────────────────────────────
 
@@ -89,43 +90,17 @@ function mapItemCompleted(item: CodexItem): AgentEvent[] {
 // ── CodexJsonLinesParser ────────────────────────────────────────────
 
 export class CodexJsonLinesParser {
-  private buffer = ''
+  private parser = new JsonLinesParser<AgentEvent>(
+    (parsed) => mapCodexEvent(parsed as CodexEvent),
+    (line) => [{ type: 'output', text: line }]
+  )
 
   feed(chunk: string): AgentEvent[] {
-    this.buffer += chunk
-    const events: AgentEvent[] = []
-
-    // Split on newlines, keeping incomplete trailing data in buffer
-    const lines = this.buffer.split('\n')
-    this.buffer = lines.pop()! // last element is either '' or incomplete line
-
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-
-      let parsed: CodexEvent
-      try {
-        parsed = JSON.parse(trimmed) as CodexEvent
-      } catch {
-        // Non-JSON line (stderr noise in PTY)
-        events.push({ type: 'output', text: trimmed })
-        continue
-      }
-
-      events.push(...mapCodexEvent(parsed))
-    }
-
-    return events
+    return this.parser.feed(chunk)
   }
 
   flush(): AgentEvent[] {
-    if (!this.buffer.trim()) {
-      this.buffer = ''
-      return []
-    }
-    const remaining = this.buffer
-    this.buffer = ''
-    return this.feed(remaining + '\n')
+    return this.parser.flush()
   }
 }
 
