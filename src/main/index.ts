@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { setupIpcHandlers } from './ipc'
+import { setupAutoUpdater } from './updater'
 import { setupTray } from './tray'
 import { createApiServer, ApiServer } from './services/api-server'
 import { createLogger } from '../shared/logger'
@@ -59,6 +60,11 @@ app.whenReady().then(async () => {
 
   // Setup tray
   setupTray(mainWindow)
+
+  // Setup auto-updater (production only)
+  if (!is.dev) {
+    setupAutoUpdater(mainWindow)
+  }
 
   // Start API server
   try {

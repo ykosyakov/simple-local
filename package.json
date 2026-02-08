@@ -1,6 +1,6 @@
 {
   "name": "simple-local",
-  "version": "1.0.0",
+  "version": "0.5.0",
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
@@ -9,6 +9,10 @@
     ]
   },
   "description": "Desktop app for managing local dev infrastructure with devcontainer-based service isolation",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ykosyakov/simple-local.git"
+  },
   "main": "./out/main/index.js",
   "author": "",
   "license": "MIT",
@@ -43,6 +47,7 @@
     "@xterm/xterm": "^6.0.0",
     "dockerode": "^4.0.9",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.7.3",
     "lucide-react": "^0.563.0",
     "node-pty": "^1.1.0",
     "react-hook-form": "^7.71.1",
