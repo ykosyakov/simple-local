@@ -255,25 +255,6 @@ describe('DiscoveryService', () => {
     })
   })
 
-  describe('buildDiscoveryPrompt', () => {
-    it('creates structured prompt for AI', () => {
-      const prompt = discovery.buildDiscoveryPrompt(
-        {
-          packageJsonPaths: ['/project/frontend/package.json'],
-          dockerComposePaths: [],
-          envFiles: ['/project/frontend/.env'],
-          makefilePaths: [],
-          toolConfigPaths: [],
-        },
-        '/project/.simple-local/discovery-result.json'
-      )
-
-      expect(prompt).toContain('package.json')
-      expect(prompt).toContain('JSON')
-      expect(prompt).toContain('discovery-result.json')
-    })
-  })
-
   describe('buildEnvAnalysisPrompt', () => {
     it('generates prompt with service path and result file', () => {
       const prompt = discovery.buildEnvAnalysisPrompt(
@@ -772,6 +753,50 @@ describe('resolveHardcodedPorts', () => {
       source: 'command-flag',
       flag: '-p',
     })
+    expect(config.services[0].useOriginalPort).toBe(true)
+    expect(config.services[0].port).toBe(4000)
+  })
+
+  it('backfills discoveredPort when AI missed port but script has hardcoded port', async () => {
+    const mockFs = createMockFileSystem({
+      readFile: vi.fn().mockResolvedValue(JSON.stringify({
+        scripts: { dev: 'next dev -p 4000' },
+      })),
+    })
+    const discovery = new DiscoveryService({
+      fileSystem: mockFs,
+      agentTerminalFactory: createMockAgentTerminalFactory(),
+      commandChecker: createMockCommandChecker(true),
+    })
+
+    const config: ProjectConfig = {
+      name: 'test',
+      services: [{
+        id: 'web',
+        name: 'Web',
+        type: 'service',
+        path: '.',
+        command: 'npm run dev',
+        port: 3000,
+        // discoveredPort is undefined — AI missed it
+        allocatedPort: 3000,
+        useOriginalPort: false,
+        env: {},
+        active: true,
+        mode: 'native',
+        containerEnvOverrides: [],
+      }],
+    }
+
+    await (discovery as any).resolveHardcodedPorts(config, '/project')
+
+    expect(config.services[0].hardcodedPort).toEqual({
+      value: 4000,
+      source: 'command-flag',
+      flag: '-p',
+    })
+    // discoveredPort should be backfilled from the hardcoded port
+    expect(config.services[0].discoveredPort).toBe(4000)
     expect(config.services[0].useOriginalPort).toBe(true)
     expect(config.services[0].port).toBe(4000)
   })

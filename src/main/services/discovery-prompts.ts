@@ -5,8 +5,8 @@
  * making prompts easier to version, test, and maintain.
  */
 
-import * as path from 'path'
-import type { Service } from '../../shared/types'
+import * as path from "path";
+import type { Service } from "../../shared/types";
 
 // ====================
 // Validation utilities
@@ -22,27 +22,16 @@ export function sanitizePath(filePath: string): string {
   // Reject control characters that could manipulate prompt
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f]/.test(filePath)) {
-    throw new Error('Path contains invalid control characters')
+    throw new Error("Path contains invalid control characters");
   }
 
   // Reject excessively long paths (Windows MAX_PATH is 260, macOS ~1024)
   if (filePath.length > 1024) {
-    throw new Error('Path exceeds maximum length')
+    throw new Error("Path exceeds maximum length");
   }
 
   // Normalize the path to resolve . and ..
-  return path.normalize(filePath)
-}
-
-/**
- * Sanitizes a list of paths, formatting them as a bullet list.
- * Returns "(none)" if the list is empty.
- */
-export function formatPathList(paths: string[]): string {
-  if (paths.length === 0) {
-    return '(none)'
-  }
-  return paths.map((p) => `- ${sanitizePath(p)}`).join('\n')
+  return path.normalize(filePath);
 }
 
 // ====================
@@ -89,39 +78,16 @@ Rules:
 - Skip cloud URLs (*.supabase.co, *.amazonaws.com, etc.)
 - The "reason" should identify the service type (Redis, Postgres, Supabase, etc.)
 - Always set enabled: true
-- If no localhost URLs found, write: {"overrides": []}`
+- If no localhost URLs found, write: {"overrides": []}`;
 
 /**
  * Template for project discovery prompt.
  * Placeholders:
- * - {{PACKAGE_FILES}} - List of package.json paths
- * - {{DOCKER_FILES}} - List of docker-compose file paths
- * - {{ENV_FILES}} - List of .env file paths
- * - {{MAKEFILES}} - List of Makefile paths
- * - {{TOOL_CONFIGS}} - List of tool config file paths
  * - {{RESULT_FILE}} - Path where agent should write results
  */
-export const DISCOVERY_PROMPT_TEMPLATE = `Analyze this project to discover runnable services AND 3rd party dev tools.
+export const DISCOVERY_PROMPT_TEMPLATE = `Explore this project to discover runnable services AND 3rd party dev tools.
 
-Found files:
-Package.json files:
-{{PACKAGE_FILES}}
-
-Docker Compose files:
-{{DOCKER_FILES}}
-
-Environment files:
-{{ENV_FILES}}
-
-Makefile locations:
-{{MAKEFILES}}
-
-Tool config files (Inngest, Temporal, Trigger.dev, etc.):
-{{TOOL_CONFIGS}}
-
-Package manager: {{PACKAGE_MANAGER}}
-
-IMPORTANT: Use "{{PACKAGE_MANAGER}}" in all commands instead of "npm". For example: "{{PACKAGE_MANAGER}} run dev", not "npm run dev".
+You have Glob, Grep, Read, and Write tools. Use them to explore the project autonomously.
 
 IMPORTANT: Write your result to this exact file: {{RESULT_FILE}}
 
@@ -133,8 +99,8 @@ Use the Write tool to create the file with this JSON:
       "name": "Display Name",
       "type": "service",
       "path": "relative/path",
-      "command": "npm run dev",
-      "debugCommand": "npm run debug",
+      "command": "pnpm run dev",
+      "debugCommand": "pnpm run debug",
       "port": 3000,
       "debugPort": 9229,
       "env": {},
@@ -156,44 +122,55 @@ Use the Write tool to create the file with this JSON:
   "connections": []
 }
 
-## Step 1: Discover Services
-Read each package.json to find:
-- Run commands: "dev", "start", "serve" scripts
-- Debug commands: "debug", "dev:debug", or scripts with --inspect
-- Ports from scripts, config, or .env files (look for PORT=NNNN in .env, .env.local, .env.development, .env.example)
+## Step 1: Identify Tech Stack and Package Manager
+
+Find project markers. What stack, package manager, etc. is this project using?
+
+## Step 2: Discover Services
+
+Read manifest files (package.json, pyproject.toml, go.mod, Cargo.toml, requirements.txt, etc.) to find:
+- Run/debug commands
+- **Port detection (IMPORTANT — always set "port" when possible):**
+  - Script flags: -p NNNN, --port NNNN, --port=NNNN
+  - Environment files: PORT=NNNN in .env, .env.local, .env.development, .env.example
+  - Config files: port settings in next.config.js, vite.config.ts, nuxt.config.ts, settings.py, etc.
+  - Framework defaults when no explicit port: Next.js=3000, Vite=5173, CRA=3000, Vue CLI=8080, Django=8000, Flask=5000, Rails=3000, FastAPI=8000, Go=8080
 - Service dependencies
 
-## Step 2: Discover 3rd Party Tools
+For monorepos, check for workspaces (packages/, apps/, services/ directories).
+
+## Step 3: Discover 3rd Party Tools
+
 Look for long-running dev tools that need to run alongside services:
 
-| File/Pattern | Tool | Example Command | Default Port |
-|-------------|------|-----------------|--------------|
-| inngest.json, inngest.ts, inngest/ | Inngest | npx inngest-cli@latest dev | 8288 |
-| temporal.yaml, temporal/ | Temporal | temporal server start-dev | 7233 |
-| trigger.config.ts | Trigger.dev | npx trigger.dev@latest dev | 3030 |
-| docker-compose.yml (redis) | Redis | docker compose up redis | 6379 |
-| docker-compose.yml (postgres) | PostgreSQL | docker compose up postgres | 5432 |
-| docker-compose.yml (localstack) | LocalStack | docker compose up localstack | 4566 |
-| .stripe/, stripe webhook config | Stripe CLI | stripe listen --forward-to localhost:3000/webhook | - |
-| Makefile (dev/watch/serve targets) | Make | make dev | - |
+| File/Pattern | Tool | Default Port |
+|---|---|---|
+| inngest.json, inngest.ts, inngest/ | Inngest | 8288 |
+| temporal.yaml, temporal/ | Temporal | 7233 |
+| trigger.config.ts | Trigger.dev | 3030 |
+| docker-compose.yml (redis) | Redis | 6379 |
+| docker-compose.yml (postgres) | PostgreSQL | 5432 |
+| docker-compose.yml (localstack) | LocalStack | 4566 |
+| .stripe/ | Stripe CLI | - |
+| Makefile (dev/watch/serve) | Make | - |
 
 Only include tools that:
 - Are long-running (stay running during dev)
 - Are actually used by this project (config files exist)
 - Don't duplicate already-discovered services
 
-## Step 3: Capture Environment Variables with Port References
-For each service, find env vars containing localhost:PORT or 127.0.0.1:PORT.
+## Step 4: Capture Environment Variables with Port References
+
+For each service, find env vars containing the actual port number used.
 
 Sources to check:
 - .env files (.env, .env.local, .env.development, .env.example)
-- Config files (next.config.js, vite.config.ts, nuxt.config.ts, etc.)
+- Config files (next.config.js, vite.config.ts, nuxt.config.ts, settings.py, etc.)
 - Setup scripts (docker-compose.yml environment sections)
-- Code that reads process.env with port-containing values
+- Code that reads env vars with port-containing values
 
 IMPORTANT: Only include env vars that are ACTUALLY USED by the service:
-- Check if the var is referenced in config files
-- Check if it appears in process.env.VAR_NAME patterns in code
+- Check if the var is referenced in config files or code
 - Skip vars that exist in .env but aren't used anywhere
 
 For each confirmed env var:
@@ -202,14 +179,14 @@ For each confirmed env var:
 3. Add a connection entry
 
 Example: If frontend/.env has API_URL=http://localhost:3000/api/v1 and:
-- next.config.js references process.env.API_URL
+- config references this env var
 - Backend service runs on port 3000
 
 Then:
 - Add to frontend service: "env": { "API_URL": "http://localhost:3000/api/v1" }
 - Add connection: { "from": "frontend", "to": "backend", "envVar": "API_URL" }
 
-## Step 4: Identify External Callback URLs
+## Step 5: Identify External Callback URLs
 
 Find environment variables containing URLs that third-party providers need to know about.
 
@@ -222,18 +199,14 @@ For each callback URL found, add to that service's "externalCallbackUrls" array:
 - provider: your best guess at the provider (Clerk, Auth0, Stripe, etc.) or null if unclear
 - description: brief explanation (e.g., "OAuth redirect URI", "Webhook endpoint")
 
-Example:
-If frontend/.env has NEXT_PUBLIC_CLERK_SIGN_IN_URL=http://localhost:3000/sign-in:
-- Add to frontend service: "externalCallbackUrls": [{"envVar": "NEXT_PUBLIC_CLERK_SIGN_IN_URL", "provider": "Clerk", "description": "Sign-in redirect URL"}]
-
 ## Field notes:
 - "type": "service" for your code, "tool" for 3rd party tools
 - "command": Primary run command (required)
-- "port": Application port (optional for tools that don't expose ports)
+- "port": Application port (IMPORTANT: always include for services)
 - "dependsOn": Tools can depend on services (e.g., inngest depends on backend)
-- "env": Environment variables with port references (captured in Step 3)
+- "env": Environment variables with port references (captured in Step 4)
 
-Only include services/tools with runnable commands.`
+Only include services/tools with runnable commands.`;
 
 /**
  * Template for port extraction prompt.
@@ -292,78 +265,75 @@ Rules:
 - Only transform references to port {{PORT}}, not other ports
 - If .env already has PORT, don't add it to envAdditions
 - If uncertain about a transformation, add to warnings instead of guessing
-- If no changes needed, return empty changes array`
+- If no changes needed, return empty changes array`;
 
 // ====================
 // Builder functions
 // ====================
 
 export interface ScanResult {
-  packageJsonPaths: string[]
-  dockerComposePaths: string[]
-  envFiles: string[]
-  makefilePaths: string[]
-  toolConfigPaths: string[]
-  packageManager?: 'npm' | 'pnpm' | 'yarn' | 'bun'
+  packageJsonPaths: string[];
+  dockerComposePaths: string[];
+  envFiles: string[];
+  makefilePaths: string[];
+  toolConfigPaths: string[];
+  packageManager?: "npm" | "pnpm" | "yarn" | "bun";
 }
 
 export interface EnvAnalysisOptions {
-  projectPath: string
-  service: Service
-  resultFilePath: string
+  projectPath: string;
+  service: Service;
+  resultFilePath: string;
 }
 
 export interface DiscoveryPromptOptions {
-  scanResult: ScanResult
-  resultFilePath: string
+  resultFilePath: string;
 }
 
 /**
  * Builds the environment analysis prompt for a service.
  */
 export function buildEnvAnalysisPrompt(options: EnvAnalysisOptions): string {
-  const { projectPath, service, resultFilePath } = options
-  const servicePath = path.join(projectPath, service.path)
+  const { projectPath, service, resultFilePath } = options;
+  const servicePath = path.join(projectPath, service.path);
 
-  return ENV_ANALYSIS_TEMPLATE.replace('{{SERVICE_NAME}}', service.name)
-    .replace('{{SERVICE_PATH}}', sanitizePath(servicePath))
-    .replace('{{RESULT_FILE}}', sanitizePath(resultFilePath))
+  return ENV_ANALYSIS_TEMPLATE.replace("{{SERVICE_NAME}}", service.name)
+    .replace("{{SERVICE_PATH}}", sanitizePath(servicePath))
+    .replace("{{RESULT_FILE}}", sanitizePath(resultFilePath));
 }
 
 /**
- * Builds the project discovery prompt from scan results.
+ * Builds the stack-agnostic project discovery prompt.
  */
 export function buildDiscoveryPrompt(options: DiscoveryPromptOptions): string {
-  const { scanResult, resultFilePath } = options
+  const { resultFilePath } = options;
 
-  return DISCOVERY_PROMPT_TEMPLATE.replace('{{PACKAGE_FILES}}', formatPathList(scanResult.packageJsonPaths))
-    .replace('{{DOCKER_FILES}}', formatPathList(scanResult.dockerComposePaths))
-    .replace('{{ENV_FILES}}', formatPathList(scanResult.envFiles))
-    .replace('{{MAKEFILES}}', formatPathList(scanResult.makefilePaths))
-    .replace('{{TOOL_CONFIGS}}', formatPathList(scanResult.toolConfigPaths))
-    .replace(/\{\{PACKAGE_MANAGER\}\}/g, scanResult.packageManager ?? 'npm')
-    .replace('{{RESULT_FILE}}', sanitizePath(resultFilePath))
+  return DISCOVERY_PROMPT_TEMPLATE.replace(
+    "{{RESULT_FILE}}",
+    sanitizePath(resultFilePath),
+  );
 }
 
 export interface PortExtractionPromptOptions {
-  serviceName: string
-  servicePath: string
-  command: string
-  port: number
-  resultFilePath: string
+  serviceName: string;
+  servicePath: string;
+  command: string;
+  port: number;
+  resultFilePath: string;
 }
 
 /**
  * Builds the port extraction prompt for a service.
  */
-export function buildPortExtractionPrompt(options: PortExtractionPromptOptions): string {
-  const { serviceName, servicePath, command, port, resultFilePath } = options
-  const portStr = String(port)
+export function buildPortExtractionPrompt(
+  options: PortExtractionPromptOptions,
+): string {
+  const { serviceName, servicePath, command, port, resultFilePath } = options;
+  const portStr = String(port);
 
-  return PORT_EXTRACTION_TEMPLATE
-    .replace(/\{\{SERVICE_NAME\}\}/g, serviceName)
+  return PORT_EXTRACTION_TEMPLATE.replace(/\{\{SERVICE_NAME\}\}/g, serviceName)
     .replace(/\{\{SERVICE_PATH\}\}/g, sanitizePath(servicePath))
     .replace(/\{\{COMMAND\}\}/g, command)
     .replace(/\{\{PORT\}\}/g, portStr)
-    .replace(/\{\{RESULT_FILE\}\}/g, sanitizePath(resultFilePath))
+    .replace(/\{\{RESULT_FILE\}\}/g, sanitizePath(resultFilePath));
 }

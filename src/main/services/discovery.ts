@@ -7,7 +7,7 @@ import { AgentTerminal } from '../modules/agent-terminal'
 import type { AiAgentId } from '../modules/agent-terminal'
 import { createLogger } from '../../shared/logger'
 import {
-  buildDiscoveryPrompt as buildDiscoveryPromptFromTemplate,
+  buildDiscoveryPrompt,
   buildEnvAnalysisPrompt as buildEnvAnalysisPromptFromTemplate,
   type ScanResult,
 } from './discovery-prompts'
@@ -436,13 +436,6 @@ export class DiscoveryService {
     }
   }
 
-  buildDiscoveryPrompt(scanResult: ScanResult, resultFilePath: string): string {
-    return buildDiscoveryPromptFromTemplate({
-      scanResult,
-      resultFilePath,
-    })
-  }
-
   async runAIDiscovery(
     projectPath: string,
     cliTool: AiAgentId = 'claude',
@@ -452,16 +445,10 @@ export class DiscoveryService {
   ): Promise<ProjectConfig | null> {
     log.info('Starting AI discovery for:', projectPath)
 
-    log.info('Scanning project structure...')
-    onProgress?.({ projectPath, step: 'scanning', message: 'Scanning file structure...' })
-
-    const scanResult = await this.scanProjectStructure(projectPath)
-    log.info('Scan result:', JSON.stringify(scanResult, null, 2))
-
-    onProgress?.({ projectPath, step: 'scanning', message: `Found ${scanResult.packageJsonPaths.length} package.json files` })
+    onProgress?.({ projectPath, step: 'ai-analysis', message: 'Starting AI exploration...' })
 
     const resultFile = path.join(projectPath, '.simple-local', 'discovery-result.json')
-    const prompt = this.buildDiscoveryPrompt(scanResult, resultFile)
+    const prompt = buildDiscoveryPrompt({ resultFilePath: resultFile })
 
     const result = await this.agentRunner.run<AIDiscoveryOutput>({
       cwd: projectPath,
@@ -483,6 +470,10 @@ export class DiscoveryService {
       onProgress?.({ projectPath, step: 'complete', message: 'Discovery complete' })
       const config = this.convertToProjectConfig(result.data, projectPath, basePort, debugPortBase)
       await this.resolveHardcodedPorts(config, projectPath)
+      // Debug: log final port state after all processing
+      for (const s of config.services) {
+        log.info(`Final: ${s.id} → port=${s.port}, discoveredPort=${s.discoveredPort}, allocatedPort=${s.allocatedPort}, useOriginal=${s.useOriginalPort}, hardcoded=${s.hardcodedPort?.value}`)
+      }
       return config
     } else {
       log.error('AI discovery failed:', result.error)
@@ -506,6 +497,11 @@ export class DiscoveryService {
     // Ports are now always allocated from project range, not from AI
     for (const s of aiOutput.services) {
       if (s.id) usedIds.add(s.id)
+    }
+
+    // Debug: log raw AI output ports to help diagnose missing discoveredPort
+    for (const s of aiOutput.services) {
+      log.info(`AI output: ${s.id || s.name} → port=${s.port}, type=${s.type}, command=${s.command}`)
     }
 
     const services: Service[] = aiOutput.services.map((s) => {
@@ -634,10 +630,11 @@ export class DiscoveryService {
         const detected = detectHardcodedPort(scriptContent)
         if (detected) {
           service.hardcodedPort = detected
-          if (service.discoveredPort) {
-            service.useOriginalPort = true
-            service.port = service.discoveredPort
+          if (!service.discoveredPort) {
+            service.discoveredPort = detected.value
           }
+          service.useOriginalPort = true
+          service.port = service.discoveredPort
         }
       } catch {
         log.debug(`Could not resolve script for ${service.id}: file missing or parse error`)

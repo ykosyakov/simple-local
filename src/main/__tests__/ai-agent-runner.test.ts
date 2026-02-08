@@ -108,10 +108,10 @@ describe('AIAgentRunner', () => {
       expect(mockFs.mkdir).toHaveBeenCalledWith('/test/project/.simple-local', { recursive: true })
     })
 
-    it('cleans up previous result file', async () => {
+    it('keeps previous result file for debugging', async () => {
       await runner.run(baseConfig)
 
-      expect(mockFs.unlink).toHaveBeenCalledWith('/test/project/.simple-local/result.json')
+      expect(mockFs.unlink).not.toHaveBeenCalled()
     })
 
     it('spawns agent terminal with correct config', async () => {

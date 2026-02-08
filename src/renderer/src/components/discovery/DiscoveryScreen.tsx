@@ -21,8 +21,8 @@ interface DiscoveryScreenProps {
 
 export function DiscoveryScreen({ projectPath, onComplete, onCancel }: DiscoveryScreenProps) {
   const [screenState, setScreenState] = useState<ScreenState>('agent-select')
-  const [currentStep, setCurrentStep] = useState<DiscoveryStep>('scanning')
-  const [message, setMessage] = useState('Scanning file structure...')
+  const [currentStep, setCurrentStep] = useState<DiscoveryStep>('ai-analysis')
+  const [message, setMessage] = useState('Starting AI exploration...')
   const [logs, setLogs] = useState<string[]>([])
   const [discoveredServices, setDiscoveredServices] = useState<Service[]>([])
   const [manualServices, setManualServices] = useState<Service[]>([])
@@ -32,8 +32,8 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
 
   const runDiscovery = useCallback(async (agentId?: AiAgentId) => {
     setScreenState('discovering')
-    setCurrentStep('scanning')
-    setMessage('Scanning file structure...')
+    setCurrentStep('ai-analysis')
+    setMessage('Starting AI exploration...')
     setLogs([])
 
     try {
@@ -235,6 +235,12 @@ export function DiscoveryScreen({ projectPath, onComplete, onCancel }: Discovery
       {screenState === 'discovering' && (
         <div className="space-y-6">
           <DiscoveryProgress currentStep={currentStep} message={message} />
+          <p
+            className="text-xs"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            This may take several minutes depending on project size and complexity.
+          </p>
           <DiscoveryTerminal logs={logs} />
           <div className="flex justify-end">
             <button onClick={onCancel} className="btn btn-ghost">

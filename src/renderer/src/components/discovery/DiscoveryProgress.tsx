@@ -7,7 +7,6 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { id: 'scanning', label: 'Scanning file structure' },
   { id: 'ai-analysis', label: 'Running AI analysis' },
   { id: 'processing', label: 'Processing results' },
 ]

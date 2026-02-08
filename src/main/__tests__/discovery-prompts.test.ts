@@ -1,11 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   sanitizePath,
-  formatPathList,
   buildEnvAnalysisPrompt,
   buildDiscoveryPrompt,
   buildPortExtractionPrompt,
-  ENV_ANALYSIS_TEMPLATE,
   DISCOVERY_PROMPT_TEMPLATE,
 } from '../services/discovery-prompts'
 
@@ -36,30 +34,6 @@ describe('discovery-prompts', () => {
       // path.normalize handles platform differences
       const result = sanitizePath('packages\\backend\\src')
       expect(result).toMatch(/packages.*backend.*src/)
-    })
-  })
-
-  describe('formatPathList', () => {
-    it('returns "(none)" for empty lists', () => {
-      expect(formatPathList([])).toBe('(none)')
-    })
-
-    it('formats single path as bullet point', () => {
-      expect(formatPathList(['/project/package.json'])).toBe('- /project/package.json')
-    })
-
-    it('formats multiple paths as bullet list', () => {
-      const result = formatPathList(['/project/frontend/package.json', '/project/backend/package.json'])
-      expect(result).toBe('- /project/frontend/package.json\n- /project/backend/package.json')
-    })
-
-    it('sanitizes paths in the list', () => {
-      const result = formatPathList(['/project/./src/../package.json'])
-      expect(result).toBe('- /project/package.json')
-    })
-
-    it('throws for paths with control characters', () => {
-      expect(() => formatPathList(['/project\x00/malicious'])).toThrow('invalid control characters')
     })
   })
 
@@ -124,69 +98,31 @@ describe('discovery-prompts', () => {
   })
 
   describe('buildDiscoveryPrompt', () => {
-    const baseScanResult = {
-      packageJsonPaths: [],
-      dockerComposePaths: [],
-      envFiles: [],
-      makefilePaths: [],
-      toolConfigPaths: [],
-    }
-
-    it('builds prompt with package.json paths', () => {
-      const prompt = buildDiscoveryPrompt({
-        scanResult: {
-          ...baseScanResult,
-          packageJsonPaths: ['/project/frontend/package.json', '/project/backend/package.json'],
-        },
-        resultFilePath: '/project/.simple-local/discovery-result.json',
-      })
-
-      expect(prompt).toContain('- /project/frontend/package.json')
-      expect(prompt).toContain('- /project/backend/package.json')
-    })
-
-    it('shows "(none)" for empty file lists', () => {
-      const prompt = buildDiscoveryPrompt({
-        scanResult: baseScanResult,
-        resultFilePath: '/project/result.json',
-      })
-
-      expect(prompt).toContain('Docker Compose files:\n(none)')
-      expect(prompt).toContain('Environment files:\n(none)')
-      expect(prompt).toContain('Makefile locations:\n(none)')
-    })
-
-    it('includes all scan result categories', () => {
-      const prompt = buildDiscoveryPrompt({
-        scanResult: {
-          packageJsonPaths: ['/project/package.json'],
-          dockerComposePaths: ['/project/docker-compose.yml'],
-          envFiles: ['/project/.env'],
-          makefilePaths: ['/project/Makefile'],
-          toolConfigPaths: ['/project/inngest.json'],
-        },
-        resultFilePath: '/project/result.json',
-      })
-
-      expect(prompt).toContain('/project/package.json')
-      expect(prompt).toContain('/project/docker-compose.yml')
-      expect(prompt).toContain('/project/.env')
-      expect(prompt).toContain('/project/Makefile')
-      expect(prompt).toContain('/project/inngest.json')
-    })
-
     it('includes result file path', () => {
       const prompt = buildDiscoveryPrompt({
-        scanResult: baseScanResult,
         resultFilePath: '/project/.simple-local/discovery-result.json',
       })
 
       expect(prompt).toContain('IMPORTANT: Write your result to this exact file: /project/.simple-local/discovery-result.json')
     })
 
+    it('includes stack-agnostic exploration instructions', () => {
+      const prompt = buildDiscoveryPrompt({
+        resultFilePath: '/project/result.json',
+      })
+
+      expect(prompt).toContain('Glob')
+      expect(prompt).toContain('Grep')
+      expect(prompt).toContain('Read')
+      expect(prompt).toContain('package.json')
+      expect(prompt).toContain('go.mod')
+      expect(prompt).toContain('Cargo.toml')
+      expect(prompt).toContain('pyproject.toml')
+      expect(prompt).toContain('requirements.txt')
+    })
+
     it('includes tool discovery table', () => {
       const prompt = buildDiscoveryPrompt({
-        scanResult: baseScanResult,
         resultFilePath: '/project/result.json',
       })
 
@@ -198,24 +134,31 @@ describe('discovery-prompts', () => {
       expect(prompt).toContain('Stripe CLI')
     })
 
-    it('sanitizes all interpolated paths', () => {
+    it('includes explicit port detection instructions', () => {
       const prompt = buildDiscoveryPrompt({
-        scanResult: {
-          ...baseScanResult,
-          packageJsonPaths: ['/project/./src/../package.json'],
-        },
+        resultFilePath: '/project/result.json',
+      })
+
+      expect(prompt).toContain('Port detection (IMPORTANT')
+      expect(prompt).toContain('Script flags: -p NNNN')
+      expect(prompt).toContain('Framework defaults')
+      expect(prompt).toContain('Next.js=3000')
+      expect(prompt).toContain('Vite=5173')
+      expect(prompt).toContain('always include for services')
+    })
+
+    it('sanitizes result file path', () => {
+      const prompt = buildDiscoveryPrompt({
         resultFilePath: '/project/./result.json',
       })
 
-      expect(prompt).toContain('- /project/package.json')
       expect(prompt).toContain('/project/result.json')
-      expect(prompt).not.toContain('..')
+      expect(prompt).not.toContain('/project/./result.json')
     })
 
     it('throws for paths with control characters', () => {
       expect(() =>
         buildDiscoveryPrompt({
-          scanResult: baseScanResult,
           resultFilePath: '/project\x00/result.json',
         })
       ).toThrow('invalid control characters')
@@ -223,19 +166,11 @@ describe('discovery-prompts', () => {
   })
 
   describe('templates', () => {
-    it('ENV_ANALYSIS_TEMPLATE has all required placeholders', () => {
-      expect(ENV_ANALYSIS_TEMPLATE).toContain('{{SERVICE_NAME}}')
-      expect(ENV_ANALYSIS_TEMPLATE).toContain('{{SERVICE_PATH}}')
-      expect(ENV_ANALYSIS_TEMPLATE).toContain('{{RESULT_FILE}}')
-    })
-
-    it('DISCOVERY_PROMPT_TEMPLATE has all required placeholders', () => {
-      expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{PACKAGE_FILES}}')
-      expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{DOCKER_FILES}}')
-      expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{ENV_FILES}}')
-      expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{MAKEFILES}}')
-      expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{TOOL_CONFIGS}}')
+    it('DISCOVERY_PROMPT_TEMPLATE has only RESULT_FILE placeholder', () => {
       expect(DISCOVERY_PROMPT_TEMPLATE).toContain('{{RESULT_FILE}}')
+      expect(DISCOVERY_PROMPT_TEMPLATE).not.toContain('{{PACKAGE_FILES}}')
+      expect(DISCOVERY_PROMPT_TEMPLATE).not.toContain('{{DOCKER_FILES}}')
+      expect(DISCOVERY_PROMPT_TEMPLATE).not.toContain('{{PACKAGE_MANAGER}}')
     })
   })
 

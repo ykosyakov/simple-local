@@ -13,7 +13,7 @@ import { createLogger } from '../../shared/logger'
 import type { FileSystemOperations, AgentTerminalFactory, CommandChecker } from './discovery'
 
 const log = createLogger('AIAgentRunner')
-const AI_AGENT_TIMEOUT = 120000 // 2 minutes for AI analysis
+const AI_AGENT_TIMEOUT = 600000 // 10 minutes for AI analysis
 
 // Strip ANSI escape codes for clean log output (used for output events from adapters like Codex)
 function stripAnsi(str: string): string {
@@ -130,12 +130,9 @@ export class AIAgentRunner {
     const resultDir = path.dirname(resultFilePath)
     await this.fs.mkdir(resultDir, { recursive: true })
 
-    // Clean up any previous result
-    try {
-      await this.fs.unlink(resultFilePath)
-    } catch {
-      // File doesn't exist, that's fine
-    }
+    // Keep previous result file for debugging — the AI's Write tool overwrites it.
+    // The old file is only read if the agent completes successfully,
+    // so a stale file from a previous run won't cause false positives.
 
     const terminal = this.agentTerminalFactory.create()
     const subscriptions: { unsubscribe: () => void }[] = []
