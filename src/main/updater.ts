@@ -64,6 +64,7 @@ export function setupUpdaterIpc(window: BrowserWindow, production: boolean): voi
       log.info('Skipping install in dev mode')
       return
     }
+    app.isQuitting = true
     autoUpdater.quitAndInstall()
   })
 
