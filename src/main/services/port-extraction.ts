@@ -70,7 +70,7 @@ export class PortExtractionService {
   async analyzeService(
     projectPath: string,
     service: Service,
-    onProgress?: (message: string) => void
+    onProgress?: (message: string, log?: string) => void
   ): Promise<PortExtractionResult | null> {
     if (!service.hardcodedPort) {
       log.info('Service has no hardcoded port, skipping:', service.id)
@@ -96,7 +96,7 @@ export class PortExtractionService {
       resultFilePath: resultFile,
       allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
       cliTool: 'claude',
-      onProgress: (message) => onProgress?.(message),
+      onProgress: (message, logLine) => onProgress?.(message, logLine),
     })
 
     if (result.success && result.data) {

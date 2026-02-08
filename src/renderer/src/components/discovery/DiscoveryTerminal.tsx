@@ -3,9 +3,10 @@ import { Terminal } from 'lucide-react'
 
 interface DiscoveryTerminalProps {
   logs: string[]
+  title?: string
 }
 
-export function DiscoveryTerminal({ logs }: DiscoveryTerminalProps) {
+export function DiscoveryTerminal({ logs, title = 'Discovery Output' }: DiscoveryTerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -34,7 +35,7 @@ export function DiscoveryTerminal({ logs }: DiscoveryTerminalProps) {
           className="text-xs font-medium"
           style={{ color: 'var(--text-secondary)' }}
         >
-          Discovery Output
+          {title}
         </span>
       </div>
 

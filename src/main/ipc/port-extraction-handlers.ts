@@ -30,8 +30,8 @@ export function setupPortExtractionHandlers(
       }
 
       const win = BrowserWindow.fromWebContents(event.sender)
-      const sendProgress = (message: string) => {
-        win?.webContents.send('ports:extract:progress', { serviceId, message })
+      const sendProgress = (message: string, log?: string) => {
+        win?.webContents.send('ports:extract:progress', { serviceId, message, log })
       }
 
       const result = await portExtraction.analyzeService(project.path, service, sendProgress)

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, AlertTriangle, Check, Loader2 } from 'lucide-react'
+import { DiscoveryTerminal } from './discovery/DiscoveryTerminal'
 import type { Service, PortExtractionResult } from '../../../shared/types'
 
 interface PortExtractionModalProps {
@@ -21,6 +22,20 @@ export function PortExtractionModal({
   const [result, setResult] = useState<PortExtractionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [commitChanges, setCommitChanges] = useState(true)
+  const [statusMessage, setStatusMessage] = useState(`Analyzing ${service.name} for port extraction...`)
+  const [logs, setLogs] = useState<string[]>([])
+
+  // Subscribe to progress events
+  useEffect(() => {
+    const unsubscribe = window.api.ports.onExtractProgress?.((data) => {
+      if (data.serviceId !== service.id) return
+      setStatusMessage(data.message)
+      if (data.log) {
+        setLogs((prev) => [...prev.slice(-100), data.log!])
+      }
+    })
+    return () => { unsubscribe?.() }
+  }, [service.id])
 
   useEffect(() => {
     const analyze = async () => {
@@ -93,11 +108,12 @@ export function PortExtractionModal({
         {/* Content */}
         <div className="max-h-[60vh] overflow-y-auto p-6">
           {step === 'analyzing' && (
-            <div className="flex flex-col items-center gap-4 py-8">
-              <Loader2 className="h-8 w-8 animate-spin" style={{ color: 'var(--accent-primary)' }} />
-              <p style={{ color: 'var(--text-secondary)' }}>
-                Analyzing {service.name} for port extraction...
-              </p>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin" style={{ color: 'var(--accent-primary)' }} />
+                <p style={{ color: 'var(--text-secondary)' }}>{statusMessage}</p>
+              </div>
+              <DiscoveryTerminal logs={logs} title="Agent Output" />
             </div>
           )}
 

@@ -86,8 +86,8 @@ const api = {
       options: { commit: boolean }
     ): Promise<{ success: boolean; error?: string }> =>
       ipcRenderer.invoke('ports:extract:apply', projectId, serviceId, changes, options),
-    onExtractProgress: (callback: (data: { serviceId: string; message: string }) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, data: { serviceId: string; message: string }) =>
+    onExtractProgress: (callback: (data: { serviceId: string; message: string; log?: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: { serviceId: string; message: string; log?: string }) =>
         callback(data)
       ipcRenderer.on('ports:extract:progress', handler)
       return () => ipcRenderer.removeListener('ports:extract:progress', handler)
