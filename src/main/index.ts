@@ -1,12 +1,15 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import fixPath from 'fix-path'
 import { setupIpcHandlers } from './ipc'
 import { setupAutoUpdater } from './updater'
 import { setupTray } from './tray'
 import { createApiServer, ApiServer } from './services/api-server'
 import { createLogger } from '../shared/logger'
 import './electron-types'
+
+fixPath()
 
 const log = createLogger('Main')
 
