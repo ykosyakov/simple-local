@@ -1,6 +1,6 @@
 {
   "name": "simple-local",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
