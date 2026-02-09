@@ -24,7 +24,10 @@ jobs:
       - run: npm run build
 
       - name: Build and publish
-        run: npx electron-builder --mac --arm64 --publish always
+        run: >
+          npx electron-builder --mac --arm64 --publish always
+          -c.mac.artifactName='${name}-${version}-mac-apple-silicon.${ext}'
+          -c.dmg.artifactName='${name}-${version}-mac-apple-silicon.${ext}'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -43,7 +46,10 @@ jobs:
       - run: npm run build
 
       - name: Build and publish
-        run: npx electron-builder --mac --x64 --publish always
+        run: >
+          npx electron-builder --mac --x64 --publish always
+          -c.mac.artifactName='${name}-${version}-mac-intel.${ext}'
+          -c.dmg.artifactName='${name}-${version}-mac-intel.${ext}'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -82,5 +88,20 @@ jobs:
 
       - name: Build and publish
         run: npx electron-builder --linux --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  cleanup:
+    needs: [build-macos-arm64, build-macos-x64, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove blockmap files from release
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release view "$TAG" --json assets -q '.assets[].name' | while read -r asset; do
+            if [[ "$asset" == *.blockmap ]]; then
+              gh release delete-asset "$TAG" "$asset" --yes
+            fi
+          done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

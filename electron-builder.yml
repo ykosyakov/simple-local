@@ -14,11 +14,12 @@ asarUnpack:
 win:
   executableName: simple-local
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${name}-${version}-win-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
   entitlementsInherit: build/entitlements.mac.plist
   identity: null
   target:
@@ -31,7 +32,7 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}-${arch}.${ext}
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
 linux:
   target:
     - AppImage
@@ -39,7 +40,9 @@ linux:
   maintainer: ykosyakov
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-linux.${ext}
+deb:
+  artifactName: ${name}-${version}-linux.${ext}
 npmRebuild: false
 publish:
   provider: github
