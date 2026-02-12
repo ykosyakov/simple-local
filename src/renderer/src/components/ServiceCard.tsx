@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Cpu, HardDrive, ExternalLink, Copy, Check } from 'lucide-react'
+import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Cpu, HardDrive, ExternalLink, Copy, Check, Variable } from 'lucide-react'
 import type { Service, ServiceStatus, ServiceResourceStats } from '../../../shared/types'
 
 interface ServiceCardProps {
@@ -17,6 +17,7 @@ interface ServiceCardProps {
   onModeChange?: (serviceId: string, mode: 'native' | 'container') => void
   onPortToggle?: (serviceId: string) => void
   onExtractPort?: (serviceId: string) => void
+  onViewEnv?: (serviceId: string) => void
   index?: number
 }
 
@@ -62,6 +63,7 @@ export const ServiceCard = memo(function ServiceCard({
   onModeChange,
   onPortToggle,
   onExtractPort,
+  onViewEnv,
   index = 0,
 }: ServiceCardProps) {
   const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null)
@@ -395,6 +397,20 @@ export const ServiceCard = memo(function ServiceCard({
             title="Hide service"
           >
             <EyeOff className="h-3.5 w-3.5" />
+          </button>
+        )}
+
+        {isBusy && onViewEnv && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onViewEnv(service.id)
+            }}
+            className="btn btn-ghost"
+            style={{ padding: '0.375rem' }}
+            title="View environment variables"
+          >
+            <Variable className="h-3.5 w-3.5" />
           </button>
         )}
 

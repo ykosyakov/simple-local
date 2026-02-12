@@ -194,3 +194,11 @@ export interface UpdateState {
   error?: string
 }
 
+export interface ServiceRuntimeEnv {
+  raw: Record<string, string>
+  final: Record<string, string>
+  warnings: string[]
+  mode: 'native' | 'container'
+  startedAt: number
+}
+

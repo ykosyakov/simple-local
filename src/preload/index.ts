@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, ServiceResourceStats, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride, PortExtractionResult, UpdateState } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ServiceRuntimeEnv, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride, PortExtractionResult, UpdateState } from '../shared/types'
 
 const api = {
   // Registry
@@ -20,6 +20,8 @@ const api = {
     ipcRenderer.invoke('service:status', projectId),
   getServiceStats: (projectId: string, serviceId: string): Promise<ServiceResourceStats | null> =>
     ipcRenderer.invoke('service:stats', projectId, serviceId),
+  getServiceEnv: (projectId: string, serviceId: string): Promise<ServiceRuntimeEnv | null> =>
+    ipcRenderer.invoke('service:env:get', projectId, serviceId),
 
   // Logs
   startLogStream: (projectId: string, serviceId: string): Promise<void> =>

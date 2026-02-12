@@ -6,8 +6,9 @@ import { ConfigEditorModal } from './ConfigEditorModal'
 import { EnvOverridesPanel } from './EnvOverridesPanel'
 import { PortExtractionModal } from './PortExtractionModal'
 import { ConfirmModal } from './ConfirmModal'
+import { EnvVarsModal } from './EnvVarsModal'
 import { Server, Code2, RefreshCw } from 'lucide-react'
-import type { Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ContainerEnvOverride, Service } from '../../../shared/types'
+import type { Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ServiceRuntimeEnv, ContainerEnvOverride, Service } from '../../../shared/types'
 import { createLogger } from '../../../shared/logger'
 
 const log = createLogger('ProjectView')
@@ -93,6 +94,8 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     newPort: number
   } | null>(null)
   const [logHeight, setLogHeight] = useState(350)
+  const [envModalService, setEnvModalService] = useState<{ serviceId: string; serviceName: string } | null>(null)
+  const [envModalData, setEnvModalData] = useState<ServiceRuntimeEnv | null>(null)
   const resizeRef = useRef({ active: false, startY: 0, startHeight: 0 })
 
   const loadConfig = useCallback(async () => {
@@ -380,6 +383,20 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     }
   }, [config?.services])
 
+  const handleViewEnv = useCallback(async (serviceId: string) => {
+    const service = config?.services.find(s => s.id === serviceId)
+    if (!service) return
+
+    setEnvModalService({ serviceId, serviceName: service.name })
+    const env = await window.api.getServiceEnv(project.id, serviceId)
+    setEnvModalData(env)
+  }, [config?.services, project.id])
+
+  const handleCloseEnvModal = useCallback(() => {
+    setEnvModalService(null)
+    setEnvModalData(null)
+  }, [])
+
   const handleResizeStart = useCallback((e: ReactMouseEvent) => {
     const ref = resizeRef.current
     ref.active = true
@@ -558,6 +575,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
               onModeChange={handleModeChange}
               onPortToggle={handlePortToggle}
               onExtractPort={handleExtractPort}
+              onViewEnv={handleViewEnv}
               index={index}
             />
           ))}
@@ -636,6 +654,14 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         confirmLabel="Restart"
         onConfirm={confirmPortToggle}
         onCancel={() => setRestartConfirm(null)}
+      />
+
+      {/* Environment Variables Modal */}
+      <EnvVarsModal
+        isOpen={envModalService !== null}
+        serviceName={envModalService?.serviceName ?? ''}
+        env={envModalData}
+        onClose={handleCloseEnvModal}
       />
     </div>
   )

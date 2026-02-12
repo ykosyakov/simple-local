@@ -5,6 +5,7 @@ import { ProjectConfigService } from '../services/project-config'
 import { RegistryService } from '../services/registry'
 import { LogManager } from '../services/log-manager'
 import { StatsManager } from '../services/stats-manager'
+import { RuntimeEnvManager } from '../services/runtime-env-manager'
 import { getServiceContext, getProjectContext } from '../services/service-lookup'
 import { sanitizeServiceId, validatePathWithinProject } from '../services/validation'
 import { ConfigPaths } from '../services/config-paths'
@@ -84,6 +85,7 @@ async function startServiceCore(
   registry: RegistryService,
   logManager: LogManager,
   statsManager: StatsManager,
+  runtimeEnvManager: RuntimeEnvManager,
   projectId: string,
   serviceId: string,
   modeOverride?: 'native' | 'container'
@@ -120,6 +122,15 @@ async function startServiceCore(
   if (service.debugPort !== undefined) {
     finalEnv.DEBUG_PORT = String(service.debugPort)
   }
+
+  // Store runtime env for UI access
+  runtimeEnvManager.store(projectId, serviceId, {
+    raw: service.env,
+    final: finalEnv,
+    warnings: interpolationErrors,
+    mode: effectiveMode,
+    startedAt: Date.now(),
+  })
 
   const servicePath = `${project.path}/${service.path}`
 
@@ -194,10 +205,11 @@ export function setupServiceHandlers(
   logManager: LogManager = new LogManager()
 ): ServiceHandlersResult {
   const statsManager = new StatsManager(container)
+  const runtimeEnvManager = new RuntimeEnvManager()
 
   ipcMain.handle('service:start', async (_event, projectId: string, serviceId: string) => {
     logManager.clearBuffer(projectId, serviceId)
-    await startServiceCore(container, config, registry, logManager, statsManager, projectId, serviceId)
+    await startServiceCore(container, config, registry, logManager, statsManager, runtimeEnvManager, projectId, serviceId)
   })
 
   ipcMain.handle('service:stop', async (_event, projectId: string, serviceId: string) => {
@@ -206,12 +218,19 @@ export function setupServiceHandlers(
     // Untrack from stats polling
     statsManager.untrackService(projectId, serviceId)
 
+    // Clear runtime env
+    runtimeEnvManager.clear(projectId, serviceId)
+
     if (service.mode === 'native') {
       await container.stopNativeService(serviceId)
     } else {
       const containerName = container.getContainerName(projectConfig.name, serviceId)
       await container.stopService(containerName)
     }
+  })
+
+  ipcMain.handle('service:env:get', (_event, projectId: string, serviceId: string) => {
+    return runtimeEnvManager.get(projectId, serviceId)
   })
 
   ipcMain.handle('service:status', async (_event, projectId: string) => {
@@ -298,7 +317,7 @@ export function setupServiceHandlers(
 
   const startService = async (projectId: string, serviceId: string, modeOverride?: 'native' | 'container'): Promise<void> => {
     logManager.clearBuffer(projectId, serviceId)
-    await startServiceCore(container, config, registry, logManager, statsManager, projectId, serviceId, modeOverride)
+    await startServiceCore(container, config, registry, logManager, statsManager, runtimeEnvManager, projectId, serviceId, modeOverride)
   }
 
   const stopService = async (projectId: string, serviceId: string): Promise<void> => {
@@ -306,6 +325,9 @@ export function setupServiceHandlers(
 
     // Untrack from stats polling
     statsManager.untrackService(projectId, serviceId)
+
+    // Clear runtime env
+    runtimeEnvManager.clear(projectId, serviceId)
 
     if (service.mode === 'native') {
       await container.stopNativeService(serviceId)
