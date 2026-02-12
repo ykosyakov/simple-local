@@ -318,7 +318,7 @@ export const ServiceCard = memo(function ServiceCard({
                         onClick={(e) => handleCopyCallbackUrl(e, url)}
                         className="btn-icon ml-1 shrink-0"
                         style={{ padding: '2px' }}
-                        title={isCopied ? 'Copied!' : url}
+                        data-tooltip={isCopied ? 'Copied!' : 'Copy URL'}
                       >
                         {isCopied ? (
                           <Check className="h-3 w-3" style={{ color: 'var(--status-running)' }} />
@@ -376,7 +376,7 @@ export const ServiceCard = memo(function ServiceCard({
               }}
               className="btn btn-ghost"
               style={{ padding: '0.375rem' }}
-              title="Restart service"
+              data-tooltip="Restart"
               disabled={isStopping}
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -394,7 +394,7 @@ export const ServiceCard = memo(function ServiceCard({
               onHide(service.id)
             }}
             className="btn-icon opacity-0 transition-opacity group-hover:opacity-100"
-            title="Hide service"
+            data-tooltip="Hide"
           >
             <EyeOff className="h-3.5 w-3.5" />
           </button>
@@ -408,7 +408,7 @@ export const ServiceCard = memo(function ServiceCard({
             }}
             className="btn btn-ghost"
             style={{ padding: '0.375rem' }}
-            title="View environment variables"
+            data-tooltip="Environment"
           >
             <Variable className="h-3.5 w-3.5" />
           </button>
@@ -419,7 +419,7 @@ export const ServiceCard = memo(function ServiceCard({
             onClick={handleOpenInBrowser}
             className="btn btn-ghost"
             style={{ padding: '0.375rem' }}
-            title={`Open http://localhost:${service.port}`}
+            data-tooltip={`Open :${service.port}`}
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </button>
