@@ -8,6 +8,15 @@ Point it at a project folder and it uses AI to discover your services — start 
 
 [![Watch the demo](media/demo-thumbnail.png)](https://youtu.be/aeqMkra2n4E)
 
+## Table of contents
+
+- [Features](#features)
+- [Native vs Container mode](#native-vs-container-mode)
+- [MCP server for AI agents](#mcp-server-for-ai-agents)
+- [Manual configuration](#manual-configuration)
+- [Install](#install)
+- [Build from source](#build-from-source)
+
 ## Features
 
 - **AI-powered discovery** — point it at a project folder and it detects services, start commands, ports, dependencies, and environment variables automatically
