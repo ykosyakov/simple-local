@@ -1,10 +1,10 @@
 import { Composition, registerRoot } from "remotion";
 import { DemoVideo } from "./DemoVideo";
 
-// Total: 210+300+330+270+330+360+180 = 1980 scene frames
-// Minus 6 transitions x 15 frames = -90 overlap
-// = 1890 frames = 63 seconds at 30fps
-const DURATION = 1890;
+// Total: 120+300+240+210+270+240+300+300+180 = 2160 scene frames
+// Minus 8 transitions x 15 frames = -120 overlap
+// = 2040 frames = 68 seconds at 30fps
+const DURATION = 2040;
 
 const RemotionRoot = () => {
   return (

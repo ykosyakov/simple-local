@@ -15,13 +15,13 @@ export const RunningScene = () => {
 
   const zoomStyle = zoomPan(frame, fps, {
     startScale: 1,
-    endScale: 1.3,
+    endScale: 1.2,
     startX: 0,
-    endX: -50,
+    endX: -40,
     startY: 0,
-    endY: -30,
-    durationFrames: 330,
-    delay: 40,
+    endY: -20,
+    durationFrames: 240,
+    delay: 30,
   });
 
   return (
@@ -38,7 +38,7 @@ export const RunningScene = () => {
       >
         <div style={zoomStyle}>
           <MacWindow width={1600}>
-            <Img src={staticFile(SCREENSHOTS.artizen)} style={{ width: "100%", display: "block" }} />
+            <Img src={staticFile(SCREENSHOTS.proseona)} style={{ width: "100%", display: "block" }} />
           </MacWindow>
         </div>
       </AbsoluteFill>
@@ -53,18 +53,21 @@ export const RunningScene = () => {
         }}
       >
         {["6 of 10 running", "CPU & Memory stats", "Real-time logs"].map((text, i) => {
-          const progress = spring({ frame, fps, config: SPRING_CONFIGS.snappy, delay: 90 + i * 8 });
+          const progress = spring({ frame, fps, config: SPRING_CONFIGS.snappy, delay: 60 + i * 8 });
           return (
             <div
               key={text}
               style={{
-                padding: "10px 20px",
+                padding: "12px 24px",
                 borderRadius: 8,
-                backgroundColor: "rgba(0, 229, 204, 0.1)",
-                border: `1px solid ${COLORS.accentGlow}`,
+                backgroundColor: "rgba(10, 12, 15, 0.92)",
+                border: `1px solid ${COLORS.accent}`,
                 fontFamily: FONTS.mono,
-                fontSize: 16,
+                fontSize: 18,
+                fontWeight: 600,
                 color: COLORS.accent,
+                boxShadow: `0 0 30px rgba(0, 229, 204, 0.25), 0 4px 20px rgba(0, 0, 0, 0.6)`,
+                backdropFilter: "blur(12px)",
                 opacity: progress,
                 transform: `translateY(${interpolate(progress, [0, 1], [15, 0])}px)`,
               }}

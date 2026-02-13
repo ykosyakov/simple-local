@@ -23,21 +23,7 @@ export const MacWindow: React.FC<MacWindowProps> = ({
         ...style,
       }}
     >
-      <div
-        style={{
-          height: 36,
-          backgroundColor: "#1C1C1E",
-          display: "flex",
-          alignItems: "center",
-          paddingLeft: 14,
-          gap: 8,
-        }}
-      >
-        <div style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: "#FF5F57" }} />
-        <div style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: "#FEBC2E" }} />
-        <div style={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: "#28C840" }} />
-      </div>
-      <div style={{ overflow: "hidden" }}>{children}</div>
+      {children}
     </div>
   );
 };

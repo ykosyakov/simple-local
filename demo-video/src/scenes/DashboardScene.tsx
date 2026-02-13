@@ -14,13 +14,13 @@ export const DashboardScene = () => {
 
   const zoomStyle = zoomPan(frame, fps, {
     startScale: 1,
-    endScale: 1.4,
+    endScale: 1.25,
     startX: 0,
-    endX: -120,
+    endX: -80,
     startY: 0,
-    endY: -60,
-    durationFrames: 330,
-    delay: 60,
+    endY: -40,
+    durationFrames: 240,
+    delay: 40,
   });
 
   return (

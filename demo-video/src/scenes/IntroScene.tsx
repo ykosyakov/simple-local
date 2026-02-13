@@ -75,7 +75,7 @@ export const IntroScene = () => {
             transform: `translateY(${taglineY}px)`,
           }}
         >
-          Your dev infrastructure, simplified
+          Your local dev infra — with no hassle
         </div>
       </AbsoluteFill>
     </AbsoluteFill>

@@ -4,6 +4,8 @@ A desktop app for running multi-service projects locally without the hassle.
 
 Point it at a project folder and it uses AI to discover your services — start commands, ports, dependencies, environment variables — then gives you a single dashboard to manage everything.
 
+[![Watch the demo](media/demo-thumbnail.png)](https://youtu.be/aeqMkra2n4E)
+
 ## Features
 
 - **AI-powered discovery** — point it at a project folder and it detects services, start commands, ports, dependencies, and environment variables automatically
@@ -22,6 +24,80 @@ Each service can run in one of two modes:
 - **Container** — runs inside a devcontainer via Docker. Fully isolated environment with its own dependencies, closer to production. Requires a container runtime (Docker Desktop, Colima, or Podman).
 
 You can mix modes per service — run your frontend natively for speed while running the database in a container for isolation.
+
+When you switch a service to container mode, Simple Local auto-generates a `devcontainer.json` tailored to the service:
+
+- Detects the language and package manager (Node/npm/pnpm/Bun/Python)
+- Picks the right base image (`mcr.microsoft.com/devcontainers/javascript-node:20`, etc.)
+- Forwards service and debug ports automatically
+- Bind-mounts your project source so code changes are live
+- Rewrites `localhost` references to `host.docker.internal` so container services can reach host services
+
+Generated configs live in `<project>/.simple-local/devcontainers/<service>/devcontainer.json` — you can customize them if needed.
+
+## MCP server for AI agents
+
+Simple Local runs a built-in MCP server so AI agents (Claude Code, Cursor, Windsurf, etc.) can manage your services without leaving the conversation.
+
+**Available tools:**
+
+| Tool | Description |
+|------|-------------|
+| `list_projects` | List all projects |
+| `get_project` | Get project details |
+| `list_services` | List services with status, ports, mode |
+| `get_service_status` | Detailed status of a single service |
+| `start_service` | Start a service (optionally specify native/container mode) |
+| `stop_service` | Stop a service |
+| `restart_service` | Stop then start a service |
+| `get_logs` | Get recent logs (default 50 lines, max 500) |
+
+### Setup
+
+The MCP server runs on `http://localhost:19275/mcp` (localhost-only, no auth needed).
+
+**Claude Code:**
+
+```bash
+claude mcp add --transport http simple-local http://localhost:19275/mcp
+```
+
+**Cursor / Windsurf:**
+
+Add to your MCP config (`.cursor/mcp.json` or equivalent):
+
+```json
+{
+  "mcpServers": {
+    "simple-local": {
+      "url": "http://localhost:19275/mcp"
+    }
+  }
+}
+```
+
+**Claude Desktop:**
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "simple-local": {
+      "command": "npx",
+      "args": ["mcp-remote", "http://localhost:19275/mcp"]
+    }
+  }
+}
+```
+
+Once connected, your AI agent can do things like:
+
+```
+> "Start the API server and check if it's healthy"
+> "What services are running in artizen?"
+> "Restart the frontend and show me the last 20 log lines"
+```
 
 ## Install
 

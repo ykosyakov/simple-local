@@ -22,12 +22,14 @@ export const SCREENSHOTS = {
 } as const;
 
 export const SCENE_DURATIONS = {
-  intro: 210,       // 7s
+  intro: 120,       // 4s
   discovery: 300,   // 10s
-  dashboard: 330,   // 11s
-  ports: 270,       // 9s
-  running: 330,     // 11s
-  mcp: 360,         // 12s
+  dashboard: 240,   // 8s  (shortened)
+  ports: 210,       // 7s  (shortened)
+  containers: 270,  // 9s  (NEW)
+  running: 240,     // 8s  (shortened)
+  mcp: 300,         // 10s (shortened)
+  mcpLogs: 300,     // 10s (NEW)
   outro: 180,       // 6s
 } as const;
 

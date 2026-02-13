@@ -44,3 +44,5 @@ scripts/
 
 # Docs (private)
 docs/
+/.agents
+/.claude
