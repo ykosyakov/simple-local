@@ -4,6 +4,8 @@ A desktop app for running multi-service projects locally without the hassle.
 
 Point it at a project folder and it uses AI to discover your services — start commands, ports, dependencies, environment variables — then gives you a single dashboard to manage everything.
 
+[**Watch the demo →**](https://youtu.be/aeqMkra2n4E)
+
 [![Watch the demo](media/demo-thumbnail.png)](https://youtu.be/aeqMkra2n4E)
 
 ## Features
@@ -98,6 +100,73 @@ Once connected, your AI agent can do things like:
 > "What services are running in artizen?"
 > "Restart the frontend and show me the last 20 log lines"
 ```
+
+## Manual configuration
+
+AI discovery handles most setups automatically, but you can also configure services manually. Create a `.simple-local/config.json` in your project root:
+
+```json
+{
+  "name": "my-project",
+  "services": [
+    {
+      "id": "backend",
+      "name": "Backend API",
+      "path": "./packages/backend",
+      "command": "npm run dev",
+      "port": 3000,
+      "debugPort": 9229,
+      "env": {
+        "DATABASE_URL": "postgresql://localhost:5432/mydb",
+        "REDIS_URL": "redis://localhost:6379"
+      },
+      "active": true,
+      "mode": "native"
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend App",
+      "path": "./packages/frontend",
+      "command": "npm run dev",
+      "port": 3001,
+      "env": {
+        "API_URL": "http://localhost:${services.backend.port}"
+      },
+      "dependsOn": ["backend"],
+      "active": true,
+      "mode": "native"
+    },
+    {
+      "id": "postgres",
+      "name": "PostgreSQL",
+      "type": "tool",
+      "path": ".",
+      "command": "docker run -p 5432:5432 postgres:16",
+      "port": 5432,
+      "env": {},
+      "active": true,
+      "mode": "native"
+    }
+  ]
+}
+```
+
+Key fields per service:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes | Unique identifier (used in `dependsOn` and env interpolation) |
+| `name` | yes | Display name |
+| `path` | yes | Working directory relative to project root |
+| `command` | yes | Start command |
+| `port` | no | Port the service listens on |
+| `env` | yes | Environment variables (supports `${services.<id>.port}` interpolation) |
+| `active` | yes | Whether to include this service |
+| `mode` | yes | `"native"` or `"container"` |
+| `type` | no | `"service"` (default) or `"tool"` for infrastructure like databases |
+| `dependsOn` | no | Array of service IDs that must start first |
+| `debugPort` | no | Port for debugger attachment |
+| `debugCommand` | no | Alternative command for debug mode |
 
 ## Install
 
