@@ -75,6 +75,43 @@ function createServiceCallbacks(
 }
 
 /**
+ * Resolve which command and env to use for starting a service.
+ * Priority: debugCommand > NODE_OPTIONS injection > plain command.
+ */
+function resolveServiceCommand(
+  service: Service,
+  env: Record<string, string>
+): { command: string; env: Record<string, string> } {
+  const resultEnv = { ...env }
+
+  // Prefer AI-discovered debugCommand (has --inspect in the right place)
+  if (service.debugCommand && service.debugPort !== undefined) {
+    let command = service.debugCommand
+    // Remap hardcoded port if AI used the original one
+    if (service.discoveredDebugPort && service.discoveredDebugPort !== service.debugPort) {
+      command = command.replace(String(service.discoveredDebugPort), String(service.debugPort))
+    }
+    // Normalize bare --inspect (no port) to --inspect=0.0.0.0:{debugPort}
+    // Matches --inspect or --inspect-brk not already followed by =
+    command = command.replace(
+      /--inspect(-brk)?(?!=)/,
+      `--inspect$1=0.0.0.0:${service.debugPort}`
+    )
+    return { command, env: resultEnv }
+  }
+
+  // Fallback: inject NODE_OPTIONS when debugPort exists but no debugCommand
+  if (service.debugPort !== undefined) {
+    const existing = resultEnv.NODE_OPTIONS || ''
+    if (!existing.includes('--inspect')) {
+      resultEnv.NODE_OPTIONS = `${existing} --inspect=0.0.0.0:${service.debugPort}`.trim()
+    }
+  }
+
+  return { command: service.command, env: resultEnv }
+}
+
+/**
  * Core service start logic used by both IPC handler and exported function.
  * Handles environment interpolation, container env overrides, port killing,
  * and starting native or container services.
@@ -123,6 +160,16 @@ async function startServiceCore(
     finalEnv.DEBUG_PORT = String(service.debugPort)
   }
 
+  // Resolve debug command: prefer debugCommand, fallback to NODE_OPTIONS injection
+  const { command: effectiveCommand, env: debugEnv } = resolveServiceCommand(service, finalEnv)
+  finalEnv = debugEnv
+
+  if (effectiveCommand !== service.command) {
+    log.info(`Debug mode: using debug command: ${effectiveCommand}`)
+  } else if (finalEnv.NODE_OPTIONS?.includes('--inspect')) {
+    log.info(`Debug mode: injected NODE_OPTIONS=${finalEnv.NODE_OPTIONS}`)
+  }
+
   // Store runtime env for UI access
   runtimeEnvManager.store(projectId, serviceId, {
     raw: service.env,
@@ -153,7 +200,7 @@ async function startServiceCore(
     try {
       container.startNativeService(
         serviceId,
-        service.command,
+        effectiveCommand,
         servicePath,
         finalEnv,
         sendLog,
@@ -181,7 +228,7 @@ async function startServiceCore(
     sendStatus('starting')
     sendLog('\n══════ Starting service ══════\n')
 
-    await container.startService(servicePath, devcontainerConfigPath, service.command, finalEnv, sendLog)
+    await container.startService(servicePath, devcontainerConfigPath, effectiveCommand, finalEnv, sendLog)
     sendStatus('running')
   }
 }

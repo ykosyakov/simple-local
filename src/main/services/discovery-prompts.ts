@@ -100,7 +100,7 @@ Use the Write tool to create the file with this JSON:
       "type": "service",
       "path": "relative/path",
       "command": "pnpm run dev",
-      "debugCommand": "pnpm run debug",
+      "debugCommand": "node --inspect=0.0.0.0:$DEBUG_PORT ./dist/server.js",
       "port": 3000,
       "debugPort": 9229,
       "env": {},
@@ -202,6 +202,8 @@ For each callback URL found, add to that service's "externalCallbackUrls" array:
 ## Field notes:
 - "type": "service" for your code, "tool" for 3rd party tools
 - "command": Primary run command (required)
+- "debugCommand": Command to run service with debugging. Use $DEBUG_PORT for the inspect port (e.g., "node --inspect=0.0.0.0:$DEBUG_PORT server.js")
+- "debugPort": Default debug port found in the project. Will be remapped at runtime.
 - "port": Application port (IMPORTANT: always include for services)
 - "dependsOn": Tools can depend on services (e.g., inngest depends on backend)
 - "env": Environment variables with port references (captured in Step 4)

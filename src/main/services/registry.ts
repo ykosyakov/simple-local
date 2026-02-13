@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   defaultPortStart: DEFAULT_PORT_START,
   portRangeSize: DEFAULT_PORT_RANGE_SIZE,
   minimizeToTray: true,
+  preferredIde: 'vscode',
 }
 
 export class RegistryService {

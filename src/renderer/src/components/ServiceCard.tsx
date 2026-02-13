@@ -1,6 +1,12 @@
-import { memo, useState } from 'react'
-import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Cpu, HardDrive, ExternalLink, Copy, Check, Variable } from 'lucide-react'
-import type { Service, ServiceStatus, ServiceResourceStats } from '../../../shared/types'
+import { memo, useState, useRef, useEffect, useCallback } from 'react'
+import { Play, Square, RotateCcw, EyeOff, Wrench, AlertTriangle, Loader2, Cpu, HardDrive, ExternalLink, Copy, Check, Variable, Bug, ChevronDown } from 'lucide-react'
+import type { Service, ServiceStatus, ServiceResourceStats, IdeId } from '../../../shared/types'
+
+const IDE_OPTIONS: Record<IdeId, string> = {
+  vscode:   'VS Code',
+  cursor:   'Cursor',
+  windsurf: 'Windsurf',
+}
 
 interface ServiceCardProps {
   projectId: string
@@ -50,6 +56,7 @@ const STATUS_CONFIG = {
 }
 
 export const ServiceCard = memo(function ServiceCard({
+  projectId,
   service,
   status,
   stats,
@@ -67,6 +74,37 @@ export const ServiceCard = memo(function ServiceCard({
   index = 0,
 }: ServiceCardProps) {
   const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null)
+  const [ideMenuOpen, setIdeMenuOpen] = useState(false)
+  const ideMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ideMenuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ideMenuRef.current && !ideMenuRef.current.contains(e.target as Node)) {
+        setIdeMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [ideMenuOpen])
+
+  const openDebugger = useCallback(async (ideOverride?: IdeId) => {
+    const port = service.debugPort
+    if (!port) return
+    let ide = ideOverride
+    if (!ide) {
+      const reg = await window.api.getRegistry()
+      ide = reg.settings.preferredIde ?? 'vscode'
+    }
+    await window.api.attachDebugger(ide, port, projectId)
+  }, [service.debugPort, projectId])
+
+  const handleIdeSelect = useCallback(async (e: React.MouseEvent, ide: IdeId) => {
+    e.stopPropagation()
+    setIdeMenuOpen(false)
+    await window.api.updateSettings({ preferredIde: ide })
+    openDebugger(ide)
+  }, [openDebugger])
 
   const isRunning = status === 'running'
   const isStarting = status === 'starting'
@@ -110,7 +148,7 @@ export const ServiceCard = memo(function ServiceCard({
   return (
     <div
       onClick={() => onSelect(service.id)}
-      className="animate-fade-up flex cursor-pointer flex-col rounded-xl p-4 transition-all"
+      className="animate-fade-up flex cursor-pointer flex-col overflow-visible rounded-xl p-4 transition-all"
       style={{
         background: isSelected ? 'var(--bg-elevated)' : 'var(--bg-surface)',
         border: `1px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-subtle)'}`,
@@ -122,6 +160,7 @@ export const ServiceCard = memo(function ServiceCard({
         animationDelay: `${index * 50}ms`,
         opacity: 0,
         minHeight: '160px',
+        zIndex: ideMenuOpen ? 50 : undefined,
       }}
     >
       {/* Status row */}
@@ -264,14 +303,76 @@ export const ServiceCard = memo(function ServiceCard({
 
         {/* Debug port if exists */}
         {service.debugPort && (
-          <div
-            className="text-[11px]"
-            style={{
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--text-muted)',
-            }}
-          >
-            debug:{service.debugPort}
+          <div className="relative flex items-center gap-0.5" ref={ideMenuRef}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                openDebugger()
+              }}
+              className="flex items-center gap-1 text-[11px] transition-colors hover:brightness-125"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--text-muted)',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+              }}
+              data-tooltip="Attach debugger"
+            >
+              <Bug className="h-3 w-3" />
+              debug:{service.debugPort}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setIdeMenuOpen((v) => !v)
+              }}
+              className="flex items-center transition-colors hover:brightness-125"
+              style={{
+                color: 'var(--text-muted)',
+                background: 'none',
+                border: 'none',
+                padding: '0 2px',
+                cursor: 'pointer',
+              }}
+              data-tooltip="Choose IDE"
+            >
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            {ideMenuOpen && (
+              <div
+                className="absolute left-0 z-50 mt-1 min-w-[120px] rounded-md py-1 shadow-lg"
+                style={{
+                  top: '100%',
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+              >
+                {(Object.keys(IDE_OPTIONS) as IdeId[]).map((id) => (
+                  <button
+                    key={id}
+                    onClick={(e) => handleIdeSelect(e, id)}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] transition-colors"
+                    style={{
+                      color: 'var(--text-secondary)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-mono)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-hover)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'none'
+                    }}
+                  >
+                    {IDE_OPTIONS[id]}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

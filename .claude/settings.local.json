@@ -76,7 +76,17 @@
       "WebFetch(domain:snyk.io)",
       "Bash(python3:*)",
       "WebFetch(domain:developers.openai.com)",
-      "Bash(./scripts/debug-discovery.sh:*)"
+      "Bash(./scripts/debug-discovery.sh:*)",
+      "Bash(npm version:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh release download:*)",
+      "Bash(gh release view:*)",
+      "Bash(gh release list:*)",
+      "WebFetch(domain:rebeccamdeprey.com)",
+      "WebFetch(domain:code.visualstudio.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)"
     ]
   }
 }

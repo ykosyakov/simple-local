@@ -15,6 +15,7 @@ vi.mock('electron-store', async () => {
           defaultPortStart: DEFAULT_PORT_START,
           portRangeSize: DEFAULT_PORT_RANGE_SIZE,
           minimizeToTray: true,
+          preferredIde: 'vscode',
         },
       }
 

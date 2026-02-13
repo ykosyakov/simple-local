@@ -85,11 +85,14 @@ export interface ServiceResourceStats {
   memoryPercent?: number
 }
 
+export type IdeId = 'vscode' | 'cursor' | 'windsurf'
+
 export interface GlobalSettings {
   dockerSocket: 'auto' | string
   defaultPortStart: number
   portRangeSize: number
   minimizeToTray: boolean
+  preferredIde: IdeId
 }
 
 export interface Registry {

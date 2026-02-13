@@ -277,7 +277,7 @@ describe('setupServiceHandlers', () => {
       )
     })
 
-    it('injects DEBUG_PORT env var when service.debugPort is defined', async () => {
+    it('injects DEBUG_PORT env var and NODE_OPTIONS when service.debugPort is defined (no debugCommand)', async () => {
       const { getServiceContext } = await import('../services/service-lookup')
       vi.mocked(getServiceContext).mockResolvedValue({
         project: { id: 'proj1', name: 'Test', path: '/test' },
@@ -301,7 +301,11 @@ describe('setupServiceHandlers', () => {
         'svc1',
         'npm run dev',
         '/test/.',
-        expect.objectContaining({ PORT: '3000', DEBUG_PORT: '9229' }),
+        expect.objectContaining({
+          PORT: '3000',
+          DEBUG_PORT: '9229',
+          NODE_OPTIONS: '--inspect=0.0.0.0:9229',
+        }),
         expect.any(Function),
         expect.any(Function)
       )
@@ -328,6 +332,185 @@ describe('setupServiceHandlers', () => {
       const callArgs = vi.mocked(mockContainer.startNativeService!).mock.calls[0]
       const envArg = callArgs[3] as Record<string, string>
       expect(envArg).not.toHaveProperty('PORT')
+    })
+  })
+
+  describe('debug command resolution', () => {
+    it('uses debugCommand instead of command when both debugCommand and debugPort exist', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          debugCommand: 'node --inspect=0.0.0.0:9229 ./dist/server.js',
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 3000,
+          debugPort: 9229,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(mockContainer.startNativeService).toHaveBeenCalledWith(
+        'svc1',
+        'node --inspect=0.0.0.0:9229 ./dist/server.js',
+        '/test/.',
+        expect.objectContaining({ PORT: '3000', DEBUG_PORT: '9229' }),
+        expect.any(Function),
+        expect.any(Function)
+      )
+    })
+
+    it('remaps port in debugCommand when discoveredDebugPort differs from debugPort', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          debugCommand: 'node --inspect=0.0.0.0:9229 ./dist/server.js',
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 3000,
+          debugPort: 9330,
+          discoveredDebugPort: 9229,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(mockContainer.startNativeService).toHaveBeenCalledWith(
+        'svc1',
+        'node --inspect=0.0.0.0:9330 ./dist/server.js',
+        '/test/.',
+        expect.objectContaining({ DEBUG_PORT: '9330' }),
+        expect.any(Function),
+        expect.any(Function)
+      )
+    })
+
+    it('normalizes bare --inspect in debugCommand to include host and port', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          debugCommand: 'node --enable-source-maps --inspect ./dist/main',
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 3100,
+          debugPort: 9210,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(mockContainer.startNativeService).toHaveBeenCalledWith(
+        'svc1',
+        'node --enable-source-maps --inspect=0.0.0.0:9210 ./dist/main',
+        '/test/.',
+        expect.objectContaining({ DEBUG_PORT: '9210' }),
+        expect.any(Function),
+        expect.any(Function)
+      )
+    })
+
+    it('normalizes bare --inspect-brk in debugCommand to include host and port', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          debugCommand: 'node --inspect-brk ./dist/main',
+          path: '.',
+          mode: 'native',
+          env: {},
+          debugPort: 9210,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      expect(mockContainer.startNativeService).toHaveBeenCalledWith(
+        'svc1',
+        'node --inspect-brk=0.0.0.0:9210 ./dist/main',
+        '/test/.',
+        expect.objectContaining({ DEBUG_PORT: '9210' }),
+        expect.any(Function),
+        expect.any(Function)
+      )
+    })
+
+    it('does not double-inject NODE_OPTIONS when it already has --inspect', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          path: '.',
+          mode: 'native',
+          env: { NODE_OPTIONS: '--inspect=0.0.0.0:9229' },
+          debugPort: 9229,
+          active: true,
+        },
+      })
+      vi.mocked(mockConfig.interpolateEnv!).mockReturnValue({
+        env: { NODE_OPTIONS: '--inspect=0.0.0.0:9229' },
+        errors: [],
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      const callArgs = vi.mocked(mockContainer.startNativeService!).mock.calls[0]
+      const envArg = callArgs[3] as Record<string, string>
+      expect(envArg.NODE_OPTIONS).toBe('--inspect=0.0.0.0:9229')
+    })
+
+    it('does not inject NODE_OPTIONS when debugCommand is present', async () => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'svc1',
+          name: 'Service 1',
+          command: 'npm run dev',
+          debugCommand: 'node --inspect=0.0.0.0:9229 ./dist/server.js',
+          path: '.',
+          mode: 'native',
+          env: {},
+          debugPort: 9229,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'svc1')
+
+      const callArgs = vi.mocked(mockContainer.startNativeService!).mock.calls[0]
+      const envArg = callArgs[3] as Record<string, string>
+      expect(envArg).not.toHaveProperty('NODE_OPTIONS')
     })
   })
 

@@ -65,6 +65,10 @@ const api = {
     return () => ipcRenderer.removeListener('discovery:progress', handler)
   },
 
+  // Debug
+  attachDebugger: (ideId: string, port: number, projectId: string): Promise<void> =>
+    ipcRenderer.invoke('debug:attach', ideId, port, projectId),
+
   // Dialogs
   selectFolder: (): Promise<string | null> =>
     ipcRenderer.invoke('dialog:selectFolder'),
