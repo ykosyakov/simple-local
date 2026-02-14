@@ -51,6 +51,7 @@ export function setupIpcHandlers(): {
   setupDiscoveryHandlers(config, discovery, registry, settings)
   setupRegistryHandlers(registry, {
     onProjectRemoved: cleanupProjectLogs,
+    config,
   })
   setupPrerequisitesHandlers(prerequisites, settings, container)
   setupAgentTerminalHandlers(agentTerminal)

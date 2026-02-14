@@ -97,7 +97,7 @@ export function EnvOverridesPanel({
       <div className="space-y-2">
         {overrides.map((override, index) => (
           <div
-            key={`${override.key}-${override.originalPattern}`}
+            key={`${override.key || ''}-${override.originalPattern || ''}-${index}`}
             className="flex items-start gap-2 rounded p-2"
             style={{
               background: 'var(--bg-surface)',

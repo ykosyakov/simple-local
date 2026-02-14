@@ -571,7 +571,9 @@ export class DiscoveryService {
         devcontainer: isService ? `.simple-local/devcontainers/${serviceId}/devcontainer.json` : undefined,
         active: true,
         mode: 'native',
-        containerEnvOverrides: s.containerEnvOverrides || [],
+        containerEnvOverrides: (s.containerEnvOverrides || []).filter(
+          (o) => o.key && o.originalPattern && o.containerValue
+        ),
         hardcodedPort,
         externalCallbackUrls: s.externalCallbackUrls,
       }

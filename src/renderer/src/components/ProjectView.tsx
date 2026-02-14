@@ -7,8 +7,9 @@ import { EnvOverridesPanel } from './EnvOverridesPanel'
 import { PortExtractionModal } from './PortExtractionModal'
 import { ConfirmModal } from './ConfirmModal'
 import { EnvVarsModal } from './EnvVarsModal'
+import { RelocatePortModal } from './RelocatePortModal'
 import { Server, Code2, RefreshCw } from 'lucide-react'
-import type { Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ServiceRuntimeEnv, ContainerEnvOverride, Service } from '../../../shared/types'
+import type { Project, Registry, ProjectConfig, ServiceStatus, ServiceResourceStats, ServiceRuntimeEnv, ContainerEnvOverride, Service } from '../../../shared/types'
 import { createLogger } from '../../../shared/logger'
 
 const log = createLogger('ProjectView')
@@ -30,7 +31,9 @@ function findDependentServices(
 
 interface ProjectViewProps {
   project: Project
+  registry: Registry
   onRerunDiscovery?: () => void
+  onRegistryChanged?: () => void
 }
 
 /**
@@ -75,7 +78,7 @@ function useServiceActionFactory(
   )
 }
 
-export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
+export function ProjectView({ project, registry, onRerunDiscovery, onRegistryChanged }: ProjectViewProps) {
   const [config, setConfig] = useState<ProjectConfig | null>(null)
   const [configError, setConfigError] = useState<string | null>(null)
   const [statuses, setStatuses] = useState<Map<string, ServiceStatus['status']>>(new Map())
@@ -96,6 +99,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
   const [logHeight, setLogHeight] = useState(350)
   const [envModalService, setEnvModalService] = useState<{ serviceId: string; serviceName: string } | null>(null)
   const [envModalData, setEnvModalData] = useState<ServiceRuntimeEnv | null>(null)
+  const [isRelocatePortOpen, setIsRelocatePortOpen] = useState(false)
   const resizeRef = useRef({ active: false, startY: 0, startHeight: 0 })
 
   const loadConfig = useCallback(async () => {
@@ -338,15 +342,16 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     }
   }
 
-  const handleUpdateOverrides = async (serviceId: string, overrides: ContainerEnvOverride[]) => {
-    if (!config) return
+  const handleUpdateOverrides = useCallback(async (serviceId: string, overrides: ContainerEnvOverride[]) => {
+    const currentConfig = configRef.current
+    if (!currentConfig) return
 
     try {
       setActionError(null)
-      const updatedServices = config.services.map((s) =>
+      const updatedServices = currentConfig.services.map((s) =>
         s.id === serviceId ? { ...s, containerEnvOverrides: overrides } : s
       )
-      const updatedConfig = { ...config, services: updatedServices }
+      const updatedConfig = { ...currentConfig, services: updatedServices }
 
       await window.api.saveProjectConfig(project.path, updatedConfig)
       setConfig(updatedConfig)
@@ -356,7 +361,7 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         `Failed to update environment overrides: ${err instanceof Error ? err.message : 'Unknown error'}`
       )
     }
-  }
+  }, [project.path])
 
   const handleReanalyzeEnv = async (serviceId: string) => {
     setReanalyzingService(serviceId)
@@ -482,7 +487,8 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
     )
   }
 
-  const activeServices = config?.services.filter((s) => s.active !== false) ?? []
+  const activeServices = (config?.services.filter((s) => s.active !== false) ?? [])
+    .sort((a, b) => (a.type === 'tool' ? 1 : 0) - (b.type === 'tool' ? 1 : 0))
   const hiddenServices = config?.services.filter((s) => s.active === false) ?? []
 
   const runningCount = Array.from(statuses.values()).filter((s) => s === 'running').length
@@ -524,8 +530,20 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
           {project.path}
         </div>
         <button
-          onClick={() => setIsConfigEditorOpen(true)}
+          onClick={() => setIsRelocatePortOpen(true)}
           className="btn btn-ghost ml-4"
+          title="Reallocate port range"
+        >
+          <span
+            className="text-xs"
+            style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
+          >
+            Ports: {project.portRange[0]}-{project.portRange[1]}
+          </span>
+        </button>
+        <button
+          onClick={() => setIsConfigEditorOpen(true)}
+          className="btn btn-ghost"
           title="Edit project config"
         >
           <Code2 className="h-4 w-4" />
@@ -662,6 +680,29 @@ export function ProjectView({ project, onRerunDiscovery }: ProjectViewProps) {
         serviceName={envModalService?.serviceName ?? ''}
         env={envModalData}
         onClose={handleCloseEnvModal}
+      />
+
+      {/* Relocate Port Range Modal */}
+      <RelocatePortModal
+        isOpen={isRelocatePortOpen}
+        project={project}
+        otherProjects={registry.projects.filter((p) => p.id !== project.id)}
+        portRangeSize={registry.settings.portRangeSize}
+        onCancel={() => setIsRelocatePortOpen(false)}
+        onConfirm={async (newStart) => {
+          setIsRelocatePortOpen(false)
+          try {
+            setActionError(null)
+            await window.api.reallocatePortRange(project.id, newStart)
+            await loadConfig()
+            onRegistryChanged?.()
+          } catch (err) {
+            log.error('Failed to reallocate port range:', err)
+            setActionError(
+              `Failed to reallocate ports: ${err instanceof Error ? err.message : 'Unknown error'}`
+            )
+          }
+        }}
       />
     </div>
   )

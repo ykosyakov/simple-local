@@ -37,7 +37,9 @@ const mockApi = {
   clearLogs: vi.fn(),
   onLogData: vi.fn(() => vi.fn()),
   onStatusChange: vi.fn(() => vi.fn()),
+  onStatsUpdate: vi.fn(() => vi.fn()),
   reanalyzeServiceEnv: vi.fn(),
+  reallocatePortRange: vi.fn(),
   // Setup-related API methods
   checkPrerequisites: vi.fn(),
   getSettings: vi.fn(),

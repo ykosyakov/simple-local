@@ -10,6 +10,8 @@ const api = {
     ipcRenderer.invoke('registry:removeProject', id),
   updateSettings: (settings: Partial<GlobalSettings>): Promise<GlobalSettings> =>
     ipcRenderer.invoke('registry:updateSettings', settings),
+  reallocatePortRange: (projectId: string, newStartPort: number): Promise<ProjectConfig> =>
+    ipcRenderer.invoke('registry:reallocatePortRange', projectId, newStartPort),
 
   // Services
   startService: (projectId: string, serviceId: string): Promise<void> =>

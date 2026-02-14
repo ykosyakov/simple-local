@@ -104,6 +104,41 @@ export class RegistryService {
     return updated
   }
 
+  reallocatePortRange(projectId: string, newStart: number): Project {
+    const { projects, settings } = this.getRegistry()
+    const { portRangeSize } = settings
+    const newEnd = newStart + portRangeSize - 1
+
+    if (newStart < 1024) {
+      throw new Error('Port must be 1024 or higher')
+    }
+    if (newEnd > 65535) {
+      throw new Error(`Port range ${newStart}-${newEnd} exceeds maximum port 65535`)
+    }
+
+    const project = projects.find((p) => p.id === projectId)
+    if (!project) {
+      throw new Error(`Project not found: ${projectId}`)
+    }
+
+    // Overlap check against all other projects
+    for (const other of projects) {
+      if (other.id === projectId) continue
+      const [otherStart, otherEnd] = other.portRange
+      if (newStart <= otherEnd && newEnd >= otherStart) {
+        throw new Error(
+          `Port range ${newStart}-${newEnd} overlaps with "${other.name}" (${otherStart}-${otherEnd})`
+        )
+      }
+    }
+
+    const updated = this.updateProject(projectId, { portRange: [newStart, newEnd] })
+    if (!updated) {
+      throw new Error(`Failed to update project: ${projectId}`)
+    }
+    return updated
+  }
+
   updateSettings(settings: Partial<GlobalSettings>): GlobalSettings {
     const current = this.store.get('settings') ?? DEFAULT_SETTINGS
     const updated = { ...current, ...settings }

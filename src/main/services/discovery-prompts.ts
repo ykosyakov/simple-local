@@ -105,7 +105,9 @@ Use the Write tool to create the file with this JSON:
       "debugPort": 9229,
       "env": {},
       "dependsOn": [],
-      "containerEnvOverrides": [],
+      "containerEnvOverrides": [
+        {"key": "DATABASE_URL", "originalPattern": "localhost:5432", "containerValue": "host.docker.internal:5432", "reason": "Local database", "enabled": true}
+      ],
       "externalCallbackUrls": []
     },
     {

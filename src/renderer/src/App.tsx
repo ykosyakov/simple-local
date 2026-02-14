@@ -347,11 +347,16 @@ function App() {
 
           {/* Show ProjectView when viewing a non-loading project */}
           {selectedProject &&
+            registry &&
             selectedProject.path !== loadingProjectPath &&
             selectedProject.status !== "loading" && (
               <ProjectView
                 project={selectedProject}
+                registry={registry}
                 onRerunDiscovery={handleRerunDiscovery}
+                onRegistryChanged={() => {
+                  window.api.getRegistry().then(setRegistry);
+                }}
               />
             )}
 

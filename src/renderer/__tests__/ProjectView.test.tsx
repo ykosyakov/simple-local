@@ -8,6 +8,21 @@ const testProject = {
   id: 'test-project',
   name: 'Test Project',
   path: '/test/path',
+  portRange: [4100, 4149] as [number, number],
+  debugPortRange: [9200, 9209] as [number, number],
+  lastOpened: new Date().toISOString(),
+  status: 'ready' as const,
+}
+
+const testRegistry = {
+  projects: [testProject],
+  settings: {
+    dockerSocket: 'auto' as const,
+    defaultPortStart: 4100,
+    portRangeSize: 50,
+    minimizeToTray: true,
+    preferredIde: 'vscode' as const,
+  },
 }
 
 const testConfig = {
@@ -33,7 +48,7 @@ describe('ProjectView - callback stability', () => {
   })
 
   it('does not reload config when selectedServiceId changes internally', async () => {
-    const { container } = render(<ProjectView project={testProject} />)
+    const { container } = render(<ProjectView project={testProject} registry={testRegistry} />)
 
     await waitFor(() => {
       expect(mockApi.loadProjectConfig).toHaveBeenCalledTimes(1)
@@ -85,7 +100,7 @@ describe('ProjectView - polling and events', () => {
   })
 
   it('fetches status on mount but does not poll (event-driven)', async () => {
-    render(<ProjectView project={testProject} />)
+    render(<ProjectView project={testProject} registry={testRegistry} />)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
@@ -104,7 +119,7 @@ describe('ProjectView - polling and events', () => {
   })
 
   it('subscribes to status change events', async () => {
-    render(<ProjectView project={testProject} />)
+    render(<ProjectView project={testProject} registry={testRegistry} />)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
@@ -116,7 +131,7 @@ describe('ProjectView - polling and events', () => {
   })
 
   it('unsubscribes from events on unmount', async () => {
-    const { unmount } = render(<ProjectView project={testProject} />)
+    const { unmount } = render(<ProjectView project={testProject} registry={testRegistry} />)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
@@ -131,7 +146,7 @@ describe('ProjectView - polling and events', () => {
   })
 
   it('updates status via event callback', async () => {
-    render(<ProjectView project={testProject} />)
+    render(<ProjectView project={testProject} registry={testRegistry} />)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0)
