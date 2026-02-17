@@ -205,3 +205,30 @@ export interface ServiceRuntimeEnv {
   startedAt: number
 }
 
+// Re-discovery diff types
+
+export interface FieldChange {
+  field: string
+  oldValue: unknown
+  newValue: unknown
+  isUserModified: boolean
+}
+
+export interface ServiceDiff {
+  serviceId: string
+  serviceName: string
+  changes: FieldChange[]
+}
+
+export interface ConfigDiff {
+  added: Service[]
+  removed: Service[]
+  modified: ServiceDiff[]
+  unchanged: string[]
+}
+
+export interface RediscoveryResult {
+  diff: ConfigDiff
+  newAiConfig: ProjectConfig
+}
+
