@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { Registry, Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ServiceRuntimeEnv, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride, PortExtractionResult, UpdateState } from '../shared/types'
+import type { Registry, Project, ProjectConfig, ServiceStatus, ServiceResourceStats, ServiceRuntimeEnv, GlobalSettings, DiscoveryProgress, PrerequisitesResult, AppSettings, AiAgentId, AgentEvent, AgentSessionInfo, ContainerEnvOverride, PortExtractionResult, UpdateState, RediscoveryResult } from '../shared/types'
 
 const api = {
   // Registry
@@ -66,6 +66,10 @@ const api = {
     ipcRenderer.on('discovery:progress', handler)
     return () => ipcRenderer.removeListener('discovery:progress', handler)
   },
+  rediscoverProject: (projectId: string, agentId?: AiAgentId): Promise<RediscoveryResult> =>
+    ipcRenderer.invoke('discovery:rediscover', projectId, agentId),
+  applyRediscovery: (projectId: string, appliedConfig: ProjectConfig, newAiConfig: ProjectConfig): Promise<void> =>
+    ipcRenderer.invoke('discovery:apply-rediscovery', projectId, appliedConfig, newAiConfig),
 
   // Debug
   attachDebugger: (ideId: string, port: number, projectId: string): Promise<void> =>

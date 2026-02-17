@@ -4,7 +4,7 @@ import { DiscoveryService } from '../services/discovery'
 import { RegistryService } from '../services/registry'
 import { SettingsService } from '../services/settings'
 import { getServiceContext } from '../services/service-lookup'
-import type { DiscoveryProgress, AiAgentId } from '../../shared/types'
+import type { DiscoveryProgress, AiAgentId, ProjectConfig } from '../../shared/types'
 import { createLogger } from '../../shared/logger'
 
 const log = createLogger('IPC')
@@ -83,6 +83,63 @@ export function setupDiscoveryHandlers(
     }
 
     log.info('All devcontainer files saved')
+  })
+
+  ipcMain.handle('discovery:rediscover', async (event, projectId: string, agentId?: AiAgentId) => {
+    log.info('discovery:rediscover called for:', projectId)
+
+    const project = registry.getRegistry().projects.find(p => p.id === projectId)
+    if (!project) throw new Error(`Project not found: ${projectId}`)
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const sendProgress = (progress: DiscoveryProgress) => {
+      win?.webContents.send('discovery:progress', progress)
+    }
+
+    const currentConfig = await config.loadConfig(project.path)
+    if (!currentConfig) throw new Error('No config found for project')
+
+    const baseline = await config.loadAiBaseline(project.path)
+
+    const selectedAgent: AiAgentId = agentId ?? settings.getSettings()?.aiAgent.selected ?? 'claude'
+    sendProgress({ projectPath: project.path, step: 'ai-analysis', message: 'Starting re-discovery...' })
+
+    const newAiConfig = await discovery.runRediscovery(
+      project.path,
+      currentConfig,
+      selectedAgent,
+      sendProgress,
+      project.portRange[0],
+      project.debugPortRange[0]
+    )
+
+    if (!newAiConfig) {
+      throw new Error('Re-discovery failed')
+    }
+
+    const { computeConfigDiff } = await import('../services/config-diff')
+    const diff = computeConfigDiff(currentConfig, newAiConfig, baseline)
+
+    sendProgress({ projectPath: project.path, step: 'complete', message: 'Re-discovery complete' })
+
+    return { diff, newAiConfig }
+  })
+
+  ipcMain.handle('discovery:apply-rediscovery', async (_event, projectId: string, appliedConfig: ProjectConfig, newAiConfig: ProjectConfig) => {
+    log.info('discovery:apply-rediscovery called for:', projectId)
+
+    const project = registry.getRegistry().projects.find(p => p.id === projectId)
+    if (!project) throw new Error(`Project not found: ${projectId}`)
+
+    await config.saveConfig(project.path, appliedConfig)
+    await config.saveAiBaseline(project.path, newAiConfig)
+
+    for (const service of appliedConfig.services) {
+      const devcontainerConfig = await config.generateDevcontainerConfig(service, appliedConfig.name)
+      await config.saveDevcontainer(project.path, service, devcontainerConfig)
+    }
+
+    log.info('Re-discovery applied successfully')
   })
 
   ipcMain.handle('service:reanalyze-env', async (event, projectId: string, serviceId: string, agentId?: AiAgentId) => {
