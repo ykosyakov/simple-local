@@ -73,6 +73,8 @@ export function setupDiscoveryHandlers(
     log.info('Saving config with', projectConfig.services.length, 'services')
 
     await config.saveConfig(projectPath, projectConfig)
+    // Save as AI baseline for future re-discovery comparison
+    await config.saveAiBaseline(projectPath, projectConfig)
     log.info('Config saved')
 
     // Generate devcontainer files
