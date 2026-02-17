@@ -213,6 +213,52 @@ For each callback URL found, add to that service's "externalCallbackUrls" array:
 Only include services/tools with runnable commands.`;
 
 /**
+ * Template for re-discovery prompt.
+ * Placeholders:
+ * - {{RESULT_FILE}} - Path where agent should write results
+ * - {{CURRENT_CONFIG}} - The current project config JSON
+ */
+export const REDISCOVERY_PROMPT_TEMPLATE = `You are re-analyzing a project that was previously discovered. Here is the current configuration:
+
+\`\`\`json
+{{CURRENT_CONFIG}}
+\`\`\`
+
+Your task: Explore the project and produce an UPDATED configuration reflecting the current state.
+
+IMPORTANT RULES:
+- Keep existing service IDs stable when the service still exists (same path/purpose)
+- Only change fields that actually differ from the project's current state
+- Add new services you discover that aren't in the current config
+- Remove services whose source code/config no longer exists
+- Focus on: commands, ports, env vars, dependencies, 3rd party tools
+
+Write your result to this exact file: {{RESULT_FILE}}
+
+Use the SAME JSON format as the current config's services array:
+{
+  "services": [ ... ],
+  "connections": []
+}
+
+Follow the same discovery steps as initial discovery:
+1. Check tech stack and package manager
+2. Discover services (check package.json, dev scripts, ports)
+3. Discover 3rd party tools (Inngest, Temporal, Redis, etc.)
+4. Capture environment variables with port references
+5. Identify external callback URLs
+
+Field notes:
+- "type": "service" for your code, "tool" for 3rd party tools
+- "command": Primary run command (required)
+- "debugCommand": Command to run service with debugging. Use $DEBUG_PORT for the inspect port
+- "port": Application port (IMPORTANT: always include for services)
+- "dependsOn": Tools can depend on services
+- "env": Environment variables with port references
+
+Only include services/tools with runnable commands.`;
+
+/**
  * Template for port extraction prompt.
  * Placeholders:
  * - {{SERVICE_NAME}} - Display name of the service
@@ -316,6 +362,24 @@ export function buildDiscoveryPrompt(options: DiscoveryPromptOptions): string {
     "{{RESULT_FILE}}",
     sanitizePath(resultFilePath),
   );
+}
+
+export interface RediscoveryPromptOptions {
+  resultFilePath: string;
+  currentConfig: string;
+}
+
+/**
+ * Builds the re-discovery prompt with current config context.
+ */
+export function buildRediscoveryPrompt(
+  options: RediscoveryPromptOptions,
+): string {
+  const { resultFilePath, currentConfig } = options;
+  return REDISCOVERY_PROMPT_TEMPLATE.replace(
+    "{{RESULT_FILE}}",
+    sanitizePath(resultFilePath),
+  ).replace("{{CURRENT_CONFIG}}", currentConfig);
 }
 
 export interface PortExtractionPromptOptions {

@@ -3,6 +3,7 @@ import {
   sanitizePath,
   buildEnvAnalysisPrompt,
   buildDiscoveryPrompt,
+  buildRediscoveryPrompt,
   buildPortExtractionPrompt,
   DISCOVERY_PROMPT_TEMPLATE,
 } from '../services/discovery-prompts'
@@ -171,6 +172,19 @@ describe('discovery-prompts', () => {
       expect(DISCOVERY_PROMPT_TEMPLATE).not.toContain('{{PACKAGE_FILES}}')
       expect(DISCOVERY_PROMPT_TEMPLATE).not.toContain('{{DOCKER_FILES}}')
       expect(DISCOVERY_PROMPT_TEMPLATE).not.toContain('{{PACKAGE_MANAGER}}')
+    })
+  })
+
+  describe('buildRediscoveryPrompt', () => {
+    it('should include current config and result file path', () => {
+      const currentConfig = { name: 'MyApp', services: [{ id: 'api', name: 'API', command: 'npm start', port: 3000 }] }
+      const prompt = buildRediscoveryPrompt({
+        resultFilePath: '/tmp/result.json',
+        currentConfig: JSON.stringify(currentConfig, null, 2),
+      })
+      expect(prompt).toContain('/tmp/result.json')
+      expect(prompt).toContain('"api"')
+      expect(prompt).toContain('current configuration')
     })
   })
 
