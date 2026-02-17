@@ -8,6 +8,7 @@ import { PortExtractionModal } from './PortExtractionModal'
 import { ConfirmModal } from './ConfirmModal'
 import { EnvVarsModal } from './EnvVarsModal'
 import { RelocatePortModal } from './RelocatePortModal'
+import { RediscoveryModal } from './discovery/RediscoveryModal'
 import { Server, Code2, RefreshCw } from 'lucide-react'
 import type { Project, Registry, ProjectConfig, ServiceStatus, ServiceResourceStats, ServiceRuntimeEnv, ContainerEnvOverride, Service } from '../../../shared/types'
 import { createLogger } from '../../../shared/logger'
@@ -100,6 +101,7 @@ export function ProjectView({ project, registry, onRerunDiscovery, onRegistryCha
   const [envModalService, setEnvModalService] = useState<{ serviceId: string; serviceName: string } | null>(null)
   const [envModalData, setEnvModalData] = useState<ServiceRuntimeEnv | null>(null)
   const [isRelocatePortOpen, setIsRelocatePortOpen] = useState(false)
+  const [isRediscovering, setIsRediscovering] = useState(false)
   const resizeRef = useRef({ active: false, startY: 0, startHeight: 0 })
 
   const loadConfig = useCallback(async () => {
@@ -428,6 +430,11 @@ export function ProjectView({ project, registry, onRerunDiscovery, onRegistryCha
     document.body.style.userSelect = 'none'
   }, [logHeight])
 
+  const runningServiceIds = useMemo(
+    () => Array.from(statuses.entries()).filter(([, s]) => s === 'running').map(([id]) => id),
+    [statuses]
+  )
+
   const selectedService = config?.services.find((s) => s.id === selectedServiceId)
 
   if (configError) {
@@ -549,6 +556,16 @@ export function ProjectView({ project, registry, onRerunDiscovery, onRegistryCha
           <Code2 className="h-4 w-4" />
           Edit Config
         </button>
+        {onRerunDiscovery && (
+          <button
+            onClick={() => setIsRediscovering(true)}
+            className="btn btn-ghost"
+            title="Re-discover project with AI"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Re-discover
+          </button>
+        )}
       </div>
 
       {/* Error Banner */}
@@ -704,6 +721,20 @@ export function ProjectView({ project, registry, onRerunDiscovery, onRegistryCha
           }
         }}
       />
+
+      {/* Re-discovery Modal */}
+      {isRediscovering && (
+        <RediscoveryModal
+          project={project}
+          runningServiceIds={runningServiceIds}
+          isOpen={isRediscovering}
+          onClose={() => setIsRediscovering(false)}
+          onApplied={() => {
+            setIsRediscovering(false)
+            loadConfig()
+          }}
+        />
+      )}
     </div>
   )
 }
