@@ -511,6 +511,35 @@ describe('DiscoveryService', () => {
     })
   })
 
+  describe('runRediscovery', () => {
+    it('should call agentRunner with rediscovery prompt containing current config', async () => {
+      const { firstValueFrom: mockFirstValueFrom } = await import('rxjs')
+      vi.mocked(mockFirstValueFrom).mockResolvedValueOnce({ type: 'task-complete' })
+
+      const currentConfig: ProjectConfig = { name: 'Test', services: [testService] }
+      const mockResult = {
+        services: [{ id: 'backend', name: 'Backend API', path: 'packages/backend', command: 'pnpm start:dev', port: 3500, env: {} }],
+        connections: [],
+      }
+      const mockFs = createMockFileSystem({
+        readFile: vi.fn()
+          .mockResolvedValueOnce(JSON.stringify(mockResult))
+          .mockRejectedValue(new Error('not found')),
+      })
+      const session = createMockSession()
+      const terminal = createMockAgentTerminal(session)
+      const discovery = new DiscoveryService({
+        fileSystem: mockFs,
+        agentTerminalFactory: createMockAgentTerminalFactory(terminal),
+        commandChecker: createMockCommandChecker(true),
+      })
+
+      const result = await discovery.runRediscovery('/project', currentConfig, 'claude', undefined, 3000, 9200)
+      expect(result).not.toBeNull()
+      expect(result!.services).toHaveLength(1)
+    })
+  })
+
   describe('backward compatibility', () => {
     it('works with no dependencies (uses defaults)', () => {
       // This should not throw - uses default implementations

@@ -8,6 +8,7 @@ import type { AiAgentId } from '../modules/agent-terminal'
 import { createLogger } from '../../shared/logger'
 import {
   buildDiscoveryPrompt,
+  buildRediscoveryPrompt,
   buildEnvAnalysisPrompt as buildEnvAnalysisPromptFromTemplate,
   type ScanResult,
 } from './discovery-prompts'
@@ -478,6 +479,52 @@ export class DiscoveryService {
     } else {
       log.error('AI discovery failed:', result.error)
       onProgress?.({ projectPath, step: 'error', message: result.error || 'AI discovery failed' })
+      return null
+    }
+  }
+
+  async runRediscovery(
+    projectPath: string,
+    currentConfig: ProjectConfig,
+    cliTool: AiAgentId = 'claude',
+    onProgress?: (progress: DiscoveryProgress) => void,
+    basePort: number = 3000,
+    debugPortBase: number = 9200
+  ): Promise<ProjectConfig | null> {
+    log.info('Starting re-discovery for:', projectPath)
+
+    onProgress?.({ projectPath, step: 'ai-analysis', message: 'Starting AI re-analysis...' })
+
+    const resultFile = path.join(projectPath, '.simple-local', 'discovery-result.json')
+    const prompt = buildRediscoveryPrompt({
+      resultFilePath: resultFile,
+      currentConfig: JSON.stringify(currentConfig, null, 2),
+    })
+
+    const result = await this.agentRunner.run<AIDiscoveryOutput>({
+      cwd: projectPath,
+      prompt,
+      resultFilePath: resultFile,
+      allowedTools: ['Read', 'Glob', 'Grep', 'Write'],
+      cliTool,
+      onProgress: (message, logText) => {
+        if (logText) {
+          onProgress?.({ projectPath, step: 'ai-analysis', message: 'Running AI re-analysis...', log: logText })
+        } else {
+          onProgress?.({ projectPath, step: 'ai-analysis', message })
+        }
+      },
+    })
+
+    if (result.success && result.data) {
+      log.info('Re-discovery result:', JSON.stringify(result.data, null, 2))
+      onProgress?.({ projectPath, step: 'complete', message: 'Re-discovery complete' })
+      const config = this.convertToProjectConfig(result.data, projectPath, basePort, debugPortBase)
+      await this.resolveHardcodedPorts(config, projectPath)
+      return config
+    } else {
+      log.error('Re-discovery failed:', result.error)
+      onProgress?.({ projectPath, step: 'error', message: result.error || 'Re-discovery failed' })
       return null
     }
   }
