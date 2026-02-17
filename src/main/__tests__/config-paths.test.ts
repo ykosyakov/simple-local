@@ -69,4 +69,12 @@ describe('ConfigPaths', () => {
       )
     })
   })
+
+  describe('aiBaseline', () => {
+    it('returns the AI baseline config path', () => {
+      expect(ConfigPaths.aiBaseline('/projects/myapp')).toBe(
+        '/projects/myapp/.simple-local/ai-baseline-config.json'
+      )
+    })
+  })
 })

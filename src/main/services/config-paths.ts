@@ -40,4 +40,6 @@ export const ConfigPaths = {
    */
   devcontainerConfig: (projectPath: string, serviceId: string) =>
     join(projectPath, CONFIG_DIR_NAME, 'devcontainers', serviceId, 'devcontainer.json'),
+
+  aiBaseline: (projectPath: string) => join(projectPath, CONFIG_DIR_NAME, 'ai-baseline-config.json'),
 }
