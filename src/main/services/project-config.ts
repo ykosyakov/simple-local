@@ -49,6 +49,24 @@ export class ProjectConfigService {
     await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8')
   }
 
+  async saveAiBaseline(projectPath: string, config: ProjectConfig): Promise<void> {
+    const configDir = ConfigPaths.projectDir(projectPath)
+    const baselinePath = ConfigPaths.aiBaseline(projectPath)
+    await fs.mkdir(configDir, { recursive: true })
+    await fs.writeFile(baselinePath, JSON.stringify(config, null, 2), 'utf-8')
+  }
+
+  async loadAiBaseline(projectPath: string): Promise<ProjectConfig | null> {
+    try {
+      const baselinePath = ConfigPaths.aiBaseline(projectPath)
+      await fs.access(baselinePath)
+      const content = await fs.readFile(baselinePath, 'utf-8')
+      return JSON.parse(content) as ProjectConfig
+    } catch {
+      return null
+    }
+  }
+
   /**
    * Interpolates service references in environment variables.
    *

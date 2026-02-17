@@ -57,6 +57,38 @@ describe('ProjectConfigService', () => {
     })
   })
 
+  describe('AI baseline', () => {
+    it('should save and load AI baseline config', async () => {
+      vi.mocked(fs.mkdir).mockResolvedValue(undefined)
+      vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+      const config = {
+        name: 'Test',
+        services: [{ id: 'api', name: 'API', path: '.', command: 'npm start', port: 3000, env: {}, active: true, mode: 'native' as const }],
+      }
+      await configService.saveAiBaseline(mockProjectPath, config)
+
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('ai-baseline-config.json'),
+        expect.any(String),
+        'utf-8'
+      )
+
+      vi.mocked(fs.access).mockResolvedValue(undefined)
+      vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(config))
+
+      const loaded = await configService.loadAiBaseline(mockProjectPath)
+      expect(loaded).toEqual(config)
+    })
+
+    it('should return null when no baseline exists', async () => {
+      vi.mocked(fs.access).mockRejectedValue(new Error('ENOENT'))
+
+      const loaded = await configService.loadAiBaseline(mockProjectPath)
+      expect(loaded).toBeNull()
+    })
+  })
+
   describe('interpolateEnv', () => {
     it('resolves service references in env values', () => {
       const services = [
