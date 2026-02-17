@@ -86,7 +86,14 @@
       "WebFetch(domain:rebeccamdeprey.com)",
       "WebFetch(domain:code.visualstudio.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "WebFetch(domain:www.remotion.dev)",
+      "WebFetch(domain:skills.sh)",
+      "Bash(npx remotion --help:*)",
+      "Bash(npx remotion:*)",
+      "Bash(open:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker compose:*)"
     ]
   }
 }

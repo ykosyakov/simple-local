@@ -1,8 +1,42 @@
-# Simple Local
+<p align="center">
+  <img src="media/demo-thumbnail.png" alt="Simple Local" width="120" />
+</p>
 
-A desktop app for running multi-service projects locally without the hassle.
+<h1 align="center">Simple Local</h1>
 
-Point it at a project folder and it uses AI to discover your services — start commands, ports, dependencies, environment variables — then gives you a single dashboard to manage everything.
+<p align="center">
+  <strong><code>Run multi-service projects locally without the hassle.</code></strong>
+  <br />
+  Point it at a project folder and it uses AI to discover your services — start commands, ports, dependencies, environment variables — then gives you a single dashboard to manage everything.
+</p>
+
+<p align="center">
+  <a href="https://github.com/ykosyakov/simple-local"><img src="https://img.shields.io/badge/Website-github.com/ykosyakov/simple--local-blue?style=flat-square" alt="Website" /></a>&nbsp;
+  <a href="https://github.com/ykosyakov/simple-local/releases/latest"><img src="https://img.shields.io/github/v/release/ykosyakov/simple-local?style=flat-square&label=version&color=blue" alt="Latest Release" /></a>&nbsp;
+  <a href="https://github.com/ykosyakov/simple-local/actions/workflows/release.yml"><img src="https://github.com/ykosyakov/simple-local/actions/workflows/release.yml/badge.svg" alt="Release CI" /></a>&nbsp;
+  <a href="https://github.com/ykosyakov/simple-local/releases"><img src="https://img.shields.io/github/downloads/ykosyakov/simple-local/total?style=flat-square&color=green" alt="Downloads" /></a>&nbsp;
+  <img src="https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon%20%2B%20Intel)%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square" alt="Platform" />
+</p>
+
+<br />
+
+<p align="center">
+  <a href="https://github.com/ykosyakov/simple-local/releases/latest">
+    <img src="https://img.shields.io/badge/macOS-Download-black?logo=apple&logoColor=white&style=flat" alt="Download for macOS" height="30" />
+  </a>&nbsp;&nbsp;
+  <a href="https://github.com/ykosyakov/simple-local/releases/latest">
+    <img src="https://img.shields.io/badge/Windows-Download-0078D4?logo=windows&logoColor=white&style=flat" alt="Download for Windows" height="30" />
+  </a>&nbsp;&nbsp;
+  <a href="https://github.com/ykosyakov/simple-local/releases/latest">
+    <img src="https://img.shields.io/badge/Linux-Download-FCC624?logo=linux&logoColor=black&style=flat" alt="Download for Linux" height="30" />
+  </a>
+</p>
+
+<p align="center">
+  <sub>AI-assisted discovery with a single dashboard for running local services.</sub>
+</p>
+
+<br />
 
 [**Watch the demo →**](https://youtu.be/aeqMkra2n4E)
 

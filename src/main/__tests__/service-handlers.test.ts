@@ -565,6 +565,34 @@ describe('setupServiceHandlers', () => {
       expect(mockContainer.killProcessOnPortAsync).toHaveBeenCalledWith(3000)
     })
 
+    it.each([
+      ['docker compose up db', 'docker compose'],
+      ['docker-compose up db', 'docker-compose'],
+      ['podman compose up db', 'podman compose'],
+      ['podman-compose up db', 'podman-compose'],
+    ])('skips port killing for compose command: %s', async (command) => {
+      const { getServiceContext } = await import('../services/service-lookup')
+      vi.mocked(getServiceContext).mockResolvedValue({
+        project: { id: 'proj1', name: 'Test', path: '/test' },
+        projectConfig: { name: 'Test', services: [] },
+        service: {
+          id: 'db',
+          name: 'PostgreSQL',
+          type: 'tool',
+          command,
+          path: '.',
+          mode: 'native',
+          env: {},
+          port: 5432,
+          active: true,
+        },
+      })
+
+      await handlers.startService('proj1', 'db')
+
+      expect(mockContainer.killProcessOnPortAsync).not.toHaveBeenCalled()
+    })
+
     it('logs the correct port when killing process', async () => {
       const { getServiceContext } = await import('../services/service-lookup')
       vi.mocked(getServiceContext).mockResolvedValue({
