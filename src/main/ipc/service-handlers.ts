@@ -189,16 +189,29 @@ async function startServiceCore(
   }
 
   if (effectiveMode === 'native') {
-    // Kill process on the port the service will actually use.
+    // Kill processes on all ports the service uses.
     // Skip for compose commands — the port is held by the runtime's port-forwarding
     // process (docker-proxy, gvproxy, etc.) and killing it destabilizes the runtime.
     // Compose up is idempotent so the skip is safe.
     const isCompose = /^(docker|podman)[ -]compose /.test(effectiveCommand)
-    const portToKill = service.hardcodedPort?.value ?? service.port
-    if (portToKill && !isCompose) {
-      const killed = await container.killProcessOnPortAsync(portToKill)
-      if (killed) {
-        sendLog(`Killed existing process on port ${portToKill}\n`)
+    if (!isCompose) {
+      // Collect env vars ending in _PORT with numeric values (e.g. RESTATE_HANDLER_PORT=9080)
+      const envPorts = Object.entries(finalEnv)
+        .filter(([key]) => key.endsWith('_PORT') && key !== 'PORT' && key !== 'DEBUG_PORT')
+        .map(([, val]) => parseInt(val, 10))
+        .filter((p) => p > 0 && p < 65536)
+
+      const portsToKill = [...new Set([
+        service.hardcodedPort?.value ?? service.port,
+        service.debugPort,
+        ...envPorts,
+      ].filter((p): p is number => p !== undefined && p > 0))]
+
+      for (const port of portsToKill) {
+        const killed = await container.killProcessOnPortAsync(port)
+        if (killed) {
+          sendLog(`Killed existing process on port ${port}\n`)
+        }
       }
     }
     try {
