@@ -364,7 +364,7 @@ describe('ContainerService', () => {
       const result = containerService.killProcessOnPort(3000)
 
       expect(result).toBe(true)
-      expect(execSync).toHaveBeenCalledWith('lsof -ti tcp:3000', { encoding: 'utf-8' })
+      expect(execSync).toHaveBeenCalledWith('lsof -ti tcp:3000 -sTCP:LISTEN', { encoding: 'utf-8' })
       expect(execSync).toHaveBeenCalledWith('kill -9 12345')
     })
 
@@ -456,7 +456,7 @@ describe('ContainerService', () => {
       const result = await containerService.killProcessOnPortAsync(3000)
 
       expect(result).toBe(true)
-      expect(exec).toHaveBeenCalledWith('lsof -ti tcp:3000', expect.any(Function))
+      expect(exec).toHaveBeenCalledWith('lsof -ti tcp:3000 -sTCP:LISTEN', expect.any(Function))
     })
 
     it('returns false when no process on port', async () => {

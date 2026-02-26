@@ -50,7 +50,7 @@ export class PortManager {
     validatePort(port)
 
     try {
-      const result = execSync(`lsof -ti tcp:${port}`, { encoding: 'utf-8' }).trim()
+      const result = execSync(`lsof -ti tcp:${port} -sTCP:LISTEN`, { encoding: 'utf-8' }).trim()
       if (result) {
         const pids = parsePids(result)
         for (const pid of pids) {
@@ -76,7 +76,7 @@ export class PortManager {
     validatePort(port)
 
     try {
-      const { stdout } = await exec(`lsof -ti tcp:${port}`)
+      const { stdout } = await exec(`lsof -ti tcp:${port} -sTCP:LISTEN`)
       const result = stdout.trim()
       if (result) {
         const pids = parsePids(result)
@@ -99,7 +99,7 @@ export class PortManager {
     validatePort(port)
 
     try {
-      const { stdout } = await exec(`lsof -ti tcp:${port}`)
+      const { stdout } = await exec(`lsof -ti tcp:${port} -sTCP:LISTEN`)
       return stdout.trim().length > 0
     } catch {
       // lsof failed or no process on port
@@ -117,7 +117,7 @@ export class PortManager {
 
     try {
       // Get PID of process on port
-      const { stdout: pidOutput } = await exec(`lsof -ti tcp:${port}`)
+      const { stdout: pidOutput } = await exec(`lsof -ti tcp:${port} -sTCP:LISTEN`)
       const pid = pidOutput.trim().split('\n')[0]
       if (!pid) return null
 
