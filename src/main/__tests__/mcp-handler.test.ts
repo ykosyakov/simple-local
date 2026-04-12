@@ -100,7 +100,9 @@ describe('McpHandler', () => {
       let startedProject = ''
       let startedService = ''
       handler = new McpHandler({
-        listProjects: async () => [],
+        listProjects: async () => [
+          { id: 'p1', name: 'Project 1', path: '/path/1', status: 'ready' },
+        ],
         getProject: async () => null,
         listServices: async () => [],
         getServiceStatus: async () => null,
@@ -128,6 +130,116 @@ describe('McpHandler', () => {
       expect(response.result).toMatchObject({
         content: [{ type: 'text', text: expect.stringContaining('Started') }],
       })
+    })
+
+    it('resolves project by name (case-insensitive)', async () => {
+      handler = new McpHandler({
+        listProjects: async () => [
+          { id: 'abc-123', name: 'My Project', path: '/path/1', status: 'ready' },
+        ],
+        getProject: async (id) =>
+          id === 'abc-123'
+            ? { id: 'abc-123', name: 'My Project', path: '/path/1', status: 'ready' }
+            : null,
+        listServices: async () => [],
+        getServiceStatus: async () => null,
+        getLogs: async () => [],
+        startService: async () => ({ restarted: false }),
+        stopService: async () => {},
+        restartService: async () => {},
+      })
+
+      const response = await handler.handle({
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'tools/call',
+        params: { name: 'get_project', arguments: { projectId: 'my project' } },
+      })
+
+      const result = response.result as { content: Array<{ text: string }> }
+      expect(result.content[0].text).toContain('My Project')
+      expect(result.content[0].text).toContain('/path/1')
+    })
+
+    it('resolves project by exact ID when both ID and name could match', async () => {
+      let receivedProjectId = ''
+      handler = new McpHandler({
+        listProjects: async () => [
+          { id: 'p1', name: 'Project 1', path: '/path/1', status: 'ready' },
+        ],
+        getProject: async () => null,
+        listServices: async (projectId) => {
+          receivedProjectId = projectId
+          return []
+        },
+        getServiceStatus: async () => null,
+        getLogs: async () => [],
+        startService: async () => ({ restarted: false }),
+        stopService: async () => {},
+        restartService: async () => {},
+      })
+
+      await handler.handle({
+        jsonrpc: '2.0',
+        id: 11,
+        method: 'tools/call',
+        params: { name: 'list_services', arguments: { projectId: 'p1' } },
+      })
+
+      expect(receivedProjectId).toBe('p1')
+    })
+
+    it('returns not found when project name does not match', async () => {
+      handler = new McpHandler({
+        listProjects: async () => [
+          { id: 'p1', name: 'Project 1', path: '/path/1', status: 'ready' },
+        ],
+        getProject: async () => null,
+        listServices: async () => [],
+        getServiceStatus: async () => null,
+        getLogs: async () => [],
+        startService: async () => ({ restarted: false }),
+        stopService: async () => {},
+        restartService: async () => {},
+      })
+
+      const response = await handler.handle({
+        jsonrpc: '2.0',
+        id: 12,
+        method: 'tools/call',
+        params: { name: 'get_project', arguments: { projectId: 'Nonexistent' } },
+      })
+
+      const result = response.result as { content: Array<{ text: string }> }
+      expect(result.content[0].text).toBe("Project 'Nonexistent' not found.")
+    })
+
+    it('resolves project name for service operations', async () => {
+      let startedWithProjectId = ''
+      handler = new McpHandler({
+        listProjects: async () => [
+          { id: 'abc-123', name: 'My App', path: '/path/1', status: 'ready' },
+        ],
+        getProject: async () => null,
+        listServices: async () => [],
+        getServiceStatus: async () => null,
+        getLogs: async () => [],
+        startService: async (projectId) => {
+          startedWithProjectId = projectId
+          return { restarted: false }
+        },
+        stopService: async () => {},
+        restartService: async () => {},
+      })
+
+      await handler.handle({
+        jsonrpc: '2.0',
+        id: 13,
+        method: 'tools/call',
+        params: { name: 'start_service', arguments: { projectId: 'My App', serviceId: 's1' } },
+      })
+
+      expect(startedWithProjectId).toBe('abc-123')
     })
 
     it('returns error for unknown tool', async () => {

@@ -62,7 +62,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "The project ID" },
+        projectId: { type: "string", description: "The project ID or name" },
       },
       required: ["projectId"],
     },
@@ -73,7 +73,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "The project ID" },
+        projectId: { type: "string", description: "The project ID or name" },
       },
       required: ["projectId"],
     },
@@ -84,7 +84,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "The project ID" },
+        projectId: { type: "string", description: "The project ID or name" },
         serviceId: { type: "string", description: "The service ID" },
       },
       required: ["projectId", "serviceId"],
@@ -96,7 +96,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "The project ID" },
+        projectId: { type: "string", description: "The project ID or name" },
         serviceId: { type: "string", description: "The service ID" },
         limit: {
           type: "number",
@@ -117,7 +117,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "The project ID" },
+        projectId: { type: "string", description: "The project ID or name" },
         serviceId: { type: "string", description: "The service ID" },
         mode: {
           type: "string",
@@ -135,7 +135,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "The project ID" },
+        projectId: { type: "string", description: "The project ID or name" },
         serviceId: { type: "string", description: "The service ID" },
       },
       required: ["projectId", "serviceId"],
@@ -147,7 +147,7 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
-        projectId: { type: "string", description: "The project ID" },
+        projectId: { type: "string", description: "The project ID or name" },
         serviceId: { type: "string", description: "The service ID" },
       },
       required: ["projectId", "serviceId"],
@@ -157,6 +157,22 @@ const TOOLS = [
 
 export class McpHandler {
   constructor(private deps: McpHandlerDeps) {}
+
+  /**
+   * Resolve a projectId-or-name string to an actual project ID.
+   * Returns the original value if it matches an existing ID,
+   * otherwise tries case-insensitive name match.
+   */
+  private async resolveProjectId(
+    idOrName: string,
+  ): Promise<string | null> {
+    const projects = await this.deps.listProjects();
+    if (projects.some((p) => p.id === idOrName)) return idOrName;
+    const match = projects.find(
+      (p) => p.name.toLowerCase() === idOrName.toLowerCase(),
+    );
+    return match ? match.id : null;
+  }
 
   async handle(request: JsonRpcRequest): Promise<JsonRpcResponse> {
     const { method, id } = request;
@@ -206,48 +222,68 @@ export class McpHandler {
           }
 
           case "get_project": {
-            const project = await this.deps.getProject(args.projectId);
-            if (!project) {
+            const projectId = await this.resolveProjectId(args.projectId);
+            if (!projectId) {
               text = `Project '${args.projectId}' not found.`;
             } else {
-              text = `Project: ${project.name}\nPath: ${project.path}\nStatus: ${project.status}`;
+              const project = await this.deps.getProject(projectId);
+              if (!project) {
+                text = `Project '${args.projectId}' not found.`;
+              } else {
+                text = `Project: ${project.name}\nPath: ${project.path}\nStatus: ${project.status}`;
+              }
             }
             break;
           }
 
           case "list_services": {
-            const services = await this.deps.listServices(args.projectId);
-            if (services.length === 0) {
-              text = "No services found for this project.";
+            const projectId = await this.resolveProjectId(args.projectId);
+            if (!projectId) {
+              text = `Project '${args.projectId}' not found.`;
             } else {
-              text =
-                "Services:\n" +
-                services
-                  .map(
-                    (s) =>
-                      `- ${s.name} (${s.id}): ${s.status}${s.port ? ` on port ${s.port}` : ''}`,
-                  )
-                  .join("\n");
+              const services = await this.deps.listServices(projectId);
+              if (services.length === 0) {
+                text = "No services found for this project.";
+              } else {
+                text =
+                  "Services:\n" +
+                  services
+                    .map(
+                      (s) =>
+                        `- ${s.name} (${s.id}): ${s.status}${s.port ? ` on port ${s.port}` : ''}`,
+                    )
+                    .join("\n");
+              }
             }
             break;
           }
 
           case "get_service_status": {
-            const service = await this.deps.getServiceStatus(
-              args.projectId,
-              args.serviceId,
-            );
-            if (!service) {
-              text = `Service '${args.serviceId}' not found.`;
+            const projectId = await this.resolveProjectId(args.projectId);
+            if (!projectId) {
+              text = `Project '${args.projectId}' not found.`;
             } else {
-              text = `Service: ${service.name}\nStatus: ${service.status}${service.port ? `\nPort: ${service.port}` : ''}`;
+              const service = await this.deps.getServiceStatus(
+                projectId,
+                args.serviceId,
+              );
+              if (!service) {
+                text = `Service '${args.serviceId}' not found.`;
+              } else {
+                text = `Service: ${service.name}\nStatus: ${service.status}${service.port ? `\nPort: ${service.port}` : ''}`;
+              }
             }
             break;
           }
 
           case "get_logs": {
+            const projectId = await this.resolveProjectId(args.projectId);
+            if (!projectId) {
+              text = `Project '${args.projectId}' not found.`;
+              break;
+            }
             const logs = await this.deps.getLogs(
-              args.projectId,
+              projectId,
               args.serviceId,
             );
             if (logs.length === 0) {
@@ -264,9 +300,14 @@ export class McpHandler {
           }
 
           case "start_service": {
+            const projectId = await this.resolveProjectId(args.projectId);
+            if (!projectId) {
+              text = `Project '${args.projectId}' not found.`;
+              break;
+            }
             const mode = args.mode as "native" | "container" | undefined;
             const result = await this.deps.startService(
-              args.projectId,
+              projectId,
               args.serviceId,
               mode,
             );
@@ -278,15 +319,27 @@ export class McpHandler {
             break;
           }
 
-          case "stop_service":
-            await this.deps.stopService(args.projectId, args.serviceId);
+          case "stop_service": {
+            const projectId = await this.resolveProjectId(args.projectId);
+            if (!projectId) {
+              text = `Project '${args.projectId}' not found.`;
+              break;
+            }
+            await this.deps.stopService(projectId, args.serviceId);
             text = `Stopped service '${args.serviceId}'.`;
             break;
+          }
 
-          case "restart_service":
-            await this.deps.restartService(args.projectId, args.serviceId);
+          case "restart_service": {
+            const projectId = await this.resolveProjectId(args.projectId);
+            if (!projectId) {
+              text = `Project '${args.projectId}' not found.`;
+              break;
+            }
+            await this.deps.restartService(projectId, args.serviceId);
             text = `Restarted service '${args.serviceId}'.`;
             break;
+          }
 
           default:
             return {
