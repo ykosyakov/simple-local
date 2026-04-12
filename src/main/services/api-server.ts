@@ -273,6 +273,14 @@ async function handleMcp(ctx: RouteContext): Promise<void> {
     req.on('end', async () => {
       try {
         const request = JSON.parse(body)
+        // JSON-RPC notifications do not expect a response body. For HTTP MCP,
+        // accepted notifications should return 202 with an empty body.
+        if (request?.id === undefined && typeof request?.method === 'string') {
+          res.writeHead(202)
+          res.end()
+          resolve()
+          return
+        }
         const response = await mcpHandler.handle(request)
         sendJson(res, response)
       } catch (_err) {
@@ -285,6 +293,16 @@ async function handleMcp(ctx: RouteContext): Promise<void> {
       resolve()
     })
   })
+}
+
+async function handleMcpGet(ctx: RouteContext): Promise<void> {
+  const { res } = ctx
+  res.setHeader('Allow', 'POST')
+  res.writeHead(405)
+  res.end(JSON.stringify({
+    error: 'Method not allowed',
+    code: 'METHOD_NOT_ALLOWED',
+  }))
 }
 
 // ============================================================================
@@ -314,6 +332,7 @@ const routes: Route[] = [
   { method: 'POST', pattern: /^\/projects\/([^/]+)\/services\/([^/]+)\/restart$/, paramNames: ['projectId', 'serviceId'], handler: handleRestartService },
 
   // MCP
+  { method: 'GET', pattern: /^\/mcp$/, paramNames: [], handler: handleMcpGet },
   { method: 'POST', pattern: /^\/mcp$/, paramNames: [], handler: handleMcp },
 ]
 

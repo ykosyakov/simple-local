@@ -262,6 +262,22 @@ describe('ApiServer', () => {
       expect(data.result.tools).toHaveLength(8)
     })
 
+    it('accepts notifications with an empty 202 response', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'notifications/initialized',
+          params: {},
+        }),
+      })
+      const body = await res.text()
+
+      expect(res.status).toBe(202)
+      expect(body).toBe('')
+    })
+
     it('returns parse error for invalid JSON', async () => {
       const res = await fetch(`http://127.0.0.1:${server.port}/mcp`, {
         method: 'POST',
@@ -273,6 +289,20 @@ describe('ApiServer', () => {
       expect(res.status).toBe(400)
       expect(data.error.code).toBe(-32700)
       expect(data.error.message).toBe('Parse error')
+    })
+  })
+
+  describe('GET /mcp', () => {
+    it('returns 405 to indicate POST-only MCP support', async () => {
+      const res = await fetch(`http://127.0.0.1:${server.port}/mcp`)
+      const data = await res.json()
+
+      expect(res.status).toBe(405)
+      expect(res.headers.get('allow')).toBe('POST')
+      expect(data).toEqual({
+        error: 'Method not allowed',
+        code: 'METHOD_NOT_ALLOWED',
+      })
     })
   })
 
